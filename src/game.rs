@@ -9,6 +9,7 @@ pub const SEQ_TICK_ICONS: usize = 0x2ba79b0;
 pub const SEQ_ON_EXIT: usize = 0x2ba10e0;
 pub const SEQ_MOUTH_HIGHLIGHT_SELECT: usize = 0x2ba3978;
 pub const SEQ_MOUTH_NAV_GRID_DONE: usize = 0x2ba4034;
+pub const SEQ_FILL_MOUTH_LIST: usize = 0x2b8fe60;
 
 const FIND_BY_PATH: usize = 0x376e6b0;
 const LIST_BIND_BUTTONS: usize = 0x2ab1110;
@@ -70,8 +71,7 @@ pub const SEQ_PAGE: usize = 0x210;
 pub const SEQ_PLAYER: usize = 0x1f8;
 pub const SEQ_FACE_PARAMS: usize = 0x314;
 pub const SEQ_FACE_PARAM_MOUTH: usize = 5;
-pub const SEQ_MOUTH_LIST_COUNT: usize = 0xbc0;
-pub const SEQ_MOUTH_LIST_PTRS: usize = 0xbc8;
+pub const SEQ_MOUTH_LIST: usize = 0xbc0;
 const SEQ_TEXTURE_POOL: usize = 0xff0;
 pub const SEQ_REQUEST: usize = 0x1cfcc;
 pub const REQUEST_FOCUS: i32 = 2;
@@ -106,6 +106,16 @@ pub struct ItemUpdater {
     pub count: u32,
     pub pad: u32,
     pub delegate: Delegate,
+}
+
+// sead-style fixed object array of u32 values (seq+0xBC0 for mouths). Nodes are 8 bytes: the
+// value, or the next free node while on the free list.
+#[repr(C)]
+pub struct ValueList {
+    pub count: i32,
+    pub capacity: i32,
+    pub ptrs: *mut *mut u64,
+    pub free: *mut u64,
 }
 
 // Selection group for a scroll list (vtable 0x71049aaf10).

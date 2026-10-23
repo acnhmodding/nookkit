@@ -45,6 +45,15 @@ unsafe fn seq_on_exit(seq: *mut u8) {
     call_original!(seq);
 }
 
+#[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
+unsafe fn seq_fill_mouth_list(value_list: *mut u8) {
+    unsafe { list::before_fill(value_list) };
+
+    call_original!(value_list);
+
+    unsafe { list::after_fill(value_list) };
+}
+
 // Page refresh, right where the game selects the current mouth button.
 #[skyline::hook(offset = SEQ_MOUTH_HIGHLIGHT_SELECT, inline)]
 unsafe fn seq_mouth_refresh(ctx: &mut skyline::hooks::InlineCtx) {
@@ -66,6 +75,7 @@ pub fn main() {
         seq_on_control_decide,
         seq_tick_icons,
         seq_on_exit,
+        seq_fill_mouth_list,
         seq_mouth_refresh,
         seq_mouth_navigation,
     );

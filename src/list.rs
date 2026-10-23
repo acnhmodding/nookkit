@@ -9,19 +9,6 @@ const MAX_MOUTHS: usize = 256;
 const LEAVE_UP: i32 = 0;
 const LEAVE_DOWN: i32 = 1;
 
-// Mouth value of list item i is i (the CharaMakeMouthTypeParam row index).
-static MOUTH_VALUES: [u32; MAX_MOUTHS] = {
-    let mut values = [0; MAX_MOUTHS];
-    let mut i = 0;
-
-    while i < MAX_MOUTHS {
-        values[i] = i as u32;
-        i += 1;
-    }
-
-    values
-};
-
 struct MouthList {
     page: *mut u8,
     seq: *mut u8,
@@ -30,11 +17,14 @@ struct MouthList {
     updater: ItemUpdater,
     icons: [*mut u8; MAX_SLOTS],
     slots: usize,
+    // Writable replacement storage for the seq's mouth value list (item -> mouth value).
+    nodes: [u64; MAX_MOUTHS],
+    node_ptrs: [*mut u64; MAX_MOUTHS],
     count: usize,
-    value_ptrs: [*const u32; MAX_MOUTHS],
-    saved_count: u32,
-    saved_ptrs: *mut u8,
     owns_values: bool,
+    saved_count: i32,
+    saved_capacity: i32,
+    saved_ptrs: *mut *mut u64,
 }
 
 struct State(UnsafeCell<MouthList>);
@@ -68,11 +58,13 @@ static STATE: State = State(UnsafeCell::new(MouthList {
     },
     icons: [null_mut(); MAX_SLOTS],
     slots: 0,
+    nodes: [0; MAX_MOUTHS],
+    node_ptrs: [null_mut(); MAX_MOUTHS],
     count: 0,
-    value_ptrs: [null(); MAX_MOUTHS],
-    saved_count: 0,
-    saved_ptrs: null_mut(),
     owns_values: false,
+    saved_count: 0,
+    saved_capacity: 0,
+    saved_ptrs: null_mut(),
 }));
 
 #[allow(clippy::mut_from_ref)]
@@ -105,6 +97,16 @@ unsafe fn post_request(seq: *mut u8, state: i32, index: i32) {
             *request.add(1) = index;
             *request.add(2) = CATEGORY_MOUTH;
         }
+    }
+}
+
+impl MouthList {
+    fn value(&self, item: usize) -> u32 {
+        self.nodes[item] as u32
+    }
+
+    fn item_of(&self, value: u32) -> Option<usize> {
+        (0..self.count).find(|&item| self.value(item) == value)
     }
 }
 
@@ -202,33 +204,103 @@ pub unsafe fn setup(seq: *mut u8) {
             },
         };
 
-        own_mouth_values(seq, state);
+        own_values(seq, state);
     }
 }
 
-// The request processor reads mouth values from the seq's mouth list; point it at one entry per
-// bcsv row so every row is selectable.
-unsafe fn own_mouth_values(seq: *mut u8, state: &mut MouthList) {
-    unsafe {
-        let count = mouth_row_count().min(MAX_MOUTHS);
+unsafe fn mouth_value_list(seq: *mut u8) -> *mut ValueList {
+    unsafe { at::<ValueList>(seq, SEQ_MOUTH_LIST) }
+}
 
-        if count == 0 {
-            state.count = *at::<u32>(seq, SEQ_MOUTH_LIST_COUNT) as usize;
-            state.owns_values = false;
+// Swap the seq's mouth value list over to our storage: the game's own entries first (in its
+// order), then every other CharaMakeMouthTypeParam row.
+unsafe fn own_values(seq: *mut u8, state: &mut MouthList) {
+    unsafe {
+        release_values(seq, state);
+
+        let list = &mut *mouth_value_list(seq);
+        let rows = mouth_row_count().min(MAX_MOUTHS);
+        let mut count = 0;
+
+        if rows == 0 {
+            state.count = list.count.max(0) as usize;
+
+            for i in 0..state.count.min(MAX_MOUTHS) {
+                state.nodes[i] = **list.ptrs.add(i);
+            }
+
             return;
         }
 
-        for (ptr, value) in state.value_ptrs.iter_mut().zip(MOUTH_VALUES.iter()) {
-            *ptr = value;
+        for i in 0..list.count.max(0) as usize {
+            let value = **list.ptrs.add(i) as u32;
+
+            if (value as usize) < rows && !state.nodes[..count].contains(&(value as u64)) {
+                state.nodes[count] = value as u64;
+                count += 1;
+            }
         }
 
-        state.saved_count = *at::<u32>(seq, SEQ_MOUTH_LIST_COUNT);
-        state.saved_ptrs = *at::<*mut u8>(seq, SEQ_MOUTH_LIST_PTRS);
+        for row in 0..rows {
+            if !state.nodes[..count].contains(&(row as u64)) {
+                state.nodes[count] = row as u64;
+                count += 1;
+            }
+        }
+
+        if count == 0 {
+            return;
+        }
+
+        for (ptr, node) in state.node_ptrs.iter_mut().zip(state.nodes.iter_mut()) {
+            *ptr = node;
+        }
+
+        state.saved_count = list.count;
+        state.saved_capacity = list.capacity;
+        state.saved_ptrs = list.ptrs;
         state.owns_values = true;
         state.count = count;
 
-        *at::<u32>(seq, SEQ_MOUTH_LIST_COUNT) = count as u32;
-        *at::<*const *const u32>(seq, SEQ_MOUTH_LIST_PTRS) = state.value_ptrs.as_ptr();
+        list.count = count as i32;
+        list.capacity = count as i32;
+        list.ptrs = state.node_ptrs.as_mut_ptr();
+    }
+}
+
+unsafe fn release_values(seq: *mut u8, state: &mut MouthList) {
+    unsafe {
+        if !state.owns_values {
+            return;
+        }
+
+        let list = &mut *mouth_value_list(seq);
+
+        list.count = state.saved_count;
+        list.capacity = state.saved_capacity;
+        list.ptrs = state.saved_ptrs;
+        state.owns_values = false;
+    }
+}
+
+// The game refills the mouth value list on enter; let it work on its own storage, then take over.
+pub unsafe fn before_fill(value_list: *mut u8) {
+    unsafe {
+        let state = state();
+
+        if !state.seq.is_null() && state.seq.add(SEQ_MOUTH_LIST) == value_list {
+            release_values(state.seq, state);
+        }
+    }
+}
+
+pub unsafe fn after_fill(value_list: *mut u8) {
+    unsafe {
+        let state = state();
+
+        if !state.seq.is_null() && state.seq.add(SEQ_MOUTH_LIST) == value_list {
+            own_values(state.seq, state);
+        }
     }
 }
 
@@ -276,7 +348,7 @@ extern "C" fn on_item(seq: *mut u8, event: *const i32) {
         let in_range = item >= 0 && (item as usize) < state.count;
         let mut params = face_params(seq);
 
-        params[SEQ_FACE_PARAM_MOUTH] = if in_range { item as u8 } else { 0 };
+        params[SEQ_FACE_PARAM_MOUTH] = if in_range { state.value(item as usize) as u8 } else { 0 };
 
         if op == 1 {
             let source = state.icons[slot_of(*event.add(2))];
@@ -316,8 +388,8 @@ pub unsafe fn refresh(seq: *mut u8) {
             return;
         };
 
-        let mouth = face_params(seq)[SEQ_FACE_PARAM_MOUTH] as usize;
-        let selected = if mouth < state.count { mouth as i32 } else { 0 };
+        let mouth = face_params(seq)[SEQ_FACE_PARAM_MOUTH] as u32;
+        let selected = state.item_of(mouth).unwrap_or(0) as i32;
 
         state.group.selected = selected;
         list_set_content(state.list, state.count as i32, selected, *at::<u8>(seq, SEQ_PLAYER));
@@ -426,12 +498,7 @@ pub unsafe fn exit(seq: *mut u8) {
             }
         }
 
-        if state.owns_values {
-            *at::<u32>(seq, SEQ_MOUTH_LIST_COUNT) = state.saved_count;
-            *at::<*mut u8>(seq, SEQ_MOUTH_LIST_PTRS) = state.saved_ptrs;
-            state.owns_values = false;
-        }
-
+        release_values(seq, state);
         state.icons = [null_mut(); MAX_SLOTS];
         state.slots = 0;
         state.seq = null_mut();
