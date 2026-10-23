@@ -178,6 +178,15 @@ pub unsafe fn setup(seq: *mut u8) {
             };
         }
 
+        // The hidden vanilla mouth buttons are still focusable; take them out of navigation.
+        for button in 0..VANILLA_MOUTH_BUTTONS {
+            let old = *at::<*mut u8>(page, PAGE_BTN_MOUTH + button * 8);
+
+            if !old.is_null() {
+                set_button_disabled(old);
+            }
+        }
+
         state.slots = list_visible_slots(list).min(MAX_SLOTS);
         state.icons = [null_mut(); MAX_SLOTS];
 
@@ -409,18 +418,47 @@ pub unsafe fn link_navigation(seq: *mut u8) {
         // Slots are column-major: the top button of column c is slot c * line_size.
         for column in 0..NOSE_BUTTONS {
             let nose = *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8);
-            let button = list_button(state.list, column * line_size);
 
-            if nose.is_null() || button.is_null() {
-                continue;
-            }
+            set_nav_link(nose, NAV_LINK_DOWN, list_button(state.list, column * line_size));
+        }
 
-            let nose_node = *at::<*mut u8>(nose, BTN_NAV_NODE);
-            let button_node = *at::<*mut u8>(button, BTN_NAV_NODE);
+        link_ok_up(page, state);
+    }
+}
 
-            if !nose_node.is_null() && !button_node.is_null() {
-                *at::<*mut u8>(nose_node, NODE_NAV_LINKS + NAV_LINK_DOWN * 8) = button_node;
-            }
+// Up from the OK button lands on the bottom of the list's middle visible column.
+unsafe fn link_ok_up(page: *mut u8, state: &MouthList) {
+    unsafe {
+        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize;
+        let slot = (line_size + line_size - 1).min(state.slots.saturating_sub(1));
+
+        set_nav_link(*at::<*mut u8>(page, PAGE_BTN_OK), NAV_LINK_UP, list_button(state.list, slot));
+    }
+}
+
+// Request state 5 points the OK button's up link at the old mouth button for the focused index.
+pub unsafe fn after_request(seq: *mut u8) {
+    unsafe {
+        let Some(state) = active(seq) else {
+            return;
+        };
+
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+        let ok = *at::<*mut u8>(page, PAGE_BTN_OK);
+
+        if ok.is_null() {
+            return;
+        }
+
+        let up = nav_link(ok, NAV_LINK_UP);
+        let points_at_old_mouth = (0..VANILLA_MOUTH_BUTTONS).any(|button| {
+            let old = *at::<*mut u8>(page, PAGE_BTN_MOUTH + button * 8);
+
+            !old.is_null() && !up.is_null() && *at::<*mut u8>(old, BTN_NAV_NODE) == up
+        });
+
+        if points_at_old_mouth {
+            link_ok_up(page, state);
         }
     }
 }

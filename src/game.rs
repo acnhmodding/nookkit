@@ -10,6 +10,8 @@ pub const SEQ_ON_EXIT: usize = 0x2ba10e0;
 pub const SEQ_MOUTH_HIGHLIGHT_SELECT: usize = 0x2ba3978;
 pub const SEQ_MOUTH_NAV_GRID_DONE: usize = 0x2ba4034;
 pub const SEQ_FILL_MOUTH_LIST: usize = 0x2b8fe60;
+pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
+pub const REQUEST_UPDATE_ANCHOR: i32 = 5;
 
 const FIND_BY_PATH: usize = 0x376e6b0;
 const LIST_BIND_BUTTONS: usize = 0x2ab1110;
@@ -39,8 +41,10 @@ const GOT_BTN_GROUP_DELEGATE_FN: usize = 0x4ac9b78;
 
 // game::UI::CharaMakePage
 pub const PAGE_BTN_NOSE: usize = 0x598;
+pub const PAGE_BTN_MOUTH: usize = 0x5b0;
 pub const PAGE_BTN_OK: usize = 0x608;
 pub const NOSE_BUTTONS: usize = 3;
+pub const VANILLA_MOUTH_BUTTONS: usize = 4;
 
 // ScrollBtnListCtrl
 pub const LIST_SCROLL_DELEGATE: usize = 0x330;
@@ -58,7 +62,8 @@ const BTN_MODE_BITS: usize = 0x2c0;
 const BTN_GROUP_DELEGATE: usize = 0x3a0;
 const BTN_CHILDREN: usize = 0x38;
 
-pub const NODE_NAV_LINKS: usize = 0x1460;
+const NODE_NAV_LINKS: usize = 0x1460;
+pub const NAV_LINK_UP: usize = 0;
 pub const NAV_LINK_DOWN: usize = 1;
 
 // PlayerIcon
@@ -284,6 +289,43 @@ pub unsafe fn set_button_mode(button: *mut u8) {
 
         *bits = (*bits & 0xf8) | 1;
         *at::<i32>(button, BTN_MODE_FLAGS) = 2;
+    }
+}
+
+// The mode setupControls gives the second MyDesign button: not selectable.
+pub unsafe fn set_button_disabled(button: *mut u8) {
+    unsafe {
+        let bits = at::<u8>(button, BTN_MODE_BITS);
+
+        *bits = (*bits & 0xf8) | 2;
+        *at::<i32>(button, BTN_MODE_FLAGS) = 0;
+    }
+}
+
+pub unsafe fn set_nav_link(button: *mut u8, link: usize, target: *mut u8) {
+    unsafe {
+        if button.is_null() || target.is_null() {
+            return;
+        }
+
+        let node = *at::<*mut u8>(button, BTN_NAV_NODE);
+        let target_node = *at::<*mut u8>(target, BTN_NAV_NODE);
+
+        if !node.is_null() && !target_node.is_null() {
+            *at::<*mut u8>(node, NODE_NAV_LINKS + link * 8) = target_node;
+        }
+    }
+}
+
+pub unsafe fn nav_link(button: *mut u8, link: usize) -> *mut u8 {
+    unsafe {
+        let node = *at::<*mut u8>(button, BTN_NAV_NODE);
+
+        if node.is_null() {
+            node
+        } else {
+            *at::<*mut u8>(node, NODE_NAV_LINKS + link * 8)
+        }
     }
 }
 

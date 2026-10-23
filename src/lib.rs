@@ -45,6 +45,17 @@ unsafe fn seq_on_exit(seq: *mut u8) {
     call_original!(seq);
 }
 
+#[skyline::hook(offset = SEQ_PROCESS_REQUEST)]
+unsafe fn seq_process_request(seq: *mut u8) {
+    let anchor = unsafe { *at::<i32>(seq, SEQ_REQUEST) == REQUEST_UPDATE_ANCHOR };
+
+    call_original!(seq);
+
+    if anchor {
+        unsafe { list::after_request(seq) };
+    }
+}
+
 #[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
 unsafe fn seq_fill_mouth_list(value_list: *mut u8) {
     unsafe { list::before_fill(value_list) };
@@ -76,6 +87,7 @@ pub fn main() {
         seq_tick_icons,
         seq_on_exit,
         seq_fill_mouth_list,
+        seq_process_request,
         seq_mouth_refresh,
         seq_mouth_navigation,
     );
