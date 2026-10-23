@@ -404,11 +404,12 @@ pub unsafe fn link_navigation(seq: *mut u8) {
         };
 
         let page = *at::<*mut u8>(seq, SEQ_PAGE);
-        let columns = (*at::<i32>(state.list, LIST_COLUMNS)).max(0) as usize;
+        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize;
 
-        for column in 0..NOSE_BUTTONS.min(columns) {
+        // Slots are column-major: the top button of column c is slot c * line_size.
+        for column in 0..NOSE_BUTTONS {
             let nose = *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8);
-            let button = list_button(state.list, column);
+            let button = list_button(state.list, column * line_size);
 
             if nose.is_null() || button.is_null() {
                 continue;
@@ -486,6 +487,8 @@ pub unsafe fn tick(seq: *mut u8) {
     }
 }
 
+// Runs every time CharaMake is left; the seq, page and list stay alive and are reused on return,
+// so only release the textures and hand the value list back (the fill hook takes it again).
 pub unsafe fn exit(seq: *mut u8) {
     unsafe {
         let Some(state) = active(seq) else {
@@ -499,8 +502,5 @@ pub unsafe fn exit(seq: *mut u8) {
         }
 
         release_values(seq, state);
-        state.icons = [null_mut(); MAX_SLOTS];
-        state.slots = 0;
-        state.seq = null_mut();
     }
 }

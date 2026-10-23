@@ -47,7 +47,8 @@ pub const LIST_SCROLL_DELEGATE: usize = 0x330;
 pub const LIST_LEAVE_DELEGATE: usize = 0x350;
 const LIST_BUTTON_COUNT: usize = 0x208;
 const LIST_BUTTONS: usize = 0x210;
-pub const LIST_COLUMNS: usize = 0x2e8;
+// Items per line; CharaMake lists scroll horizontally, so a line is one column.
+pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
 
 // game::UI::AppUniteBtnCtrl
