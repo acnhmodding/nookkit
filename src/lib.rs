@@ -1,6 +1,6 @@
 use core::ptr::null_mut;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use skyline::hooks::{getRegionAddress, Region};
+use skyline::hooks::{Region, getRegionAddress};
 
 const VANILLA_MOUTHS: usize = 4;
 const MAX_EXTRA_MOUTHS: usize = SEQ_MOUTH_LIST_CAPACITY - VANILLA_MOUTHS;
@@ -78,17 +78,19 @@ static MOUTH_VALUES: [u32; SEQ_MOUTH_LIST_CAPACITY] = {
 };
 
 unsafe fn text() -> *mut u8 {
-    getRegionAddress(Region::Text) as *mut u8
+    unsafe { getRegionAddress(Region::Text) as *mut u8 }
 }
 
 unsafe fn at<T>(base: *mut u8, offset: usize) -> *mut T {
-    base.add(offset) as *mut T
+    unsafe { base.add(offset) as *mut T }
 }
 
 unsafe fn vcall<F: Copy>(obj: *mut u8, slot: usize) -> F {
-    let vtable = *(obj as *const *const u8);
+    unsafe {
+        let vtable = *(obj as *const *const u8);
 
-    core::mem::transmute_copy(&*(vtable.add(slot) as *const usize))
+        core::mem::transmute_copy(&*(vtable.add(slot) as *const usize))
+    }
 }
 
 fn extra_count(page: *mut u8) -> usize {
@@ -116,39 +118,43 @@ fn extra_index_of(page: *mut u8, button: *mut u8) -> Option<usize> {
 }
 
 unsafe fn find_mouth_button(root: *mut u8, index: usize) -> *mut u8 {
-    let search: extern "C" fn(*mut u8, *const SafeString) -> *mut u8 =
-        core::mem::transmute(text().add(SEARCH_AS_APP_UNITE_BTN));
+    unsafe {
+        let search: extern "C" fn(*mut u8, *const SafeString) -> *mut u8 =
+            core::mem::transmute(text().add(SEARCH_AS_APP_UNITE_BTN));
 
-    let mut pane = *b"/L_BtnMouth_00\0";
-    pane[12] = b'0' + (index / 10) as u8;
-    pane[13] = b'0' + (index % 10) as u8;
+        let mut pane = *b"/L_BtnMouth_00\0";
+        pane[12] = b'0' + (index / 10) as u8;
+        pane[13] = b'0' + (index % 10) as u8;
 
-    let got = *at::<*const u8>(text(), GOT_SAFE_STRING_VTABLE);
-    let name = SafeString {
-        vtable: got.add(0x10),
-        string: pane.as_ptr(),
-    };
+        let got = *at::<*const u8>(text(), GOT_SAFE_STRING_VTABLE);
+        let name = SafeString {
+            vtable: got.add(0x10),
+            string: pane.as_ptr(),
+        };
 
-    search(root.add(0x38), &name)
+        search(root.add(0x38), &name)
+    }
 }
 
 unsafe fn link_icon_node(page: *mut u8, button: *mut u8) {
-    let list = *at::<*mut u8>(*at::<*mut u8>(page, PAGE_HELPER), 0x48);
-    let icon = *at::<*mut u8>(button, BTN_ICON_NODE);
-    *at::<*mut u8>(icon, 0x18) = list;
+    unsafe {
+        let list = *at::<*mut u8>(*at::<*mut u8>(page, PAGE_HELPER), 0x48);
+        let icon = *at::<*mut u8>(button, BTN_ICON_NODE);
+        *at::<*mut u8>(icon, 0x18) = list;
 
-    let node = icon.offset(*at::<i32>(list, 0x14) as isize);
-    let old_head = *at::<*mut u8>(list, 0);
+        let node = icon.offset(*at::<i32>(list, 0x14) as isize);
+        let old_head = *at::<*mut u8>(list, 0);
 
-    *at::<*mut u8>(list, 0) = node;
-    *at::<*mut u8>(node, 0) = old_head;
-    *at::<*mut u8>(node, 8) = list;
+        *at::<*mut u8>(list, 0) = node;
+        *at::<*mut u8>(node, 0) = old_head;
+        *at::<*mut u8>(node, 8) = list;
 
-    if !old_head.is_null() {
-        *at::<*mut u8>(old_head, 8) = node;
+        if !old_head.is_null() {
+            *at::<*mut u8>(old_head, 8) = node;
+        }
+
+        *at::<i32>(list, 0x10) += 1;
     }
-
-    *at::<i32>(list, 0x10) += 1;
 }
 
 #[skyline::hook(offset = PAGE_LOOKUP_BUTTONS)]
@@ -158,7 +164,7 @@ unsafe fn page_lookup_buttons(page: *mut u8) {
     EXTRA_COUNT.store(0, Ordering::Relaxed);
     MOUTH_PAGE.store(page, Ordering::Relaxed);
 
-    let root = **at::<*mut *mut u8>(page, PAGE_ROOT_CONTROL);
+    let root = unsafe { **at::<*mut *mut u8>(page, PAGE_ROOT_CONTROL) };
 
     if root.is_null() {
         return;
@@ -167,13 +173,13 @@ unsafe fn page_lookup_buttons(page: *mut u8) {
     let mut count = 0;
 
     while count < MAX_EXTRA_MOUTHS {
-        let button = find_mouth_button(root, VANILLA_MOUTHS + count);
+        let button = unsafe { find_mouth_button(root, VANILLA_MOUTHS + count) };
 
         if button.is_null() {
             break;
         }
 
-        link_icon_node(page, button);
+        unsafe { link_icon_node(page, button) };
         EXTRA_BUTTONS[count].store(button, Ordering::Relaxed);
         count += 1;
     }
@@ -185,30 +191,32 @@ unsafe fn page_lookup_buttons(page: *mut u8) {
 unsafe fn seq_setup_controls(seq: *mut u8) {
     call_original!(seq);
 
-    let page = *at::<*mut u8>(seq, SEQ_PAGE);
-    let first = *at::<*mut u8>(page, PAGE_BTN_MOUTH);
+    unsafe {
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+        let first = *at::<*mut u8>(page, PAGE_BTN_MOUTH);
 
-    if first.is_null() {
-        return;
-    }
+        if first.is_null() {
+            return;
+        }
 
-    for extra in 0..extra_count(page) {
-        let button = extra_button(page, extra);
+        for extra in 0..extra_count(page) {
+            let button = extra_button(page, extra);
 
-        let bits = at::<u8>(button, BTN_MODE_BITS);
-        *bits = (*bits & 0xf8) | 1;
-        *at::<i32>(button, BTN_MODE_FLAGS) = 2;
+            let bits = at::<u8>(button, BTN_MODE_BITS);
+            *bits = (*bits & 0xf8) | 1;
+            *at::<i32>(button, BTN_MODE_FLAGS) = 2;
 
-        core::ptr::copy_nonoverlapping(
-            at::<u64>(first, BTN_GROUP_DELEGATE),
-            at::<u64>(button, BTN_GROUP_DELEGATE),
-            4,
-        );
+            core::ptr::copy_nonoverlapping(
+                at::<u64>(first, BTN_GROUP_DELEGATE),
+                at::<u64>(button, BTN_GROUP_DELEGATE),
+                4,
+            );
+        }
     }
 }
 
 unsafe fn accessor_page(acc: *const ButtonAccessor) -> *mut u8 {
-    ((*acc).data as *mut u8).sub(PAGE_BTN_MOUTH)
+    unsafe { ((*acc).data as *mut u8).sub(PAGE_BTN_MOUTH) }
 }
 
 extern "C" fn accessor_index_of(acc: *const ButtonAccessor, button: *mut u8) -> i32 {
@@ -272,27 +280,33 @@ unsafe fn patch_accessor_vtable() {
 }
 
 unsafe fn post_request(seq: *mut u8, state: i32, index: usize) {
-    let request = at::<i32>(seq, SEQ_REQUEST);
+    unsafe {
+        let request = at::<i32>(seq, SEQ_REQUEST);
 
-    if *request == -1 {
-        *request = state;
-        *request.add(1) = index as i32;
-        *request.add(2) = CATEGORY_MOUTH;
+        if *request == -1 {
+            *request = state;
+            *request.add(1) = index as i32;
+            *request.add(2) = CATEGORY_MOUTH;
+        }
     }
 }
 
 unsafe fn event_button_index(seq: *mut u8, event: *mut u8) -> Option<usize> {
-    let page = *at::<*mut u8>(seq, SEQ_PAGE);
+    unsafe {
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
 
-    extra_index_of(page, *at::<*mut u8>(event, 8)).map(|extra| VANILLA_MOUTHS + extra)
+        extra_index_of(page, *at::<*mut u8>(event, 8)).map(|extra| VANILLA_MOUTHS + extra)
+    }
 }
 
 #[skyline::hook(offset = SEQ_ON_CONTROL_FOCUS)]
 unsafe fn seq_on_control_focus(seq: *mut u8, event: *mut u8) {
     call_original!(seq, event);
 
-    if let Some(index) = event_button_index(seq, event) {
-        post_request(seq, REQUEST_FOCUS, index);
+    unsafe {
+        if let Some(index) = event_button_index(seq, event) {
+            post_request(seq, REQUEST_FOCUS, index);
+        }
     }
 }
 
@@ -300,106 +314,112 @@ unsafe fn seq_on_control_focus(seq: *mut u8, event: *mut u8) {
 unsafe fn seq_on_control_decide(seq: *mut u8, event: *mut u8) {
     call_original!(seq, event);
 
-    let Some(index) = event_button_index(seq, event) else {
-        return;
-    };
+    unsafe {
+        let Some(index) = event_button_index(seq, event) else {
+            return;
+        };
 
-    if *at::<u8>(seq, SEQ_MOUTH_GROUP_LOCKED) != 0 {
-        return;
+        if *at::<u8>(seq, SEQ_MOUTH_GROUP_LOCKED) != 0 {
+            return;
+        }
+
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+
+        let accessor = ButtonAccessor {
+            vtable: text().add(MOUTH_ACCESSOR_VTABLE),
+            data: at::<*mut u8>(page, PAGE_BTN_MOUTH),
+        };
+
+        let group = at::<u8>(seq, SEQ_MOUTH_GROUP);
+        let is_new_selection: extern "C" fn(*mut u8, u32) -> bool = vcall(group, 0x20);
+        let select: extern "C" fn(*mut u8, i32) = vcall(group, 0x18);
+        let refresh: extern "C" fn(*mut u8, *const ButtonAccessor) = vcall(group, 0x28);
+
+        if is_new_selection(group, index as u32) {
+            refresh(group, &accessor);
+            select(group, index as i32);
+        } else if *at::<u8>(seq, SEQ_MOUTH_GROUP_TOGGLE) == 0 {
+            refresh(group, &accessor);
+            select(group, -1);
+
+            return;
+        } else if *at::<i32>(seq, SEQ_MOUTH_GROUP_KEEP) == 0 {
+            return;
+        }
+
+        post_request(seq, REQUEST_DECIDE, index);
     }
-
-    let page = *at::<*mut u8>(seq, SEQ_PAGE);
-
-    let accessor = ButtonAccessor {
-        vtable: text().add(MOUTH_ACCESSOR_VTABLE),
-        data: at::<*mut u8>(page, PAGE_BTN_MOUTH),
-    };
-
-    let group = at::<u8>(seq, SEQ_MOUTH_GROUP);
-    let is_new_selection: extern "C" fn(*mut u8, u32) -> bool = vcall(group, 0x20);
-    let select: extern "C" fn(*mut u8, i32) = vcall(group, 0x18);
-    let refresh: extern "C" fn(*mut u8, *const ButtonAccessor) = vcall(group, 0x28);
-
-    if is_new_selection(group, index as u32) {
-        refresh(group, &accessor);
-        select(group, index as i32);
-    } else if *at::<u8>(seq, SEQ_MOUTH_GROUP_TOGGLE) == 0 {
-        refresh(group, &accessor);
-        select(group, -1);
-
-        return;
-    } else if *at::<i32>(seq, SEQ_MOUTH_GROUP_KEEP) == 0 {
-        return;
-    }
-
-    post_request(seq, REQUEST_DECIDE, index);
 }
 
 unsafe fn with_extended_mouth_list(seq: *mut u8, f: impl FnOnce()) {
-    let request = at::<i32>(seq, SEQ_REQUEST);
-    let count = at::<u32>(seq, SEQ_MOUTH_LIST_COUNT);
-    let ptrs = *at::<*mut *const u32>(seq, SEQ_MOUTH_LIST_PTRS);
-    let index = *request.add(1);
+    unsafe {
+        let request = at::<i32>(seq, SEQ_REQUEST);
+        let count = at::<u32>(seq, SEQ_MOUTH_LIST_COUNT);
+        let ptrs = *at::<*mut *const u32>(seq, SEQ_MOUTH_LIST_PTRS);
+        let index = *request.add(1);
 
-    let pending = (*request == REQUEST_FOCUS || *request == REQUEST_DECIDE)
-        && *request.add(2) == CATEGORY_MOUTH;
+        let pending = (*request == REQUEST_FOCUS || *request == REQUEST_DECIDE)
+            && *request.add(2) == CATEGORY_MOUTH;
 
-    let original_count = *count as usize;
+        let original_count = *count as usize;
 
-    if !pending
-        || ptrs.is_null()
-        || index < original_count as i32
-        || index as usize >= SEQ_MOUTH_LIST_CAPACITY
-    {
+        if !pending
+            || ptrs.is_null()
+            || index < original_count as i32
+            || index as usize >= SEQ_MOUTH_LIST_CAPACITY
+        {
+            f();
+            return;
+        }
+
+        let index = index as usize;
+        let mut saved = [core::ptr::null::<u32>(); SEQ_MOUTH_LIST_CAPACITY];
+
+        for i in original_count..=index {
+            saved[i] = *ptrs.add(i);
+            *ptrs.add(i) = &MOUTH_VALUES[i];
+        }
+
+        *count = (index + 1) as u32;
         f();
-        return;
-    }
+        *count = original_count as u32;
 
-    let index = index as usize;
-    let mut saved = [core::ptr::null::<u32>(); SEQ_MOUTH_LIST_CAPACITY];
-
-    for i in original_count..=index {
-        saved[i] = *ptrs.add(i);
-        *ptrs.add(i) = &MOUTH_VALUES[i];
-    }
-
-    *count = (index + 1) as u32;
-    f();
-    *count = original_count as u32;
-
-    for i in original_count..=index {
-        *ptrs.add(i) = saved[i];
+        for i in original_count..=index {
+            *ptrs.add(i) = saved[i];
+        }
     }
 }
 
 #[skyline::hook(offset = SEQ_UPDATE_FOCUS_REQUEST)]
 unsafe fn seq_update_focus_request(seq: *mut u8) {
-    with_extended_mouth_list(seq, || call_original!(seq));
+    unsafe { with_extended_mouth_list(seq, || call_original!(seq)) };
 }
 
 #[skyline::hook(offset = SEQ_PROCESS_REQUEST)]
 unsafe fn seq_process_request(seq: *mut u8) {
-    with_extended_mouth_list(seq, || call_original!(seq));
+    unsafe { with_extended_mouth_list(seq, || call_original!(seq)) };
 }
 
 #[skyline::hook(offset = SEQ_MOUTH_HIGHLIGHT_SELECT, inline)]
 unsafe fn seq_mouth_highlight_select(ctx: &mut skyline::hooks::InlineCtx) {
     let seq = ctx.registers[19].x() as *mut u8;
-    let page = *at::<*mut u8>(seq, SEQ_PAGE);
-    let mouth = *at::<u8>(seq, SEQ_FACE_PARAM_MOUTH) as usize;
+    unsafe {
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+        let mouth = *at::<u8>(seq, SEQ_FACE_PARAM_MOUTH) as usize;
 
-    if ctx.registers[1].w() as i32 == -1
-        && mouth >= VANILLA_MOUTHS
-        && mouth < VANILLA_MOUTHS + extra_count(page)
-    {
-        ctx.registers[1].set_w(mouth as u32);
+        if ctx.registers[1].w() as i32 == -1
+            && mouth >= VANILLA_MOUTHS
+            && mouth < VANILLA_MOUTHS + extra_count(page)
+        {
+            ctx.registers[1].set_w(mouth as u32);
+        }
     }
 }
 
 #[skyline::hook(offset = SEQ_MOUTH_NAV_GRID_DONE, inline)]
 unsafe fn seq_mouth_nav_grid(ctx: &mut skyline::hooks::InlineCtx) {
     let seq = ctx.registers[19].x() as *mut u8;
-    let page = *at::<*mut u8>(seq, SEQ_PAGE);
+    let page = unsafe { *at::<*mut u8>(seq, SEQ_PAGE) };
     let extras = extra_count(page);
 
     if extras == 0 {
@@ -407,17 +427,17 @@ unsafe fn seq_mouth_nav_grid(ctx: &mut skyline::hooks::InlineCtx) {
     }
 
     let build: extern "C" fn(*mut *mut u8, u32, u32) =
-        core::mem::transmute(text().add(NAV_GRID_BUILD));
+        unsafe { core::mem::transmute(text().add(NAV_GRID_BUILD)) };
 
     let cols = VANILLA_MOUTHS + extras;
     let mut grid = [null_mut::<u8>(); NAV_GRID_MAX_CELLS];
 
     for i in 0..NOSE_BUTTONS {
-        grid[i] = *at::<*mut u8>(page, PAGE_BTN_NOSE + i * 8);
+        grid[i] = unsafe { *at::<*mut u8>(page, PAGE_BTN_NOSE + i * 8) };
     }
 
     for i in 0..VANILLA_MOUTHS {
-        grid[cols + i] = *at::<*mut u8>(page, PAGE_BTN_MOUTH + i * 8);
+        grid[cols + i] = unsafe { *at::<*mut u8>(page, PAGE_BTN_MOUTH + i * 8) };
     }
 
     for extra in 0..extras {
@@ -431,10 +451,10 @@ unsafe fn seq_mouth_nav_grid(ctx: &mut skyline::hooks::InlineCtx) {
             continue;
         }
 
-        let node = *at::<*mut u8>(button, BTN_ICON_NODE);
+        let node = unsafe { *at::<*mut u8>(button, BTN_ICON_NODE) };
 
         if !node.is_null() {
-            *at::<*mut u8>(node, NODE_NAV_LINKS + NAV_LINK_DOWN * 8) = null_mut();
+            unsafe { *at::<*mut u8>(node, NODE_NAV_LINKS + NAV_LINK_DOWN * 8) = null_mut() };
         }
     }
 }

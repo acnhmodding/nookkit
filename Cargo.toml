@@ -2,7 +2,7 @@
 name = "acnh-mouth"
 version = "0.1.0"
 authors = []
-edition = "2021"
+edition = "2024"
 
 [package.metadata.skyline]
 titleid = "01006F8002326000" # Animal Crossing: New Horizons (v3.0.3)
