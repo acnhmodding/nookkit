@@ -186,8 +186,6 @@ pub unsafe fn setup(seq: *mut u8) {
             };
         }
 
-        disable_old_buttons(page);
-
         state.slots = list_visible_slots(list).min(MAX_SLOTS);
         state.icons = [null_mut(); MAX_SLOTS];
 
@@ -233,17 +231,26 @@ pub unsafe fn setup(seq: *mut u8) {
     }
 }
 
-// The hidden vanilla mouth buttons are still focusable; take them out of navigation.
-unsafe fn disable_old_buttons(page: *mut u8) {
+// The tab switches its mouth group on and off; the list takes the old buttons' place in it.
+pub unsafe fn set_enabled(seq: *mut u8, enable: bool, mode: u32) {
     unsafe {
-        for button in 0..VANILLA_MOUTH_BUTTONS {
-            let old = *at::<*mut u8>(page, PAGE_BTN_MOUTH + button * 8);
+        let Some(state) = active(seq) else {
+            return;
+        };
 
-            if !old.is_null() {
-                set_button_unfocusable(old);
-            }
-        }
+        println!(
+            "[acnh-mouth] enable={} mode={} items={} state={}",
+            enable,
+            mode,
+            *at::<i32>(state.list, 0x3d4),
+            *at::<u32>(state.list, 0x298)
+        );
+        list_set_enabled(state.list, enable, mode);
     }
+}
+
+pub unsafe fn is_active(seq: *mut u8) -> bool {
+    unsafe { active(seq).is_some() }
 }
 
 unsafe fn mouth_value_list(seq: *mut u8) -> *mut ValueList {
@@ -468,7 +475,6 @@ pub unsafe fn link_navigation(seq: *mut u8) {
             }
         }
 
-        disable_old_buttons(page);
         link_ok_up(page, state);
     }
 }

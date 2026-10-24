@@ -56,6 +56,19 @@ unsafe fn seq_process_request(seq: *mut u8) {
     }
 }
 
+#[skyline::hook(offset = SEQ_SET_GROUP_ENABLED)]
+unsafe fn seq_set_group_enabled(seq: *mut u8, group: u32, enable: u32, mode: u32) {
+    if group != GROUP_MOUTH || unsafe { !list::is_active(seq) } {
+        call_original!(seq, group, enable, mode);
+        return;
+    }
+
+    // The old mouth buttons stay hidden and out of navigation; the list stands in for them.
+    call_original!(seq, group, 0, mode);
+
+    unsafe { list::set_enabled(seq, enable & 1 != 0, mode) };
+}
+
 #[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
 unsafe fn seq_fill_mouth_list(value_list: *mut u8) {
     unsafe { list::before_fill(value_list) };
@@ -88,6 +101,7 @@ pub fn main() {
         seq_on_exit,
         seq_fill_mouth_list,
         seq_process_request,
+        seq_set_group_enabled,
         seq_mouth_refresh,
         seq_mouth_navigation,
     );

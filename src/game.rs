@@ -11,6 +11,9 @@ pub const SEQ_MOUTH_HIGHLIGHT_SELECT: usize = 0x2ba3978;
 pub const SEQ_MOUTH_NAV_GRID_DONE: usize = 0x2ba4034;
 pub const SEQ_FILL_MOUTH_LIST: usize = 0x2b8fe60;
 pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
+// (seq, group, enable, mode): enables a tab's control group; group 6 = the four old mouth buttons.
+pub const SEQ_SET_GROUP_ENABLED: usize = 0x2ba7fe0;
+pub const GROUP_MOUTH: u32 = 6;
 pub const REQUEST_UPDATE_ANCHOR: i32 = 5;
 
 const FIND_BY_PATH: usize = 0x376e6b0;
@@ -25,6 +28,9 @@ const ICON_RENDER: usize = 0x2fc37ac;
 const ICON_MOVE_FROM: usize = 0x2fc3ff0;
 const ICON_RELEASE: usize = 0x2fc4398;
 const ICON_TICK: usize = 0x2fc47d8;
+const LIST_ENABLE: usize = 0x3764fe0;
+const LIST_ENABLE_FOCUS: usize = 0x3dbb160;
+const LIST_DISABLE: usize = 0x335b550;
 
 // Data (offsets from .text)
 pub const LIST_SCROLL_DELEGATE_VTABLE: usize = 0x49b5088;
@@ -38,6 +44,7 @@ const GOT_SCROLL_LIST_TYPE_INFO_GUARD: usize = 0x4ac4d70;
 const GOT_LIST_GROUP_VTABLE: usize = 0x4ac5170;
 const GOT_BTN_GROUP_DELEGATE_VTABLE: usize = 0x4ac9b80;
 const GOT_BTN_GROUP_DELEGATE_FN: usize = 0x4ac9b78;
+const GOT_LIST_ENABLE_PARAMS_VTABLE: usize = 0x4ac9c80;
 
 // game::UI::CharaMakePage
 pub const PAGE_BTN_NOSE: usize = 0x598;
@@ -63,8 +70,6 @@ const BTN_GROUP_DELEGATE: usize = 0x3a0;
 const BTN_CHILDREN: usize = 0x38;
 
 const NODE_NAV_LINKS: usize = 0x1460;
-// Per-player focusable mask; the focus setter (0x71031017e0) checks bit 0.
-const NODE_FOCUS_MASK: usize = 0x14b0;
 pub const NAV_LINK_UP: usize = 0;
 pub const NAV_LINK_DOWN: usize = 1;
 
@@ -294,13 +299,43 @@ pub unsafe fn set_button_mode(button: *mut u8) {
     }
 }
 
-// Takes the button out of focus navigation.
-pub unsafe fn set_button_unfocusable(button: *mut u8) {
+// Same as the game's group switch does for the eye list (group 3).
+pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
     unsafe {
-        let node = *at::<*mut u8>(button, BTN_NAV_NODE);
+        if !enable {
+            let disable: extern "C" fn(*mut u8, u32) = func(LIST_DISABLE);
 
-        if !node.is_null() {
-            *at::<u32>(node, NODE_FOCUS_MASK) &= !1;
+            disable(list, mode);
+            return;
+        }
+
+        if *at::<u32>(list, 0x298) > 1 {
+            let mut params = [0u64; 2];
+
+            params[0] = (got(GOT_LIST_ENABLE_PARAMS_VTABLE) + 0x10) as u64;
+            params[1] = 0xffffffff01000100;
+
+            let enable: extern "C" fn(*mut u8, *const u64) = func(LIST_ENABLE);
+
+            enable(list, params.as_ptr());
+            return;
+        }
+
+        let slots = *at::<*mut u8>(list, 0x270);
+        let scroll = *at::<*mut u8>(list, 0x480);
+        let ready = *at::<i32>(list, 0x2f8) != 0
+            && *at::<i32>(list, LIST_BUTTON_COUNT) != 0
+            && !slots.is_null()
+            && !(*at::<*mut u8>(slots, 8)).is_null()
+            && (scroll.is_null() || *at::<i32>(scroll, 0x14) != -1)
+            && !(*at::<*mut u8>(list, 0x2d8)).is_null()
+            && *at::<i32>(list, 0x3d8) > 0
+            && *at::<i32>(list, 0x3d4) != 0;
+
+        if ready {
+            let enable: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
+
+            enable(list.add(0x290), 2);
         }
     }
 }
