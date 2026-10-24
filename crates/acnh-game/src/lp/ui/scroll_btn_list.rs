@@ -181,7 +181,7 @@ impl ScrollBtnListCtrl {
                 return Ok(None);
             };
 
-            let list_type = type_info("game::UI::AppScrollBtnListCtrl")?;
+            let list_type = type_info("game::UI::ScrollBtnListCtrl")?;
 
             Ok(control
                 .is_derived(list_type)

@@ -66,7 +66,7 @@ impl ListBtnGroup {
 
 #[native(resolve = crate::native::resolve)]
 impl ListBtnGroup {
-    #[native(symbol = "game::UI::CharaMakeSeq::refreshListGroup")]
+    #[native(symbol = "game::UI::ListBtnGroup::refresh")]
     pub unsafe fn refresh(&mut self, list: *mut ScrollBtnListCtrl);
 }
 

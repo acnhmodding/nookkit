@@ -1,7 +1,7 @@
 fn	Lp::UI::Control::findByPath
 fn	Lp::UI::Control::setFocusable
 fn	Lp::Utl::StateMachine::changeState
-fn	game::UI::CharaMakeSeq::refreshListGroup
+fn	game::UI::ListBtnGroup::refresh
 fn	ListItemUpdater::update
 fn	ScrollBtnListCtrl::bindButtons
 fn	ScrollBtnListCtrl::attach
@@ -15,10 +15,10 @@ data	game::UI::ListBtnGroup::SelectableDelegate::vtable
 data	game::UI::ListBtnGroup::vtable
 data	ScrollBtnListCtrl::EnableParams::vtable
 data	ScrollBtnListCtrl::SetContentParams::vtable
-type_info	game::UI::AppScrollBtnListCtrl
+type_info	game::UI::ScrollBtnListCtrl
 type_info	game::UI::AppBodyCtrl
 type_info	Lp::UI::BtnPartsCtrl
-type_info_guard	game::UI::AppScrollBtnListCtrl
+type_info_guard	game::UI::ScrollBtnListCtrl
 type_info_guard	game::UI::AppBodyCtrl
 type_info_guard	Lp::UI::BtnPartsCtrl
 fn	operator_new

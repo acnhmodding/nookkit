@@ -28,11 +28,11 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::CharaMakeSeq::onExit" = 0x2ba10e0
 "game::UI::CharaMakeSeq::processRequest" = 0x2ba4a00
 "game::UI::CharaMakeSeq::refreshEnter" = 0x2ba1460
-"game::UI::CharaMakeSeq::refreshListGroup" = 0x2ac30b0
 "game::UI::CharaMakeSeq::setGroupEnabled" = 0x2ba7fe0
 "game::UI::CharaMakeSeq::setupControls" = 0x2b9d7d0
 "game::UI::CharaMakeSeq::tickIcons" = 0x2ba79b0
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
+"game::UI::ListBtnGroup::refresh" = 0x2ac30b0
 "game::UI::ViewPage::initialize" = 0x3759dd0
 "operator_new" = 0x37aa260
 
@@ -48,9 +48,9 @@ rodata_hash = 0xacfdd336a5d95bb0
 [type_info]
 "Lp::UI::BtnPartsCtrl" = 0x55431f8
 "game::UI::AppBodyCtrl" = 0x5543dd0
-"game::UI::AppScrollBtnListCtrl" = 0x55430e0
+"game::UI::ScrollBtnListCtrl" = 0x5543148
 
 [type_info_guard]
 "Lp::UI::BtnPartsCtrl" = 0x5543200
 "game::UI::AppBodyCtrl" = 0x5543dd8
-"game::UI::AppScrollBtnListCtrl" = 0x55430e8
+"game::UI::ScrollBtnListCtrl" = 0x5543150
