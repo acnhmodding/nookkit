@@ -68,10 +68,6 @@ pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
 // Slot the list believes is focused.
 const LIST_FOCUSED_SLOT: usize = 0x43c;
-// The list's own cursor: absolute line (column) and position within it. Focus moving into the list
-// is applied to this cursor as a one-step move (State_710375F2AC::cPlay_Exec).
-const LIST_CURSOR_LINE: usize = 0x440;
-const LIST_CURSOR_POS: usize = 0x444;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -345,6 +341,11 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             return;
         }
 
+        // Both paths enter State::cPlay, whose enter focuses the list's cursor button unless a slot is
+        // already marked focused. The mouth tab focuses the nose row right after, which the list never
+        // sees: it would keep the D-pad. Mark a slot for the call so the list comes up unfocused.
+        *at::<i32>(list, LIST_FOCUSED_SLOT) = 0;
+
         if *at::<u32>(list, 0x298) > 1 {
             let mut params = [0u64; 2];
 
@@ -354,6 +355,7 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             let enable: extern "C" fn(*mut u8, *const u64) = func(LIST_ENABLE);
 
             enable(list, params.as_ptr());
+            list_clear_focus(list);
             return;
         }
 
@@ -373,19 +375,14 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
 
             enable(list.add(0x290), 2);
         }
+
+        list_clear_focus(list);
     }
 }
 
 // What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec).
 pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
-}
-
-pub unsafe fn list_set_cursor(list: *mut u8, line: i32, pos: i32) {
-    unsafe {
-        *at::<i32>(list, LIST_CURSOR_LINE) = line;
-        *at::<i32>(list, LIST_CURSOR_POS) = pos;
-    }
 }
 
 pub unsafe fn list_button_count(list: *mut u8) -> usize {
