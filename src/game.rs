@@ -63,6 +63,8 @@ const BTN_GROUP_DELEGATE: usize = 0x3a0;
 const BTN_CHILDREN: usize = 0x38;
 
 const NODE_NAV_LINKS: usize = 0x1460;
+// Per-player focusable mask; the focus setter (0x71031017e0) checks bit 0.
+const NODE_FOCUS_MASK: usize = 0x14b0;
 pub const NAV_LINK_UP: usize = 0;
 pub const NAV_LINK_DOWN: usize = 1;
 
@@ -208,7 +210,7 @@ pub unsafe fn list_visible_slots(list: *mut u8) -> usize {
 
 pub unsafe fn list_button(list: *mut u8, slot: usize) -> *mut u8 {
     unsafe {
-        if slot >= (*at::<i32>(list, LIST_BUTTON_COUNT)).max(0) as usize {
+        if slot >= list_button_count(list) {
             return core::ptr::null_mut();
         }
 
@@ -292,14 +294,19 @@ pub unsafe fn set_button_mode(button: *mut u8) {
     }
 }
 
-// The mode setupControls gives the second MyDesign button: not selectable.
-pub unsafe fn set_button_disabled(button: *mut u8) {
+// Takes the button out of focus navigation.
+pub unsafe fn set_button_unfocusable(button: *mut u8) {
     unsafe {
-        let bits = at::<u8>(button, BTN_MODE_BITS);
+        let node = *at::<*mut u8>(button, BTN_NAV_NODE);
 
-        *bits = (*bits & 0xf8) | 2;
-        *at::<i32>(button, BTN_MODE_FLAGS) = 0;
+        if !node.is_null() {
+            *at::<u32>(node, NODE_FOCUS_MASK) &= !1;
+        }
     }
+}
+
+pub unsafe fn list_button_count(list: *mut u8) -> usize {
+    unsafe { (*at::<i32>(list, LIST_BUTTON_COUNT)).max(0) as usize }
 }
 
 pub unsafe fn set_nav_link(button: *mut u8, link: usize, target: *mut u8) {

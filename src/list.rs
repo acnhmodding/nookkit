@@ -25,6 +25,8 @@ struct MouthList {
     saved_count: i32,
     saved_capacity: i32,
     saved_ptrs: *mut *mut u64,
+    // Last logged mouth-part load state per slot (debug).
+    load_state: [u64; MAX_SLOTS],
 }
 
 struct State(UnsafeCell<MouthList>);
@@ -65,6 +67,7 @@ static STATE: State = State(UnsafeCell::new(MouthList {
     saved_count: 0,
     saved_capacity: 0,
     saved_ptrs: null_mut(),
+    load_state: [u64::MAX; MAX_SLOTS],
 }));
 
 #[allow(clippy::mut_from_ref)]
@@ -110,8 +113,8 @@ impl MouthList {
     }
 }
 
-// CharaMakePage::vf_0d0 runs while parts are built; look the list up the same way the game does
-// for its six lists until it exists.
+// CharaMakePage::vf_0d0 runs while parts are built, on every CharaMake entry; look the list up the
+// same way the game does for its six lists and bind its buttons whenever they were rebuilt.
 pub unsafe fn bind(page: *mut u8, parent: *mut u8, builder: *mut u8) {
     unsafe {
         let state = state();
@@ -122,7 +125,7 @@ pub unsafe fn bind(page: *mut u8, parent: *mut u8, builder: *mut u8) {
             state.list = null_mut();
         }
 
-        if !state.list.is_null() || parent.is_null() {
+        if parent.is_null() {
             return;
         }
 
@@ -132,8 +135,13 @@ pub unsafe fn bind(page: *mut u8, parent: *mut u8, builder: *mut u8) {
             return;
         }
 
+        if list == state.list && list_button_count(list) != 0 {
+            return;
+        }
+
         list_bind_buttons(list, builder);
         state.list = list;
+        println!("[acnh-mouth] bind page={:p} list={:p}", page, list);
     }
 }
 
@@ -178,14 +186,7 @@ pub unsafe fn setup(seq: *mut u8) {
             };
         }
 
-        // The hidden vanilla mouth buttons are still focusable; take them out of navigation.
-        for button in 0..VANILLA_MOUTH_BUTTONS {
-            let old = *at::<*mut u8>(page, PAGE_BTN_MOUTH + button * 8);
-
-            if !old.is_null() {
-                set_button_disabled(old);
-            }
-        }
+        disable_old_buttons(page);
 
         state.slots = list_visible_slots(list).min(MAX_SLOTS);
         state.icons = [null_mut(); MAX_SLOTS];
@@ -200,7 +201,13 @@ pub unsafe fn setup(seq: *mut u8) {
             set_button_mode(button);
             bind_button_to_group(button, &mut state.group);
             state.icons[slot] = create_player_icon(seq, button);
+
+            let icon = state.icons[slot];
+            let mouth_pane = if icon.is_null() { null_mut() } else { *at::<*mut u8>(icon, 0x3b8) };
+            println!("[acnh-mouth] setup slot={} button={:p} icon={:p} mouth_part={:p}", slot, button, icon, mouth_pane);
         }
+
+        state.load_state = [u64::MAX; MAX_SLOTS];
 
         state.updater = ItemUpdater {
             count: state.slots as u32,
@@ -214,6 +221,28 @@ pub unsafe fn setup(seq: *mut u8) {
         };
 
         own_values(seq, state);
+        println!(
+            "[acnh-mouth] setup seq={:p} slots={} buttons={} line={} count={} rows={}",
+            seq,
+            state.slots,
+            *at::<i32>(list, 0x208),
+            *at::<i32>(list, LIST_LINE_SIZE),
+            state.count,
+            mouth_row_count()
+        );
+    }
+}
+
+// The hidden vanilla mouth buttons are still focusable; take them out of navigation.
+unsafe fn disable_old_buttons(page: *mut u8) {
+    unsafe {
+        for button in 0..VANILLA_MOUTH_BUTTONS {
+            let old = *at::<*mut u8>(page, PAGE_BTN_MOUTH + button * 8);
+
+            if !old.is_null() {
+                set_button_unfocusable(old);
+            }
+        }
     }
 }
 
@@ -343,6 +372,8 @@ extern "C" fn on_item(seq: *mut u8, event: *const i32) {
         let slot = *event.add(1);
         let icon = state.icons[slot_of(slot)];
 
+        println!("[acnh-mouth] item op={} slot={} from={} icon={:p}", op, slot, *event.add(2), icon);
+
         if icon.is_null() {
             return;
         }
@@ -358,6 +389,7 @@ extern "C" fn on_item(seq: *mut u8, event: *const i32) {
         let mut params = face_params(seq);
 
         params[SEQ_FACE_PARAM_MOUTH] = if in_range { state.value(item as usize) as u8 } else { 0 };
+        println!("[acnh-mouth] item slot={} item={} value={}", slot, item, params[SEQ_FACE_PARAM_MOUTH]);
 
         if op == 1 {
             let source = state.icons[slot_of(*event.add(2))];
@@ -384,6 +416,8 @@ extern "C" fn on_leave(seq: *mut u8, target: *mut *mut u8, event: *mut u8) {
             _ => null_mut(),
         };
 
+        println!("[acnh-mouth] leave dir={} target={:p}", *at::<i32>(event, 0x10), control);
+
         if !control.is_null() {
             *target = control;
         }
@@ -400,6 +434,7 @@ pub unsafe fn refresh(seq: *mut u8) {
         let mouth = face_params(seq)[SEQ_FACE_PARAM_MOUTH] as u32;
         let selected = state.item_of(mouth).unwrap_or(0) as i32;
 
+        println!("[acnh-mouth] refresh mouth={} selected={} count={}", mouth, selected, state.count);
         state.group.selected = selected;
         list_set_content(state.list, state.count as i32, selected, *at::<u8>(seq, SEQ_PLAYER));
     }
@@ -419,9 +454,21 @@ pub unsafe fn link_navigation(seq: *mut u8) {
         for column in 0..NOSE_BUTTONS {
             let nose = *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8);
 
-            set_nav_link(nose, NAV_LINK_DOWN, list_button(state.list, column * line_size));
+            let slot = list_button(state.list, column * line_size);
+
+            set_nav_link(nose, NAV_LINK_DOWN, slot);
+
+            if !nose.is_null() && !slot.is_null() {
+                println!(
+                    "[acnh-mouth] link nose[{}] down={:p} slot_node={:p}",
+                    column,
+                    nav_link(nose, NAV_LINK_DOWN),
+                    *at::<*mut u8>(slot, BTN_NAV_NODE)
+                );
+            }
         }
 
+        disable_old_buttons(page);
         link_ok_up(page, state);
     }
 }
@@ -457,6 +504,8 @@ pub unsafe fn after_request(seq: *mut u8) {
             !old.is_null() && !up.is_null() && *at::<*mut u8>(old, BTN_NAV_NODE) == up
         });
 
+        println!("[acnh-mouth] after_request ok_up={:p} old={}", up, points_at_old_mouth);
+
         if points_at_old_mouth {
             link_ok_up(page, state);
         }
@@ -470,6 +519,8 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
         };
 
         let index = list_item_index_of(state.list, control);
+
+        println!("[acnh-mouth] focus {} index={} request={}", describe(seq, state, control), index, *at::<i32>(seq, SEQ_REQUEST));
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);
@@ -485,6 +536,15 @@ pub unsafe fn on_decide(seq: *mut u8, control: *mut u8) {
         };
 
         let index = list_item_index_of(state.list, control);
+
+        println!(
+            "[acnh-mouth] decide {} index={} locked={} selected={} request={}",
+            describe(seq, state, control),
+            index,
+            state.group.locked,
+            state.group.selected,
+            *at::<i32>(seq, SEQ_REQUEST)
+        );
 
         if index < 0 || state.group.locked != 0 {
             return;
@@ -517,11 +577,81 @@ pub unsafe fn tick(seq: *mut u8) {
             return;
         };
 
-        for &icon in &state.icons[..state.slots] {
+        for slot in 0..state.slots {
+            let icon = state.icons[slot];
+
             if !icon.is_null() {
                 icon_tick(icon);
+                log_load_state(state, slot, icon);
             }
         }
+    }
+}
+
+// Logs the mouth part's texture slot, pending flag, icon fade flag and pool slot state on change.
+unsafe fn log_load_state(state: &mut MouthList, slot: usize, icon: *mut u8) {
+    unsafe {
+        let texture_slot = *at::<u32>(icon, 0x3e0);
+        let pending = *at::<u8>(icon, 0x3e4);
+        let loading = *at::<u8>(icon, 0x218);
+        let pool = *at::<*mut u8>(icon, 0x208);
+        let pool_state = if !pool.is_null() && texture_slot < 0x10e {
+            *at::<i32>(pool, texture_slot as usize * 0x1a8 + 0x1a8)
+        } else {
+            -1
+        };
+        let packed = (texture_slot as u64) << 32 | (pending as u64) << 24 | (loading as u64) << 16 | (pool_state as u8 as u64);
+
+        if state.load_state[slot] != packed {
+            state.load_state[slot] = packed;
+            println!(
+                "[acnh-mouth] load slot={} tex={} pending={} loading={} pool_state={}",
+                slot,
+                texture_slot as i32,
+                pending,
+                loading,
+                pool_state
+            );
+        }
+    }
+}
+
+// Names a focused/decided control relative to the page for the log.
+unsafe fn describe(seq: *mut u8, state: &MouthList, control: *mut u8) -> Described {
+    unsafe {
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+
+        for i in 0..NOSE_BUTTONS {
+            if *at::<*mut u8>(page, PAGE_BTN_NOSE + i * 8) == control {
+                return Described("nose", i as i32, control);
+            }
+        }
+
+        for i in 0..VANILLA_MOUTH_BUTTONS {
+            if *at::<*mut u8>(page, PAGE_BTN_MOUTH + i * 8) == control {
+                return Described("old_mouth", i as i32, control);
+            }
+        }
+
+        if *at::<*mut u8>(page, PAGE_BTN_OK) == control {
+            return Described("ok", 0, control);
+        }
+
+        for slot in 0..state.slots {
+            if list_button(state.list, slot) == control {
+                return Described("list_slot", slot as i32, control);
+            }
+        }
+
+        Described("other", -1, control)
+    }
+}
+
+struct Described(&'static str, i32, *mut u8);
+
+impl core::fmt::Display for Described {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}[{}]={:p}", self.0, self.1, self.2)
     }
 }
 
