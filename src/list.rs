@@ -577,6 +577,15 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
             // Focus set from outside (onTabEnter focusing the nose row) bypasses the list, which would
             // stay in cPlay and keep handling the D-pad from its own cursor.
             list_pause(state.list);
+            list_enable_visible_buttons(state.list);
+            println!(
+                "[acnh-mouth] paused state={} first={} visible={} 438={} 2f4={}",
+                *at::<u32>(state.list, 0x298),
+                *at::<i32>(state.list, 0x430),
+                *at::<i32>(state.list, 0x2ec),
+                *at::<i32>(state.list, 0x438),
+                *at::<i32>(state.list, 0x2f4)
+            );
         }
     }
 }

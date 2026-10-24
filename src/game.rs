@@ -77,6 +77,12 @@ const LIST_PAUSE_MODE: usize = 0x2e4;
 const LIST_STATE_PLAY: u32 = 2;
 const LIST_STATE_PAUSE: u32 = 3;
 const PAUSE_KEEP_BUTTONS: i32 = 2;
+const LIST_PLAYER: usize = 0x2e0;
+// First visible line and the number of visible lines.
+const LIST_FIRST_LINE: usize = 0x430;
+const LIST_VISIBLE_LINES: usize = 0x2ec;
+// Lp::UI control: set focusable for a player (control, player, enable).
+const CONTROL_SET_FOCUSABLE: usize = 0x3c5d0e0;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -382,6 +388,34 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
 }
 
 // What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec).
+// Pausing keeps only the line focus last left from enabled (vanilla re-enters a list where it was
+// left). Here the nose row and OK link into every visible line, so keep all of them focusable.
+pub unsafe fn list_enable_visible_buttons(list: *mut u8) {
+    unsafe {
+        let line_size = (*at::<i32>(list, LIST_LINE_SIZE)).max(1);
+        let first = *at::<i32>(list, LIST_FIRST_LINE);
+        let visible = *at::<i32>(list, LIST_VISIBLE_LINES);
+        let items = *at::<i32>(list, 0x3d4);
+        let player = *at::<u32>(list, LIST_PLAYER);
+        let set_focusable: extern "C" fn(*mut u8, u32, bool) = func(CONTROL_SET_FOCUSABLE);
+
+        for slot in 0..list_button_count(list) {
+            let button = list_button(list, slot);
+
+            if button.is_null() {
+                continue;
+            }
+
+            let item = list_item_index_of(list, button);
+            let line = if item < 0 { -1 } else { item / line_size };
+
+            if item >= 0 && item < items && line >= first && line < first + visible {
+                set_focusable(button, player, true);
+            }
+        }
+    }
+}
+
 pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
 }
