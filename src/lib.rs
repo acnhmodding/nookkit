@@ -78,11 +78,7 @@ unsafe fn seq_set_group_enabled(seq: *mut CharaMakeSeq, group: u32, enable: u32,
 
 #[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
 unsafe fn seq_fill_mouth_list(values: *mut ObjArray<u32>) {
-    unsafe { mouth_list::before_fill(values) };
-
-    call_original!(values);
-
-    unsafe { mouth_list::after_fill(values) };
+    unsafe { mouth_list::fill(values, || call_original!(values)) };
 }
 
 #[skyline::hook(offset = SEQ_REFRESH_ENTER)]

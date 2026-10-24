@@ -88,26 +88,15 @@ impl MouthValues {
     }
 
     // Swap the seq's mouth value list over to our storage: the game's own entries first (in its
-    // order), then every other CharaMakeMouthTypeParam row.
+    // order), then every other CharaMakeMouthTypeParam row. Without the table, leave the game's list.
     unsafe fn own(&mut self, list: &mut ObjArray<u32>) {
         unsafe {
             self.release(list);
+            self.count = 0;
 
             let game = &list.base;
             let rows = mouth_type_count().min(MAX_MOUTHS);
             let game_values = (0..game.size.max(0) as usize).map(|i| **game.ptrs.add(i));
-
-            if rows == 0 {
-                self.count = 0;
-
-                for value in game_values.take(MAX_MOUTHS) {
-                    self.nodes[self.count] = value as u64;
-                    self.count += 1;
-                }
-
-                return;
-            }
-
             let mut count = 0;
 
             for value in game_values.chain(0..rows as u32) {
@@ -280,21 +269,18 @@ pub unsafe fn is_active(seq: *mut CharaMakeSeq) -> bool {
 }
 
 // The game refills the mouth value list on enter; let it work on its own storage, then take over.
-pub unsafe fn before_fill(values: *mut ObjArray<u32>) {
+pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) {
     unsafe {
         let state = state();
+        let ours = !state.seq.is_null() && core::ptr::eq(&(*state.seq).mouth_values, values);
 
-        if !state.seq.is_null() && core::ptr::eq(&(*state.seq).mouth_values, values) {
+        if ours {
             state.values.release(&mut *values);
         }
-    }
-}
 
-pub unsafe fn after_fill(values: *mut ObjArray<u32>) {
-    unsafe {
-        let state = state();
+        game_fill();
 
-        if !state.seq.is_null() && core::ptr::eq(&(*state.seq).mouth_values, values) {
+        if ours {
             state.values.own(&mut *values);
         }
     }
@@ -373,7 +359,7 @@ extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event:
 // refresh also relinks every tab's grid, so on the mouth tab point the nose row and OK back at the list.
 pub unsafe fn refresh(seq: *mut CharaMakeSeq) {
     unsafe {
-        let Some(state) = active(seq) else {
+        let Some(state) = active(seq).filter(|state| state.values.count != 0) else {
             return;
         };
 
