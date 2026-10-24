@@ -85,16 +85,11 @@ unsafe fn seq_fill_mouth_list(values: *mut ObjArray<u32>) {
     unsafe { mouth_list::after_fill(values) };
 }
 
-// Page refresh, right where the game selects the current mouth button.
-#[skyline::hook(offset = SEQ_MOUTH_HIGHLIGHT_SELECT, inline)]
-unsafe fn seq_mouth_refresh(ctx: &mut skyline::hooks::InlineCtx) {
-    unsafe { mouth_list::refresh(ctx.registers[19].x() as *mut CharaMakeSeq) };
-}
+#[skyline::hook(offset = SEQ_REFRESH_ENTER)]
+unsafe fn seq_refresh_enter(seq: *mut CharaMakeSeq) {
+    call_original!(seq);
 
-// Right after the game links the nose/mouth tab's navigation grid.
-#[skyline::hook(offset = SEQ_MOUTH_NAV_GRID_DONE, inline)]
-unsafe fn seq_mouth_navigation(ctx: &mut skyline::hooks::InlineCtx) {
-    unsafe { mouth_list::link_navigation(ctx.registers[19].x() as *mut CharaMakeSeq) };
+    unsafe { mouth_list::refresh(seq) };
 }
 
 #[skyline::main(name = "acnh-mouth")]
@@ -109,7 +104,6 @@ pub fn main() {
         seq_fill_mouth_list,
         seq_process_request,
         seq_set_group_enabled,
-        seq_mouth_refresh,
-        seq_mouth_navigation,
+        seq_refresh_enter,
     );
 }

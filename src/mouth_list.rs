@@ -366,7 +366,8 @@ extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event:
     }
 }
 
-// Page refresh: select the current mouth and (re)fill the list, which renders the visible items.
+// Page refresh: select the current mouth and (re)fill the list, which renders the visible items. The
+// refresh also relinks every tab's grid, so on the mouth tab point the nose row and OK back at the list.
 pub unsafe fn refresh(seq: *mut CharaMakeSeq) {
     unsafe {
         let Some(state) = active(seq) else {
@@ -379,13 +380,8 @@ pub unsafe fn refresh(seq: *mut CharaMakeSeq) {
 
         state.group.selected = selected;
         state.list().set_content(count, selected, player);
-    }
-}
 
-// The game links the nose buttons down to the old mouth buttons; link them to the list instead.
-pub unsafe fn link_navigation(seq: *mut CharaMakeSeq) {
-    unsafe {
-        if let Some(state) = active(seq) {
+        if state.enabled {
             state.relink();
         }
     }

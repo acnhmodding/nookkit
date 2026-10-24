@@ -15,9 +15,8 @@ pub const SEQ_FILL_MOUTH_LIST: usize = 0x2b8fe60;
 pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
 // (seq, group, enable, mode): enables one of the current tab's control groups.
 pub const SEQ_SET_GROUP_ENABLED: usize = 0x2ba7fe0;
-// Inline, x19 = seq.
-pub const SEQ_MOUTH_HIGHLIGHT_SELECT: usize = 0x2ba3978;
-pub const SEQ_MOUTH_NAV_GRID_DONE: usize = 0x2ba4034;
+// Refresh state enter: selects each tab's current items, then builds the tabs' navigation grids.
+pub const SEQ_REFRESH_ENTER: usize = 0x2ba1460;
 
 // The four old mouth buttons.
 pub const GROUP_MOUTH: u32 = 6;
