@@ -7,9 +7,9 @@ fn start() -> Result {
     ui.on_page(PageFilter::Layout("CharaMake"), |page| {
         println!("[acnh-ui-smoke] CharaMake built {:p}", page.raw());
 
-        match page.pane("L_BtnOk") {
-            Ok(pane) => println!("[acnh-ui-smoke] L_BtnOk {:p}", pane.raw()),
-            Err(e) => println!("[acnh-ui-smoke] L_BtnOk: {e}"),
+        match page.pane("/L_BtnOk_00") {
+            Ok(pane) => println!("[acnh-ui-smoke] /L_BtnOk_00 {:p}", pane.raw()),
+            Err(e) => println!("[acnh-ui-smoke] /L_BtnOk_00: {e}"),
         }
 
         page.on_focus(|e| {
