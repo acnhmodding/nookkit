@@ -29,7 +29,8 @@ const ICON_MOVE_FROM: usize = 0x2fc3ff0;
 const ICON_RELEASE: usize = 0x2fc4398;
 const ICON_TICK: usize = 0x2fc47d8;
 const LIST_ENABLE: usize = 0x3764fe0;
-const LIST_ENABLE_FOCUS: usize = 0x3dbb160;
+// Lp::Utl::StateMachine change state (machine, state).
+const STATE_MACHINE_CHANGE: usize = 0x3dbb160;
 const LIST_DISABLE: usize = 0x335b550;
 // ScrollBtnListCtrl attach: player, the page's focus manager, nav nodes, arrow buttons.
 const LIST_ATTACH: usize = 0x3763fe0;
@@ -373,7 +374,7 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             && *at::<i32>(list, 0x3d4) != 0;
 
         if ready {
-            let enable: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
+            let enable: extern "C" fn(*mut u8, u32) = func(STATE_MACHINE_CHANGE);
 
             enable(list.add(LIST_STATE_MACHINE), LIST_STATE_PLAY);
         }
@@ -393,7 +394,7 @@ pub unsafe fn list_pause(list: *mut u8) {
         list_clear_focus(list);
 
         if *at::<u32>(list, LIST_STATE) == LIST_STATE_PLAY {
-            let change_state: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
+            let change_state: extern "C" fn(*mut u8, u32) = func(STATE_MACHINE_CHANGE);
 
             *at::<i32>(list, LIST_PAUSE_MODE) = PAUSE_KEEP_BUTTONS;
             change_state(list.add(LIST_STATE_MACHINE), LIST_STATE_PAUSE);
