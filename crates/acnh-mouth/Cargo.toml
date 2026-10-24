@@ -1,0 +1,15 @@
+[package]
+name = "acnh-mouth"
+version = "0.1.0"
+authors = []
+edition = "2024"
+
+[package.metadata.skyline]
+titleid = "01006F8002326000" # Animal Crossing: New Horizons (v3.0.3)
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+skyline = "0.6.0"
+native-vtable = { git = "https://github.com/crackheadakira/vtable-rs.git" }
