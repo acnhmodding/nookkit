@@ -13,3 +13,4 @@ crate-type = ["cdylib"]
 skyline = "0.6.0"
 acnh-ui-sys = { path = "../acnh-ui-sys" }
 acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
+acnh-game = { path = "../acnh-game" }

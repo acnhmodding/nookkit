@@ -1,0 +1,5 @@
+fn	game::UI::ViewPage::initialize
+fn	game::PlayerControlLockMgr::acquire
+fn	game::PlayerControlLockMgr::releaseMenuLock
+data	game::UI::CharaMakeSeq::ControlEventDelegate::vtable
+data	ACNH_Singleton_7104CA4AB8::sInstance
