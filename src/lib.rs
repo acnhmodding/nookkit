@@ -69,6 +69,13 @@ unsafe fn seq_set_group_enabled(seq: *mut u8, group: u32, enable: u32, mode: u32
     unsafe { list::set_enabled(seq, enable & 1 != 0, mode) };
 }
 
+#[skyline::hook(offset = LIST_PLAY_EXEC)]
+unsafe fn list_play_exec(list: *mut u8) {
+    unsafe { list::before_play_exec(list) };
+
+    call_original!(list);
+}
+
 #[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
 unsafe fn seq_fill_mouth_list(value_list: *mut u8) {
     unsafe { list::before_fill(value_list) };
@@ -102,6 +109,7 @@ pub fn main() {
         seq_fill_mouth_list,
         seq_process_request,
         seq_set_group_enabled,
+        list_play_exec,
         seq_mouth_refresh,
         seq_mouth_navigation,
     );

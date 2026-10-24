@@ -14,6 +14,8 @@ pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
 // (seq, group, enable, mode): enables a tab's control group; group 6 = the four old mouth buttons.
 pub const SEQ_SET_GROUP_ENABLED: usize = 0x2ba7fe0;
 pub const GROUP_MOUTH: u32 = 6;
+// ScrollBtnListCtrl State::cPlay exec (list): applies the pending D-pad move, focused or not.
+pub const LIST_PLAY_EXEC: usize = 0x375fd8c;
 pub const REQUEST_UPDATE_ANCHOR: i32 = 5;
 
 const FIND_BY_PATH: usize = 0x376e6b0;
@@ -68,6 +70,8 @@ pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
 // Slot the list believes is focused.
 const LIST_FOCUSED_SLOT: usize = 0x43c;
+// Pending move kind (0 none, 1 within a line, 2 across lines, 3 scroll) for State::cPlay.
+const LIST_PENDING_MOVE: usize = 0x3ec;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -383,6 +387,10 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
 // What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec).
 pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
+}
+
+pub unsafe fn list_drop_pending_move(list: *mut u8) {
+    unsafe { *at::<i32>(list, LIST_PENDING_MOVE) = 0 };
 }
 
 pub unsafe fn list_button_count(list: *mut u8) -> usize {

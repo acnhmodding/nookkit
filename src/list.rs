@@ -25,6 +25,8 @@ struct MouthList {
     saved_count: i32,
     saved_capacity: i32,
     saved_ptrs: *mut *mut u64,
+    // Whether one of the list's slots holds focus; the list itself doesn't check before moving.
+    focused: bool,
     // Last logged mouth-part load state per slot (debug).
     load_state: [u64; MAX_SLOTS],
 }
@@ -67,6 +69,7 @@ static STATE: State = State(UnsafeCell::new(MouthList {
     saved_count: 0,
     saved_capacity: 0,
     saved_ptrs: null_mut(),
+    focused: false,
     load_state: [u64::MAX; MAX_SLOTS],
 }));
 
@@ -245,6 +248,7 @@ pub unsafe fn set_enabled(seq: *mut u8, enable: bool, mode: u32) {
         println!("[acnh-mouth] enable={} mode={}", enable, mode);
         dump_list("mouth", state.list);
         dump_list("eye", *at::<*mut u8>(page, 0x670));
+        state.focused = false;
         list_set_enabled(state.list, enable, mode);
         dump_list("mouth_after", state.list);
     }
@@ -274,6 +278,18 @@ unsafe fn dump_list(name: &str, list: *mut u8) {
             *at::<i32>(list, 0x3d8),
             *at::<i32>(list, 0x3d4)
         );
+    }
+}
+
+// The list applies D-pad moves even while focus is on the nose row or the OK button; only let it
+// move while one of its own slots is focused, so entering it goes through the navigation links.
+pub unsafe fn before_play_exec(list: *mut u8) {
+    unsafe {
+        let state = state();
+
+        if list == state.list && !state.focused {
+            list_drop_pending_move(list);
+        }
     }
 }
 
@@ -568,6 +584,8 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
             *at::<i32>(state.list, 0x3ec),
             *at::<i32>(state.list, 0x3f4)
         );
+
+        state.focused = index >= 0;
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);
