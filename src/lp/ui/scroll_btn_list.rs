@@ -59,8 +59,7 @@ pub struct ScrollBtnListCtrl {
     pub pause_button_mode: i32,
     pub line_size: i32,
     pub visible_lines: i32,
-    _unk_2f0: [u8; 0x4],
-    pub visible_items: i32,
+    _unk_2f0: [u8; 0x8],
     pub slot_count: i32,
     _unk_2fc: [u8; 0x34],
     pub scroll_delegate: Delegate,
@@ -73,13 +72,11 @@ pub struct ScrollBtnListCtrl {
     pub unk_3d8: i32,
     _unk_3dc: [u8; 0x54],
     pub first_line: i32,
-    pub last_first_line: i32,
+    _unk_434: [u8; 0x4],
     pub first_button_line: i32,
     // Slot the list believes is focused, -1 for none.
     pub focused_slot: i32,
-    pub cursor_line: i32,
-    pub cursor_pos: i32,
-    _unk_448: [u8; 0x38],
+    _unk_440: [u8; 0x40],
     pub input_claim: *mut InputClaim,
 }
 
@@ -93,7 +90,6 @@ const _: () = {
     assert!(offset_of!(ScrollBtnListCtrl, pause_button_mode) == 0x2e4);
     assert!(offset_of!(ScrollBtnListCtrl, line_size) == 0x2e8);
     assert!(offset_of!(ScrollBtnListCtrl, visible_lines) == 0x2ec);
-    assert!(offset_of!(ScrollBtnListCtrl, visible_items) == 0x2f4);
     assert!(offset_of!(ScrollBtnListCtrl, slot_count) == 0x2f8);
     assert!(offset_of!(ScrollBtnListCtrl, scroll_delegate) == 0x330);
     assert!(offset_of!(ScrollBtnListCtrl, leave_delegate) == 0x350);
@@ -103,7 +99,6 @@ const _: () = {
     assert!(offset_of!(ScrollBtnListCtrl, first_line) == 0x430);
     assert!(offset_of!(ScrollBtnListCtrl, first_button_line) == 0x438);
     assert!(offset_of!(ScrollBtnListCtrl, focused_slot) == 0x43c);
-    assert!(offset_of!(ScrollBtnListCtrl, cursor_pos) == 0x444);
     assert!(offset_of!(ScrollBtnListCtrl, input_claim) == 0x480);
 };
 
