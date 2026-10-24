@@ -3,9 +3,13 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use acnh_game::game::ui::{ControlEvent, ViewPage};
+use acnh_game::lp::ui::{Control, ScrollBtnListCtrl};
 use acnh_game::native::NativeResult;
 use acnh_game::sead::{Delegate, VftDelegate};
-use acnh_ui_sys::{Callback, ControlEvent as Event, Status};
+use acnh_ui_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
+
+use crate::lists::ListState;
+use crate::report;
 
 struct PageListener {
     layout: String,
@@ -23,9 +27,39 @@ struct EventSlot {
 
 unsafe impl Send for EventSlot {}
 
-// Boxed so the delegates in the game's tables keep pointing at them
-#[allow(clippy::vec_box)]
-static PAGES: Mutex<BTreeMap<usize, Vec<Box<EventSlot>>>> = Mutex::new(BTreeMap::new());
+#[derive(Default)]
+pub struct PageState {
+    // Boxed so the delegates in the game's tables keep pointing at them
+    #[allow(clippy::vec_box)]
+    events: Vec<Box<EventSlot>>,
+
+    pub seq: [Vec<Callback>; SEQ_EVENT_KINDS],
+    pub lists: Vec<&'static ListState>,
+}
+
+pub static PAGES: Mutex<BTreeMap<usize, PageState>> = Mutex::new(BTreeMap::new());
+
+pub type Snapshot = Vec<(
+    unsafe extern "C" fn(*mut c_void, *const c_void),
+    *mut c_void,
+)>;
+
+/// Callbacks may register more while they run, so they are called from a copy taken under the lock
+pub fn snapshot(cbs: &[Callback]) -> Snapshot {
+    cbs.iter().map(|cb| (cb.func, cb.user)).collect()
+}
+
+pub unsafe fn call(cbs: Snapshot, arg: *const c_void) {
+    for (func, user) in cbs {
+        unsafe { func(user, arg) };
+    }
+}
+
+pub fn with_page<R>(page: *mut ViewPage, f: impl FnOnce(&mut PageState) -> R) -> Option<R> {
+    let mut pages = PAGES.lock().ok()?;
+
+    Some(f(pages.entry(page as usize).or_default()))
+}
 
 acnh_sym::hook! {
     pub view_page_initialize = "game::UI::ViewPage::initialize";
@@ -35,13 +69,67 @@ acnh_sym::hook! {
     }
 }
 
+#[repr(C)]
+pub struct LayoutBuilt {
+    parent: *mut Control,
+    builder: *mut c_void,
+}
+
+acnh_sym::hook! {
+    pub view_page_layout_built = "game::UI::ViewPage::dispatchLayoutBuilt";
+    fn(page: *mut ViewPage, event: *mut LayoutBuilt) {
+        unsafe { original(page, event) };
+
+        if let Some(event) = unsafe { event.as_ref() } {
+            report("auto-bind", unsafe { bind_unbound_lists(event.parent, event.builder) });
+        }
+    }
+}
+
+// The page binds its own lists in the original, so any list still without buttons came from a layout mod
+unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> NativeResult {
+    unsafe {
+        let Some(control_ref) = control.as_mut() else {
+            return Ok(());
+        };
+
+        if let Some(list) = ScrollBtnListCtrl::cast(control)? {
+            if list.button_count() == 0 {
+                list.bind_buttons(builder)?;
+
+                let name = control_ref
+                    .name()
+                    .and_then(|n| n.to_str().ok())
+                    .unwrap_or("?");
+                println!(
+                    "[acnh-ui] bound list {name} ({} buttons)",
+                    list.button_count()
+                );
+            }
+
+            return Ok(());
+        }
+
+        for child in control_ref.children() {
+            bind_unbound_lists(child, builder)?;
+        }
+
+        Ok(())
+    }
+}
+
 unsafe fn built(page: *mut ViewPage) {
     // A page built again at this address has a new event table, so its old slots are unreachable
     let stale = PAGES
         .lock()
         .ok()
         .and_then(|mut pages| pages.remove(&(page as usize)));
-    drop(stale);
+
+    if let Some(stale) = stale {
+        for list in &stale.lists {
+            list.retire();
+        }
+    }
 
     let Some(page_ref) = (unsafe { page.as_ref() }) else {
         return;
@@ -54,7 +142,7 @@ unsafe fn built(page: *mut ViewPage) {
         .and_then(|s| s.to_str().ok())
         .unwrap_or("");
 
-    let matching: Vec<_> = match PAGE_LISTENERS.lock() {
+    let matching: Snapshot = match PAGE_LISTENERS.lock() {
         Ok(listeners) => listeners
             .iter()
             .filter(|l| {
@@ -66,10 +154,7 @@ unsafe fn built(page: *mut ViewPage) {
         Err(_) => return,
     };
 
-    // Listeners are never removed, so their user data outlives the lock
-    for (func, user) in matching {
-        unsafe { func(user, page.cast()) };
-    }
+    unsafe { call(matching, page.cast()) };
 }
 
 pub fn on_page_built(layout: &str, class: &str, cb: Callback) -> Status {
@@ -98,14 +183,11 @@ extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
         kind: slot.kind,
     };
 
-    let cbs: Vec<_> = match slot.cbs.lock() {
-        Ok(cbs) => cbs.iter().map(|cb| (cb.func, cb.user)).collect(),
-        Err(_) => return,
+    let Some(cbs) = slot.cbs.lock().ok().map(|cbs| snapshot(&cbs)) else {
+        return;
     };
 
-    for (func, user) in cbs {
-        unsafe { func(user, (&event as *const Event).cast()) };
-    }
+    unsafe { call(cbs, (&event as *const Event).cast()) };
 }
 
 pub unsafe fn on_control_event(
@@ -117,9 +199,9 @@ pub unsafe fn on_control_event(
         return Ok(Status::InvalidArg);
     };
 
-    let slots = pages.entry(page as usize).or_default();
+    let events = &mut pages.entry(page as usize).or_default().events;
 
-    if let Some(slot) = slots.iter().find(|s| s.kind == kind) {
+    if let Some(slot) = events.iter().find(|s| s.kind == kind) {
         if let Ok(mut cbs) = slot.cbs.lock() {
             cbs.push(cb);
         }
@@ -148,7 +230,7 @@ pub unsafe fn on_control_event(
     });
 
     *free = Delegate::bind(&mut *slot as *mut EventSlot, dispatch as *const () as usize);
-    slots.push(slot);
+    events.push(slot);
 
     Ok(Status::Ok)
 }

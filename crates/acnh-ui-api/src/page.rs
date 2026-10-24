@@ -1,8 +1,11 @@
 use core::ffi::c_void;
 
-use acnh_ui_sys::{ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, Str};
+use acnh_ui_sys::{
+    ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_READY,
+    SEQ_UPDATE, Str,
+};
 
-use crate::{Result, Ui, callback, check};
+use crate::{List, ListTarget, Result, Ui, callback, check};
 
 pub trait PaneRef {
     fn path(&self) -> &str;
@@ -26,8 +29,6 @@ pub struct Page {
     ui: Ui,
     raw: *mut c_void,
 }
-
-unsafe impl Send for Page {}
 
 impl Page {
     pub(crate) fn new(ui: Ui, raw: *mut c_void) -> Self {
@@ -57,18 +58,65 @@ impl Page {
         Ok(Pane { page: *self, raw })
     }
 
-    pub fn on_focus(&self, f: impl FnMut(Event) -> Result + Send + 'static) -> Result {
+    pub fn on_focus(&self, f: impl FnMut(Event) -> Result + 'static) -> Result {
         self.on_event(EVENT_FOCUS, f)
     }
 
-    pub fn on_decide(&self, f: impl FnMut(Event) -> Result + Send + 'static) -> Result {
+    pub fn on_decide(&self, f: impl FnMut(Event) -> Result + 'static) -> Result {
         self.on_event(EVENT_DECIDE, f)
     }
 
-    fn on_event(&self, kind: u32, f: impl FnMut(Event) -> Result + Send + 'static) -> Result {
-        let cb = callback::event(self.ui, f);
+    fn on_event(&self, kind: u32, mut f: impl FnMut(Event) -> Result + 'static) -> Result {
+        let ui = self.ui;
+        let cb = callback::raw(ui, move |arg| {
+            match unsafe { arg.cast::<ControlEvent>().as_ref() } {
+                Some(event) => f(Event::new(ui, event)),
+                None => Ok(()),
+            }
+        });
 
         check(unsafe { (self.ui.table.on_control_event)(self.raw, kind, cb) })
+    }
+
+    /// The scroll list at `path`; lists a layout mod added are bound by the framework while the page builds
+    pub fn list(&self, path: impl PaneRef) -> Result<List> {
+        let mut raw = core::ptr::null_mut();
+
+        check(unsafe { (self.ui.table.list_get)(self.raw, Str::new(path.path()), &mut raw) })?;
+
+        Ok(List::new(*self, raw))
+    }
+
+    /// After the page's seq has set up its controls
+    pub fn on_ready(&self, mut f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        self.on_seq(SEQ_READY, move |arg| {
+            f(Seq {
+                raw: arg.cast_mut(),
+            })
+        })
+    }
+
+    pub fn on_activate(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
+        self.on_seq(SEQ_ACTIVATE, move |_| f())
+    }
+
+    pub fn on_deactivated(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
+        self.on_seq(SEQ_DEACTIVATED, move |_| f())
+    }
+
+    /// Every frame the page's seq updates
+    pub fn on_update(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
+        self.on_seq(SEQ_UPDATE, move |_| f())
+    }
+
+    fn on_seq(&self, kind: u32, f: impl FnMut(*const c_void) -> Result + 'static) -> Result {
+        let cb = callback::raw(self.ui, f);
+
+        check(unsafe { (self.ui.table.on_seq_event)(self.raw, kind, cb) })
+    }
+
+    pub(crate) fn ui(&self) -> Ui {
+        self.ui
     }
 }
 
@@ -78,7 +126,17 @@ pub struct Pane {
     raw: *mut c_void,
 }
 
-unsafe impl Send for Pane {}
+#[derive(Clone, Copy)]
+pub struct Seq {
+    raw: *mut c_void,
+}
+
+impl Seq {
+    /// For reading the seq's own struct, e.g. through acnh-game
+    pub fn raw(&self) -> *mut c_void {
+        self.raw
+    }
+}
 
 impl PartialEq for Pane {
     fn eq(&self, other: &Self) -> bool {
@@ -114,13 +172,26 @@ impl Pane {
         Ok(*self)
     }
 
+    pub(crate) fn new(page: Page, raw: *mut c_void) -> Self {
+        Self { page, raw }
+    }
+
+    /// Keeps the link pointed at `target` of the list's visible window as it scrolls
+    pub fn link_into(&self, direction: Direction, list: &List, target: ListTarget) -> Result<Pane> {
+        check(unsafe {
+            (self.page.ui.table.list_link_into)(self.raw, direction, list.raw(), target.into())
+        })?;
+
+        Ok(*self)
+    }
+
     pub fn set_visible(&self, visible: bool) -> Result<Pane> {
         check(unsafe { (self.page.ui.table.set_visible)(self.raw, visible) })?;
 
         Ok(*self)
     }
 
-    pub fn on_focus(&self, mut f: impl FnMut(Event) -> Result + Send + 'static) -> Result<Pane> {
+    pub fn on_focus(&self, mut f: impl FnMut(Event) -> Result + 'static) -> Result<Pane> {
         let this = *self;
         self.page.on_focus(move |e| {
             if e.control == Some(this) {
@@ -133,7 +204,7 @@ impl Pane {
         Ok(*self)
     }
 
-    pub fn on_decide(&self, mut f: impl FnMut(Event) -> Result + Send + 'static) -> Result<Pane> {
+    pub fn on_decide(&self, mut f: impl FnMut(Event) -> Result + 'static) -> Result<Pane> {
         let this = *self;
         self.page.on_decide(move |e| {
             if e.control == Some(this) {

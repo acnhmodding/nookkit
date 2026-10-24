@@ -6,12 +6,14 @@
 )]
 
 mod callback;
+mod list;
 mod page;
 
 use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, Status, Str, sl_api_get};
 
 pub use acnh_ui_sys::Direction;
-pub use page::{Event, Page, Pane, PaneRef};
+pub use list::{ItemUpdate, List, ListTarget};
+pub use page::{Event, Page, Pane, PaneRef, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UiError {
@@ -82,14 +84,15 @@ impl Ui {
     pub fn on_page(
         &self,
         filter: PageFilter<'_>,
-        f: impl FnMut(Page) -> Result + Send + 'static,
+        mut f: impl FnMut(Page) -> Result + 'static,
     ) -> Result {
         let (layout, class) = match filter {
             PageFilter::Layout(layout) => (layout, ""),
             PageFilter::Class(class) => ("", class),
         };
 
-        let cb = callback::page(*self, f);
+        let ui = *self;
+        let cb = callback::raw(ui, move |arg| f(Page::new(ui, arg.cast_mut())));
 
         check(unsafe { (self.table.on_page_built)(Str::new(layout), Str::new(class), cb) })
     }

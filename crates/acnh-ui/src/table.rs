@@ -7,9 +7,10 @@ use acnh_game::game::ui::ViewPage;
 use acnh_game::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
 use acnh_game::native::{Error, NativeResult, type_info};
 use acnh_sym::SymError;
-use acnh_ui_sys::{AcnhUiV1, Callback, Direction, Status, Str};
+use acnh_ui_sys::{AcnhUiV1, Callback, Direction, ListTarget, Status, Str};
 
-use crate::{STARTED, pages};
+use crate::lists::{self, ListState};
+use crate::{STARTED, pages, seqs};
 
 pub static TABLE: AcnhUiV1 = AcnhUiV1 {
     size: core::mem::size_of::<AcnhUiV1>(),
@@ -22,7 +23,20 @@ pub static TABLE: AcnhUiV1 = AcnhUiV1 {
     lock_player,
     release_player,
     set_visible,
+    on_seq_event,
+    list_get,
+    list_on,
+    list_set_items,
+    list_set_enabled,
+    list_link_into,
+    list_relink,
+    list_slot_count,
+    list_button,
 };
+
+unsafe fn list_ref<'a>(list: *mut c_void) -> Option<&'a ListState> {
+    unsafe { list.cast::<ListState>().as_ref() }
+}
 
 fn status(context: &str, result: NativeResult<Status>) -> Status {
     match result {
@@ -169,6 +183,117 @@ unsafe extern "C" fn set_visible(pane: *mut c_void, visible: bool) -> Status {
         };
 
         pane.set_visible(visible);
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn on_seq_event(page: *mut c_void, kind: u32, cb: Callback) -> Status {
+    guarded("on_seq_event", || {
+        Ok(seqs::on_seq_event(page.cast(), kind, cb))
+    })
+}
+
+unsafe extern "C" fn list_get(page: *mut c_void, path: Str, out: *mut *mut c_void) -> Status {
+    guarded("list_get", || unsafe {
+        let (Some(path), false) = (path.as_str(), out.is_null()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        Ok(match lists::get(page.cast(), path)? {
+            Ok(list) => {
+                *out = (list as *const ListState).cast_mut().cast();
+                Status::Ok
+            }
+            Err(status) => status,
+        })
+    })
+}
+
+unsafe extern "C" fn list_on(list: *mut c_void, kind: u32, cb: Callback) -> Status {
+    guarded("list_on", || unsafe {
+        Ok(list_ref(list).map_or(Status::InvalidArg, |list| lists::on(list, kind, cb)))
+    })
+}
+
+unsafe extern "C" fn list_set_items(
+    list: *mut c_void,
+    count: u32,
+    selected: u32,
+    player: u8,
+) -> Status {
+    guarded("list_set_items", || unsafe {
+        let Some(list) = list_ref(list) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        list.set_items(count, selected, player)?;
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn list_set_enabled(list: *mut c_void, enable: bool, mode: u32) -> Status {
+    guarded("list_set_enabled", || unsafe {
+        let Some(list) = list_ref(list) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        list.set_enabled(enable, mode)?;
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn list_link_into(
+    from: *mut c_void,
+    direction: Direction,
+    list: *mut c_void,
+    target: ListTarget,
+) -> Status {
+    guarded("list_link_into", || unsafe {
+        match list_ref(list) {
+            Some(list) => lists::link_into(from, direction, list, target),
+            None => Ok(Status::InvalidArg),
+        }
+    })
+}
+
+unsafe extern "C" fn list_relink(list: *mut c_void) -> Status {
+    guarded("list_relink", || unsafe {
+        let Some(list) = list_ref(list) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        list.relink();
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn list_slot_count(list: *mut c_void, out: *mut u32) -> Status {
+    guarded("list_slot_count", || unsafe {
+        let (Some(list), false) = (list_ref(list), out.is_null()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        *out = lists::slot_count(list);
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn list_button(list: *mut c_void, slot: u32, out: *mut *mut c_void) -> Status {
+    guarded("list_button", || unsafe {
+        let (Some(list), false) = (list_ref(list), out.is_null()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        let Some(button) = lists::button(list, slot) else {
+            return Ok(Status::PaneNotFound);
+        };
+
+        *out = button;
 
         Ok(Status::Ok)
     })

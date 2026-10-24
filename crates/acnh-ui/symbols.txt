@@ -2,3 +2,8 @@ fn	game::UI::ViewPage::initialize
 fn	game::PlayerControlLockMgr::acquire
 fn	game::PlayerControlLockMgr::releaseMenuLock
 data	ACNH_Singleton_7104CA4AB8::sInstance
+fn	game::UI::ViewPage::dispatchLayoutBuilt
+fn	game::UISys::Sequence::create
+fn	game::UI::SequenceBase::onActivate
+fn	game::UI::SequenceBase::onDeactivated
+fn	game::UI::SequenceBase::update

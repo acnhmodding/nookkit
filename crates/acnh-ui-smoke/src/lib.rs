@@ -1,20 +1,45 @@
-use acnh_ui_api::{PageFilter, Result, connect};
+use acnh_ui_api::{Page, PageFilter, Result, connect};
+
+fn log_seq(page: Page, name: &'static str) -> Result {
+    page.on_ready(move |seq| {
+        println!("[acnh-ui-smoke] {name} ready, seq {:p}", seq.raw());
+        Ok(())
+    })?;
+
+    page.on_activate(move || {
+        println!("[acnh-ui-smoke] {name} activate");
+        Ok(())
+    })?;
+
+    page.on_deactivated(move || {
+        println!("[acnh-ui-smoke] {name} deactivated");
+        Ok(())
+    })?;
+
+    let mut frames = 0u32;
+
+    page.on_update(move || {
+        frames += 1;
+
+        if frames % 300 == 1 {
+            println!("[acnh-ui-smoke] {name} update #{frames}");
+        }
+
+        Ok(())
+    })
+}
 
 fn start() -> Result {
     let ui = connect("acnh-ui-smoke")?;
     println!("[acnh-ui-smoke] connected");
 
+    ui.on_page(PageFilter::Layout("MenuDevice"), |page| log_seq(page, "MenuDevice"))?;
+
     ui.on_page(PageFilter::Layout("CharaMake"), |page| {
         println!("[acnh-ui-smoke] CharaMake built {:p}", page.raw());
+        log_seq(page, "CharaMake")?;
 
         let ok = page.pane("/L_BtnOk_00")?;
-        println!("[acnh-ui-smoke] /L_BtnOk_00 {:p}", ok.raw());
-
-        page.on_focus(|e| {
-            println!("[acnh-ui-smoke] focus {:?}", e.control.map(|c| c.raw()));
-            Ok(())
-        })?;
-
         let mut visible = true;
 
         page.on_decide(move |e| {

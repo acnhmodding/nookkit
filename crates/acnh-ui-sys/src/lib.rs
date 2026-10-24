@@ -95,6 +95,54 @@ pub enum Direction {
     Right = 3,
 }
 
+pub const SEQ_READY: u32 = 0;
+pub const SEQ_ACTIVATE: u32 = 1;
+pub const SEQ_DEACTIVATED: u32 = 2;
+pub const SEQ_UPDATE: u32 = 3;
+pub const SEQ_EVENT_KINDS: usize = 4;
+
+pub const LIST_ITEM: u32 = 0;
+pub const LIST_FOCUS: u32 = 1;
+pub const LIST_DECIDE: u32 = 2;
+pub const LIST_LEAVE: u32 = 3;
+pub const LIST_EVENT_KINDS: usize = 4;
+
+pub const ITEM_RENDER: u32 = 0;
+pub const ITEM_MOVE: u32 = 1;
+pub const ITEM_CLEAR: u32 = 2;
+
+#[repr(C)]
+pub struct ItemUpdate {
+    pub op: u32,
+    pub slot: u32,
+    pub from_slot: u32,
+
+    /// -1 for `ITEM_CLEAR`
+    pub item: i32,
+}
+
+pub const NO_LINE: u32 = u32::MAX;
+
+#[repr(C)]
+pub struct LeaveQuery {
+    pub direction: Direction,
+
+    /// Visible line focus leaves from, `NO_LINE` if unknown
+    pub line: u32,
+
+    /// Set to the control focus moves to
+    pub target: *mut *mut c_void,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ListTarget {
+    pub line: u32,
+
+    /// Last button of the line instead of the first
+    pub last: bool,
+}
+
 #[repr(C)]
 pub struct AcnhUiV1 {
     pub size: usize,
@@ -121,4 +169,28 @@ pub struct AcnhUiV1 {
     pub lock_player: unsafe extern "C" fn(player: u8) -> Status,
     pub release_player: unsafe extern "C" fn(player: u8) -> Status,
     pub set_visible: unsafe extern "C" fn(pane: *mut c_void, visible: bool) -> Status,
+
+    /// `cb` gets the seq pointer. Dropped when the page is built again
+    pub on_seq_event: unsafe extern "C" fn(page: *mut c_void, kind: u32, cb: Callback) -> Status,
+
+    pub list_get:
+        unsafe extern "C" fn(page: *mut c_void, path: Str, out: *mut *mut c_void) -> Status,
+
+    /// `cb` gets `*const ItemUpdate`, `*const u32` item for focus and decide, or `*const LeaveQuery`
+    pub list_on: unsafe extern "C" fn(list: *mut c_void, kind: u32, cb: Callback) -> Status,
+
+    pub list_set_items:
+        unsafe extern "C" fn(list: *mut c_void, count: u32, selected: u32, player: u8) -> Status,
+    pub list_set_enabled:
+        unsafe extern "C" fn(list: *mut c_void, enable: bool, mode: u32) -> Status,
+    pub list_link_into: unsafe extern "C" fn(
+        from: *mut c_void,
+        direction: Direction,
+        list: *mut c_void,
+        target: ListTarget,
+    ) -> Status,
+    pub list_relink: unsafe extern "C" fn(list: *mut c_void) -> Status,
+    pub list_slot_count: unsafe extern "C" fn(list: *mut c_void, out: *mut u32) -> Status,
+    pub list_button:
+        unsafe extern "C" fn(list: *mut c_void, slot: u32, out: *mut *mut c_void) -> Status,
 }

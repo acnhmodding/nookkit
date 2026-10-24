@@ -1,8 +1,11 @@
+mod lists;
 mod pages;
+mod seqs;
 mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use acnh_game::native::NativeResult;
 use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
 
 #[unsafe(no_mangle)]
@@ -10,6 +13,12 @@ use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
 pub static __sl_framework: u8 = 0;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
+
+fn report(context: &str, result: NativeResult) {
+    if let Err(e) = result {
+        println!("[acnh-ui] {context}: {e}");
+    }
+}
 
 fn start() -> Result<(), acnh_sym::SymError> {
     let symbols = acnh_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
@@ -19,7 +28,12 @@ fn start() -> Result<(), acnh_sym::SymError> {
         symbols.game_version
     );
 
-    pages::view_page_initialize::install()
+    pages::view_page_initialize::install()?;
+    pages::view_page_layout_built::install()?;
+    seqs::sequence_create::install()?;
+    seqs::sequence_on_activate::install()?;
+    seqs::sequence_on_deactivated::install()?;
+    seqs::sequence_update::install()
 }
 
 #[skyline::main(name = "acnh-ui")]
