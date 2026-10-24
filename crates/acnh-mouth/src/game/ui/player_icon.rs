@@ -39,8 +39,10 @@ const _: () = {
 };
 
 impl PlayerIcon {
-    /// Set up like setupControls does for the eye list
-    pub unsafe fn create(button: &mut AppUniteBtnCtrl, pool: *mut IconTexturePool) -> NativeResult<*mut PlayerIcon> {
+    pub unsafe fn create(
+        button: &mut AppUniteBtnCtrl,
+        pool: *mut IconTexturePool,
+    ) -> NativeResult<*mut PlayerIcon> {
         unsafe {
             let Some(icon) = find_player_icon(&mut button.children)?.as_mut() else {
                 return Ok(core::ptr::null_mut());

@@ -21,9 +21,15 @@ impl Kind {
     }
 
     fn from_section(name: &str) -> Option<Self> {
-        [Kind::Fn, Kind::Got, Kind::Data, Kind::TypeInfo, Kind::TypeInfoGuard]
-            .into_iter()
-            .find(|k| k.section() == name)
+        [
+            Kind::Fn,
+            Kind::Got,
+            Kind::Data,
+            Kind::TypeInfo,
+            Kind::TypeInfoGuard,
+        ]
+        .into_iter()
+        .find(|k| k.section() == name)
     }
 }
 
@@ -34,7 +40,11 @@ pub enum ParseError {
     #[error("line {line}: unknown section [{section}]")]
     UnknownSection { line: usize, section: String },
     #[error("line {line}: \"{name}\" is listed twice under [{section}]")]
-    Duplicate { line: usize, section: &'static str, name: String },
+    Duplicate {
+        line: usize,
+        section: &'static str,
+        name: String,
+    },
     #[error("missing header field `{0}`")]
     MissingHeader(&'static str),
 }
@@ -83,37 +93,63 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
         }
 
         if let Some(name) = content.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-            section = Some(Kind::from_section(name).ok_or_else(|| ParseError::UnknownSection {
-                line,
-                section: name.to_owned(),
-            })?);
+            section = Some(
+                Kind::from_section(name).ok_or_else(|| ParseError::UnknownSection {
+                    line,
+                    section: name.to_owned(),
+                })?,
+            );
             continue;
         }
 
         let (key, value) = content
             .split_once('=')
             .map(|(k, v)| (k.trim(), v.trim()))
-            .ok_or(ParseError::Syntax { line, reason: "expected `key = value`" })?;
+            .ok_or(ParseError::Syntax {
+                line,
+                reason: "expected `key = value`",
+            })?;
 
         let Some(kind) = section else {
             match key {
                 "game_version" => {
-                    let v = parse_quoted(value).ok_or(ParseError::Syntax { line, reason: "game_version must be a string" })?;
+                    let v = parse_quoted(value).ok_or(ParseError::Syntax {
+                        line,
+                        reason: "game_version must be a string",
+                    })?;
                     game_version = Some(v.to_owned());
                 }
                 "rodata_hash" => {
-                    rodata_hash = Some(parse_hex(value).ok_or(ParseError::Syntax { line, reason: "rodata_hash must be hex" })?);
+                    rodata_hash = Some(parse_hex(value).ok_or(ParseError::Syntax {
+                        line,
+                        reason: "rodata_hash must be hex",
+                    })?);
                 }
-                _ => return Err(ParseError::Syntax { line, reason: "unknown header field" }),
+                _ => {
+                    return Err(ParseError::Syntax {
+                        line,
+                        reason: "unknown header field",
+                    });
+                }
             }
             continue;
         };
 
-        let name = parse_quoted(key).ok_or(ParseError::Syntax { line, reason: "symbol names must be quoted" })?;
-        let offset = parse_hex(value).ok_or(ParseError::Syntax { line, reason: "offsets must be 0x hex" })?;
+        let name = parse_quoted(key).ok_or(ParseError::Syntax {
+            line,
+            reason: "symbol names must be quoted",
+        })?;
+        let offset = parse_hex(value).ok_or(ParseError::Syntax {
+            line,
+            reason: "offsets must be 0x hex",
+        })?;
 
         if entries.insert((kind, name.to_owned()), offset).is_some() {
-            return Err(ParseError::Duplicate { line, section: kind.section(), name: name.to_owned() });
+            return Err(ParseError::Duplicate {
+                line,
+                section: kind.section(),
+                name: name.to_owned(),
+            });
         }
     }
 
@@ -143,8 +179,14 @@ rodata_hash = 0x1234abcd
         let f = parse(SAMPLE).unwrap();
         assert_eq!(f.game_version, "3.0.3");
         assert_eq!(f.rodata_hash, 0x1234abcd);
-        assert_eq!(f.get(Kind::Fn, "Lp::UI::Control::findByPath"), Some(0x376e6b0));
-        assert_eq!(f.get(Kind::TypeInfo, "Lp::UI::UniteBtnCtrl"), Some(0x55431e8));
+        assert_eq!(
+            f.get(Kind::Fn, "Lp::UI::Control::findByPath"),
+            Some(0x376e6b0)
+        );
+        assert_eq!(
+            f.get(Kind::TypeInfo, "Lp::UI::UniteBtnCtrl"),
+            Some(0x55431e8)
+        );
         assert_eq!(f.get(Kind::Fn, "Lp::UI::UniteBtnCtrl"), None);
         assert_eq!(f.len(), 2);
     }
@@ -153,8 +195,17 @@ rodata_hash = 0x1234abcd
     fn rejects_duplicates_and_bad_lines() {
         let dup = format!("{SAMPLE}\n[fn]\n\"Lp::UI::Control::findByPath\" = 0x1\n");
         assert!(matches!(parse(&dup), Err(ParseError::Duplicate { .. })));
-        assert!(matches!(parse("game_version = \"1\"\nrodata_hash = 0x1\n[nope]\n"), Err(ParseError::UnknownSection { .. })));
-        assert!(matches!(parse("game_version = \"1\"\n"), Err(ParseError::MissingHeader("rodata_hash"))));
-        assert!(matches!(parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\nname = 0x1\n"), Err(ParseError::Syntax { .. })));
+        assert!(matches!(
+            parse("game_version = \"1\"\nrodata_hash = 0x1\n[nope]\n"),
+            Err(ParseError::UnknownSection { .. })
+        ));
+        assert!(matches!(
+            parse("game_version = \"1\"\n"),
+            Err(ParseError::MissingHeader("rodata_hash"))
+        ));
+        assert!(matches!(
+            parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\nname = 0x1\n"),
+            Err(ParseError::Syntax { .. })
+        ));
     }
 }

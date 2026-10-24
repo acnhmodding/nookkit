@@ -32,7 +32,6 @@ struct CharaMakeParamMgr {
     mouth_type: *const BcsvTable,
 }
 
-/// Same lookup as the game's mouth accessor
 pub unsafe fn mouth_type_count() -> NativeResult<usize> {
     unsafe {
         let mgr = *data::<*const CharaMakeParamMgr>("ACNH_Singleton_7104BF00A0::sInstance")?;

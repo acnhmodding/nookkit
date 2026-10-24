@@ -20,10 +20,12 @@ const LEAVE_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListLeaveDelegate::
 const ITEM_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ItemDelegate::vtable";
 
 struct MouthValues {
-    // Writable, the game reuses these slots on refill
+    // The game reuses these slots on refill
     nodes: [u64; MAX_MOUTHS],
+
     node_ptrs: [*mut u32; MAX_MOUTHS],
     count: usize,
+
     // The game's storage while ours is installed
     saved: Option<(i32, i32, *mut *mut u32)>,
 }
@@ -37,6 +39,7 @@ struct MouthList {
     icons: [*mut PlayerIcon; MAX_SLOTS],
     slots: usize,
     values: MouthValues,
+
     // The focus delegates run on every tab
     enabled: bool,
 }
@@ -85,7 +88,6 @@ impl MouthValues {
         (0..self.count).find(|&item| self.value(item) == value)
     }
 
-    // Game entries first, then the remaining CharaMakeMouthTypeParam rows
     unsafe fn own(&mut self, list: &mut ObjArray<u32>) -> NativeResult {
         unsafe {
             self.release(list);
@@ -148,13 +150,13 @@ impl MouthList {
         unsafe { self.seq().request.post(state, index, CATEGORY_MOUTH) };
     }
 
-    // Nose button c links to visible line c, OK to the middle line
     unsafe fn relink(&mut self) {
         unsafe {
             let list = &*self.list;
             let page = self.page();
             let last = list.line_size.max(1) as usize - 1;
 
+            // Nose button C links to visible line C, OK to the middle line
             for (line, &nose) in page.nose_buttons.iter().enumerate() {
                 if let Some(nose) = nose.as_mut() {
                     nose.set_link(NavDirection::Down, list.visible_button(line, 0));
@@ -162,7 +164,10 @@ impl MouthList {
             }
 
             if let Some(ok) = page.ok_button.as_mut() {
-                ok.set_link(NavDirection::Up, list.visible_button(page.nose_buttons.len() / 2, last));
+                ok.set_link(
+                    NavDirection::Up,
+                    list.visible_button(page.nose_buttons.len() / 2, last),
+                );
             }
         }
     }
@@ -178,8 +183,11 @@ impl MouthList {
     }
 }
 
-// CharaMakePage::vf_0d0, runs on every entry and may rebuild the buttons
-pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) -> NativeResult {
+pub unsafe fn bind(
+    page: *mut CharaMakePage,
+    parent: *mut Control,
+    builder: *mut c_void,
+) -> NativeResult {
     unsafe {
         let state = state();
 
@@ -226,12 +234,19 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
         state.group = ListBtnGroup::new()?;
 
         if !list.scroll_delegate.is_bound() {
-            list.scroll_delegate =
-                Delegate::new(vtable(SCROLL_DELEGATE_VTABLE)?, seq, on_scroll as *const () as usize);
+            list.scroll_delegate = Delegate::new(
+                vtable(SCROLL_DELEGATE_VTABLE)?,
+                seq,
+                on_scroll as *const () as usize,
+            );
         }
 
         if !list.leave_delegate.is_bound() {
-            list.leave_delegate = Delegate::new(vtable(LEAVE_DELEGATE_VTABLE)?, seq, on_leave as *const () as usize);
+            list.leave_delegate = Delegate::new(
+                vtable(LEAVE_DELEGATE_VTABLE)?,
+                seq,
+                on_leave as *const () as usize,
+            );
         }
 
         state.slots = list.slot_count().min(MAX_SLOTS);
@@ -249,7 +264,11 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
 
         state.updater = ItemUpdater::new(
             state.slots as u32,
-            Delegate::new(vtable(ITEM_DELEGATE_VTABLE)?, seq, on_item as *const () as usize),
+            Delegate::new(
+                vtable(ITEM_DELEGATE_VTABLE)?,
+                seq,
+                on_item as *const () as usize,
+            ),
         );
         state.values.own(&mut seq_ref.mouth_values)
     }
@@ -270,7 +289,6 @@ pub unsafe fn is_active(seq: *mut CharaMakeSeq) -> bool {
     unsafe { active(seq).is_some() }
 }
 
-// The game fills its own storage first
 pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) -> NativeResult {
     unsafe {
         let state = state();
@@ -293,7 +311,10 @@ pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) -> Nati
 extern "C" fn on_scroll(seq: *mut CharaMakeSeq, event: *mut c_void) {
     let result = unsafe {
         match active(seq) {
-            Some(state) => state.updater.update(event).and_then(|()| Ok(state.group.refresh(state.list)?)),
+            Some(state) => state
+                .updater
+                .update(event)
+                .and_then(|()| Ok(state.group.refresh(state.list)?)),
             None => Ok(()),
         }
     };
@@ -312,7 +333,13 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
         };
 
         let event = &*event;
-        let slot_of = |slot: i32| if (0..state.slots as i32).contains(&slot) { slot as usize } else { 0 };
+        let slot_of = |slot: i32| {
+            if (0..state.slots as i32).contains(&slot) {
+                slot as usize
+            } else {
+                0
+            }
+        };
         let Some(icon) = state.icons[slot_of(event.slot)].as_mut() else {
             return Ok(());
         };
@@ -329,7 +356,11 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
         let in_range = item >= 0 && (item as usize) < state.values.count;
         let mut params = (*seq).face_params;
 
-        params[FACE_PARAM_MOUTH] = if in_range { state.values.value(item as usize) as u8 } else { 0 };
+        params[FACE_PARAM_MOUTH] = if in_range {
+            state.values.value(item as usize) as u8
+        } else {
+            0
+        };
 
         match op {
             ItemOp::Move => icon.move_from(state.icons[slot_of(event.from_slot)], &params)?,
@@ -341,8 +372,11 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
     }
 }
 
-// Up goes to the nose button above, down to OK
-extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event: *const LeaveEvent) {
+extern "C" fn on_leave(
+    seq: *mut CharaMakeSeq,
+    target: *mut *mut Control,
+    event: *const LeaveEvent,
+) {
     unsafe {
         let Some(state) = active(seq) else {
             return;
@@ -350,7 +384,11 @@ extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event:
 
         let line = state.list().focused_visible_line();
         let page = state.page();
-        let nose = line.map_or(page.nose_buttons.len() / 2, |line| line.min(page.nose_buttons.len() - 1));
+
+        let nose = line.map_or(page.nose_buttons.len() / 2, |line| {
+            line.min(page.nose_buttons.len() - 1)
+        });
+
         let control = match (*event).direction() {
             Some(LeaveDirection::Up) => page.nose_buttons[nose],
             Some(LeaveDirection::Down) => page.ok_button,
@@ -415,7 +453,6 @@ pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeR
     }
 }
 
-// Mirrors the eye list branch of onControlDecide
 pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
@@ -437,6 +474,7 @@ pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) -> Native
         } else if !group.toggle {
             group.clear_selection(list);
             group.set_selected(-1);
+
             return Ok(());
         } else if group.keep == 0 {
             return Ok(());
@@ -466,7 +504,6 @@ pub unsafe fn tick(seq: *mut CharaMakeSeq) -> NativeResult {
     }
 }
 
-// The seq, page and list are reused on return
 pub unsafe fn exit(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {

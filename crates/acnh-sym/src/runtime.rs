@@ -16,12 +16,21 @@ pub fn module_base() -> usize {
 pub fn display_version() -> String {
     let mut version = skyline::nn::oe::DisplayVersion { name: [0; 16] };
     unsafe { skyline::nn::oe::GetDisplayVersion(&mut version) };
-    let len = version.name.iter().position(|&b| b == 0).unwrap_or(version.name.len());
+    let len = version
+        .name
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(version.name.len());
     String::from_utf8_lossy(&version.name[..len]).into_owned()
 }
 
 fn running_fingerprint() -> u64 {
-    let window = unsafe { core::slice::from_raw_parts((module_base() + FINGERPRINT_OFFSET) as *const u8, FINGERPRINT_LEN) };
+    let window = unsafe {
+        core::slice::from_raw_parts(
+            (module_base() + FINGERPRINT_OFFSET) as *const u8,
+            FINGERPRINT_LEN,
+        )
+    };
     fingerprint(window)
 }
 
@@ -41,7 +50,11 @@ pub fn init(embedded: &str) -> Result<&'static SymbolFile, SymError> {
     let actual = running_fingerprint();
 
     if file.rodata_hash != actual {
-        return Err(SymError::UnsupportedBuild { version, expected: file.rodata_hash, actual });
+        return Err(SymError::UnsupportedBuild {
+            version,
+            expected: file.rodata_hash,
+            actual,
+        });
     }
 
     Ok(TABLE.get_or_init(|| file))
@@ -55,7 +68,10 @@ pub fn offset(kind: Kind, name: &str) -> Result<usize, SymError> {
     table()?
         .get(kind, name)
         .map(|o| o as usize)
-        .ok_or_else(|| SymError::Missing { kind, name: name.to_owned() })
+        .ok_or_else(|| SymError::Missing {
+            kind,
+            name: name.to_owned(),
+        })
 }
 
 pub fn address(kind: Kind, name: &str) -> Result<usize, SymError> {

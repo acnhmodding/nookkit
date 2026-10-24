@@ -14,7 +14,11 @@ pub fn main() {
     println!("[acnh-ui] main, publishing api v{API_VERSION}");
 
     match acnh_sym::init("") {
-        Ok(table) => println!("[acnh-ui] {} symbols for {}", table.len(), table.game_version),
+        Ok(table) => println!(
+            "[acnh-ui] {} symbols for {}",
+            table.len(),
+            table.game_version
+        ),
         Err(e) => println!("[acnh-ui] {e}"),
     }
 

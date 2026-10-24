@@ -84,7 +84,10 @@ mod tests {
     fn shipped_file_covers_the_manifests() {
         let file = parse(include_str!("../../../offsets/3.0.3.toml")).unwrap();
         assert_eq!(file.game_version, "3.0.3");
-        assert_eq!(missing(&file, include_str!("../../acnh-mouth/symbols.txt")), vec![]);
+        assert_eq!(
+            missing(&file, include_str!("../../acnh-mouth/symbols.txt")),
+            vec![]
+        );
     }
 
     #[test]
