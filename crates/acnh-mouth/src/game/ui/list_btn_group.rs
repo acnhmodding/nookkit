@@ -54,7 +54,7 @@ impl ListBtnGroup {
         }
     }
 
-    /// The group setupControls gives the eye list.
+    /// The eye list's group from setupControls
     pub fn new() -> NativeResult<Self> {
         Ok(Self {
             vtable: vtable("game::UI::ListBtnGroup::vtable")?,

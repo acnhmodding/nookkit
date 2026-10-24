@@ -20,11 +20,11 @@ const LEAVE_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListLeaveDelegate::
 const ITEM_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ItemDelegate::vtable";
 
 struct MouthValues {
-    // The game recycles these slots when it refills the list, so they must be writable.
+    // Writable, the game reuses these slots on refill
     nodes: [u64; MAX_MOUTHS],
     node_ptrs: [*mut u32; MAX_MOUTHS],
     count: usize,
-    // The game's own storage while ours is installed.
+    // The game's storage while ours is installed
     saved: Option<(i32, i32, *mut *mut u32)>,
 }
 
@@ -37,13 +37,13 @@ struct MouthList {
     icons: [*mut PlayerIcon; MAX_SLOTS],
     slots: usize,
     values: MouthValues,
-    // Whether the nose/mouth tab has the list switched on; the focus delegates run on every tab.
+    // The focus delegates run on every tab
     enabled: bool,
 }
 
 struct State(UnsafeCell<MouthList>);
 
-// The CharaMake UI runs on a single thread.
+// CharaMake UI is single-threaded
 unsafe impl Sync for State {}
 
 static STATE: State = State(UnsafeCell::new(MouthList {
@@ -85,8 +85,7 @@ impl MouthValues {
         (0..self.count).find(|&item| self.value(item) == value)
     }
 
-    // Swap the seq's mouth value list over to our storage: the game's own entries first (in its
-    // order), then every other CharaMakeMouthTypeParam row. Without the table, leave the game's list.
+    // Game entries first, then the remaining CharaMakeMouthTypeParam rows
     unsafe fn own(&mut self, list: &mut ObjArray<u32>) -> NativeResult {
         unsafe {
             self.release(list);
@@ -149,8 +148,7 @@ impl MouthList {
         unsafe { self.seq().request.post(state, index, CATEGORY_MOUTH) };
     }
 
-    // Nose button c links down to the top of visible line c, OK links up to the bottom of the
-    // middle visible line. The list scrolls through a ring of buttons, so this follows its window.
+    // Nose button c links to visible line c, OK to the middle line
     unsafe fn relink(&mut self) {
         unsafe {
             let list = &*self.list;
@@ -180,8 +178,7 @@ impl MouthList {
     }
 }
 
-// CharaMakePage::vf_0d0 runs while parts are built, on every CharaMake entry; look the list up the
-// same way the game does for its six lists and bind its buttons whenever they were rebuilt.
+// CharaMakePage::vf_0d0, runs on every entry and may rebuild the buttons
 pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) -> NativeResult {
     unsafe {
         let state = state();
@@ -273,7 +270,7 @@ pub unsafe fn is_active(seq: *mut CharaMakeSeq) -> bool {
     unsafe { active(seq).is_some() }
 }
 
-// The game refills the mouth value list on enter; let it work on its own storage, then take over.
+// The game fills its own storage first
 pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) -> NativeResult {
     unsafe {
         let state = state();
@@ -344,8 +341,7 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
     }
 }
 
-// Leaving the list vertically: up goes to the nose button above the column (the reverse of its down
-// link), down to the OK button. The list still has the slot it leaves from marked focused here.
+// Up goes to the nose button above, down to OK
 extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event: *const LeaveEvent) {
     unsafe {
         let Some(state) = active(seq) else {
@@ -367,8 +363,7 @@ extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event:
     }
 }
 
-// Page refresh: select the current mouth and (re)fill the list, which renders the visible items. The
-// refresh also relinks every tab's grid, so on the mouth tab point the nose row and OK back at the list.
+// The refresh relinks every tab, so point the nose row and OK back at the list
 pub unsafe fn refresh(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq).filter(|state| state.values.count != 0) else {
@@ -390,8 +385,7 @@ pub unsafe fn refresh(seq: *mut CharaMakeSeq) -> NativeResult {
     }
 }
 
-// The UpdateAnchor request points the OK button's up link at the old mouth button for the
-// focused index.
+// UpdateAnchor links OK to the old mouth buttons
 pub unsafe fn after_request(seq: *mut CharaMakeSeq) {
     unsafe {
         if let Some(state) = active(seq).filter(|state| state.enabled) {
@@ -411,8 +405,7 @@ pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeR
         if index >= 0 {
             state.post_request(RequestState::Focus, index);
         } else if state.enabled {
-            // Focus set from outside (onTabEnter focusing the nose row) bypasses the list, which would
-            // stay in cPlay and keep handling the D-pad from its own cursor.
+            // Outside focus (onTabEnter) bypasses the list, which would keep the D-pad
             state.list().pause()?;
             state.list().enable_visible_buttons()?;
             state.relink();
@@ -422,7 +415,7 @@ pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeR
     }
 }
 
-// Mirrors the game's eye list branch of onControlDecide.
+// Mirrors the eye list branch of onControlDecide
 pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
@@ -473,8 +466,7 @@ pub unsafe fn tick(seq: *mut CharaMakeSeq) -> NativeResult {
     }
 }
 
-// Runs every time CharaMake is left; the seq, page and list stay alive and are reused on return,
-// so only release the textures and hand the value list back (the fill hook takes it again).
+// The seq, page and list are reused on return
 pub unsafe fn exit(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {

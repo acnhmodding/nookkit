@@ -29,7 +29,7 @@ pub struct PlayerIcon {
     _unk_0: [u8; 0x208],
     pub texture_pool: *mut IconTexturePool,
     _unk_210: [u8; 0x18],
-    // Face, hair, eye, pupil, nose, mouth, cheek.
+    // Face, hair, eye, pupil, nose, mouth, cheek
     pub parts: [IconPart; 7],
 }
 
@@ -39,7 +39,7 @@ const _: () = {
 };
 
 impl PlayerIcon {
-    /// The button's icon, prepared the way setupControls does for the eye list's icons.
+    /// Set up like setupControls does for the eye list
     pub unsafe fn create(button: &mut AppUniteBtnCtrl, pool: *mut IconTexturePool) -> NativeResult<*mut PlayerIcon> {
         unsafe {
             let Some(icon) = find_player_icon(&mut button.children)?.as_mut() else {
@@ -62,7 +62,7 @@ impl PlayerIcon {
     #[native(symbol = "PlayerIcon_render")]
     pub unsafe fn render(&mut self, params: *const FaceParams);
 
-    /// Takes over `source`'s textures, loading only the parts that differ.
+    /// Only loads the parts that differ from `source`
     #[native(symbol = "PlayerIcon_moveFrom")]
     pub unsafe fn move_from(&mut self, source: *mut PlayerIcon, params: *const FaceParams);
 

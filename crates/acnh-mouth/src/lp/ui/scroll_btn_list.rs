@@ -30,11 +30,11 @@ pub struct ScrollBtnListCtrl {
     _unk_218: [u8; 0x58],
     pub unk_270: *mut [*mut c_void; 2],
     _unk_278: [u8; 0x18],
-    // 2 = cPlay (handles the D-pad itself), 3 = cPause.
+    // 2 = cPlay (handles the D-pad), 3 = cPause
     pub state_machine: StateMachine,
     pub focus_manager: *mut c_void,
     pub player: u32,
-    // Button mode cPause applies; 2 keeps the buttons focusable.
+    // Button mode under cPause, 2 keeps them focusable
     pub pause_button_mode: i32,
     pub line_size: i32,
     pub visible_lines: i32,
@@ -42,7 +42,7 @@ pub struct ScrollBtnListCtrl {
     pub slot_count: i32,
     _unk_2fc: [u8; 0x34],
     pub scroll_delegate: Delegate,
-    // Invoked with a LeaveEvent when the D-pad moves out of the list; writes the target control.
+    // Called when the D-pad leaves the list, writes the target control
     pub leave_delegate: Delegate,
     _unk_370: [u8; 0x5c],
     pub item_count: i32,
@@ -50,12 +50,11 @@ pub struct ScrollBtnListCtrl {
     pub padded_item_count: i32,
     pub unk_3d8: i32,
     _unk_3dc: [u8; 0x54],
-    // The buttons are a ring the list scrolls through: visible line c is button line
-    // `first_button_line + c` and item line `first_line + c`. Lines are columns in CharaMake.
+    // Ring buffer: visible line c is button line `first_button_line + c` and item line `first_line + c`
     pub first_line: i32,
     _unk_434: [u8; 0x4],
     pub first_button_line: i32,
-    // Slot the list believes is focused, -1 for none.
+    // -1 for none
     pub focused_slot: i32,
     _unk_440: [u8; 0x40],
     pub input_claim: *mut InputClaim,
@@ -146,7 +145,7 @@ impl LeaveEvent {
 
 #[native(resolve = crate::native::resolve)]
 impl ScrollBtnListCtrl {
-    /// Clones the template buttons into slots; the page does this for its lists while building.
+    /// Clones the template buttons into slots, like the page does while building
     #[native(symbol = "ScrollBtnListCtrl::bindButtons")]
     pub unsafe fn bind_buttons(&mut self, builder: *mut c_void);
 
@@ -179,8 +178,7 @@ impl ScrollBtnListCtrl {
         }
     }
 
-    /// What the page's list attach routine (0x7102b99900) does for its own lists on every entry:
-    /// sets the player and focus manager, links the buttons into the focus graph.
+    /// Mirrors the page's list attach (0x7102b99900)
     pub unsafe fn attach(&mut self, page: *mut c_void, root: *mut Control) -> NativeResult {
         let root_type = type_info("game::UI::AppBodyCtrl")?;
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
@@ -196,7 +194,7 @@ impl ScrollBtnListCtrl {
         unsafe { self.attach_native(&params) }.map_err(Into::into)
     }
 
-    /// Same values the game passes for the eye list on page refresh.
+    /// Values the game passes for the eye list
     pub unsafe fn set_content(&mut self, item_count: i32, selected: i32, player: u8) -> NativeResult {
         let mut flags = [0; 0xc];
 
@@ -219,7 +217,7 @@ impl ScrollBtnListCtrl {
         unsafe { self.set_content_native(&params) }.map_err(Into::into)
     }
 
-    /// Same as the game's group switch does for the eye list (group 3).
+    /// Same as the game's group switch for the eye list (group 3)
     pub unsafe fn set_enabled(&mut self, enable: bool, mode: u32) -> NativeResult {
         unsafe {
             if !enable {
@@ -255,9 +253,7 @@ impl ScrollBtnListCtrl {
         }
     }
 
-    /// What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec): forget the
-    /// focused slot and pause with its buttons still focusable, so it stops taking the D-pad and
-    /// navigation back into it goes through the links.
+    /// Mirrors cPlay_Exec when focus leaves, the list stops taking the D-pad
     pub unsafe fn pause(&mut self) -> NativeResult {
         self.focused_slot = -1;
 
@@ -270,8 +266,7 @@ impl ScrollBtnListCtrl {
         Ok(())
     }
 
-    /// Pausing keeps only the line focus last left from enabled (vanilla re-enters a list where it
-    /// was left). Here neighbours link into every visible line, so keep all of them focusable.
+    /// Every visible line stays focusable since neighbours link into all of them
     pub unsafe fn enable_visible_buttons(&mut self) -> NativeResult {
         let line_size = self.line_size.max(1);
         let visible = self.first_line..self.first_line + self.visible_lines;

@@ -78,12 +78,12 @@ pub fn data<T>(name: &str) -> Result<*mut T, SymError> {
     Ok(address(Kind::Data, name)? as *mut T)
 }
 
-/// A `::vtable` label marks the address an object's vptr holds (slot 0), not the typeinfo header.
+/// The vptr value (slot 0), not the typeinfo header
 pub fn vtable<T>(name: &str) -> Result<*const T, SymError> {
     Ok(address(Kind::Data, name)? as *const T)
 }
 
-/// Guarded statics are only initialised once the game runs their check, so `Ok(None)` means "not yet".
+/// `Ok(None)` until the game has run the guarded init
 pub fn type_info(name: &str) -> Result<Option<*const c_void>, SymError> {
     let info = address(Kind::TypeInfo, name)? as *const c_void;
 

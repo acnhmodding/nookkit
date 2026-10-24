@@ -4,7 +4,7 @@ use crate::game::ui::AppUniteBtnCtrl;
 use crate::lp::ui::Control;
 use crate::sead::ObjArray;
 
-// The four old mouth buttons.
+// The four old mouth buttons
 pub const GROUP_MOUTH: u32 = 6;
 
 pub const FACE_PARAM_MOUTH: usize = 5;
@@ -40,7 +40,7 @@ pub enum RequestState {
     None = -1,
     Focus = 2,
     Decide = 3,
-    // Focus moved to the OK button; points its up link at the focused button of the tab.
+    // Links OK up to the focused button of the tab
     UpdateAnchor = 5,
 }
 
@@ -58,7 +58,7 @@ impl Request {
         self.state == state as i32
     }
 
-    /// Like the game, only one request per frame: the first one posted wins.
+    /// First request posted in a frame wins, like the game
     pub fn post(&mut self, state: RequestState, index: i32, category: i32) {
         if self.is(RequestState::None) {
             *self = Self {
@@ -79,7 +79,7 @@ pub struct CharaMakeSeq {
     _unk_218: [u8; 0xfc],
     pub face_params: FaceParams,
     _unk_320: [u8; 0x8a0],
-    // Item -> mouth value for the mouth tab.
+    // Item -> mouth value
     pub mouth_values: ObjArray<u32>,
     _unk_bd8: [u8; 0x418],
     pub icon_texture_pool: IconTexturePool,

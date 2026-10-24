@@ -38,7 +38,7 @@ impl AppUniteBtnCtrl {
         (self as *mut Self).cast()
     }
 
-    /// The mode setupControls gives the buttons of the game's own lists.
+    /// Mode setupControls gives the game's list buttons
     pub fn set_list_mode(&mut self) {
         self.mode_bits = (self.mode_bits & 0xf8) | 1;
         self.list_mode = 2;

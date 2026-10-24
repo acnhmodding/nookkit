@@ -86,7 +86,7 @@ acnh_sym::hook! {
             return;
         }
 
-        // The old mouth buttons stay hidden and out of navigation; the list stands in for them.
+        // Disables the old mouth buttons
         unsafe { original(seq, group, 0, mode) };
 
         report("set_enabled", unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) });
