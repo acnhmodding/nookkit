@@ -18,6 +18,7 @@ version = "0.1.0"
 dependencies = [
  "acnh-game",
  "acnh-sym",
+ "acnh-ui-api",
  "native-vtable",
  "skyline",
 ]

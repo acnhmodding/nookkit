@@ -71,6 +71,11 @@ unsafe fn state() -> &'static mut MouthList {
     unsafe { &mut *STATE.0.get() }
 }
 
+#[cfg(feature = "framework")]
+pub unsafe fn seq() -> *mut CharaMakeSeq {
+    unsafe { state().seq }
+}
+
 unsafe fn active(seq: *mut CharaMakeSeq) -> Option<&'static mut MouthList> {
     unsafe {
         let state = state();

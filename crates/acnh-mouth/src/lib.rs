@@ -113,14 +113,61 @@ fn install() -> Result<(), acnh_sym::SymError> {
 
     page_bind_lists::install()?;
     seq_setup_controls::install()?;
-    seq_on_control_focus::install()?;
-    seq_on_control_decide::install()?;
     seq_tick_icons::install()?;
     seq_on_exit::install()?;
     seq_fill_mouth_list::install()?;
     seq_process_request::install()?;
     seq_set_group_enabled::install()?;
-    seq_refresh_enter::install()
+    seq_refresh_enter::install()?;
+
+    if !framework_events() {
+        seq_on_control_focus::install()?;
+        seq_on_control_decide::install()?;
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "framework")]
+fn framework_events() -> bool {
+    use acnh_ui_api::{Event, PageFilter};
+
+    fn control(event: &Event) -> *mut Control {
+        event
+            .control
+            .map_or(core::ptr::null_mut(), |c| c.raw().cast())
+    }
+
+    let registered = acnh_ui_api::connect("acnh-mouth").and_then(|ui| {
+        ui.on_page(PageFilter::Layout("CharaMake"), |page| {
+            page.on_focus(|e| {
+                report("focus", unsafe {
+                    mouth_list::on_focus(mouth_list::seq(), control(&e))
+                });
+                Ok(())
+            })?;
+
+            page.on_decide(|e| {
+                report("decide", unsafe {
+                    mouth_list::on_decide(mouth_list::seq(), control(&e))
+                });
+                Ok(())
+            })
+        })
+    });
+
+    match registered {
+        Ok(()) => true,
+        Err(e) => {
+            println!("[acnh-mouth] acnh-ui: {e}, hooking focus and decide instead");
+            false
+        }
+    }
+}
+
+#[cfg(not(feature = "framework"))]
+fn framework_events() -> bool {
+    false
 }
 
 #[skyline::main(name = "acnh-mouth")]

@@ -15,3 +15,7 @@ skyline = "0.6.0"
 native-vtable = { path = "../../../native-vtable" }
 acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
 acnh-game = { path = "../acnh-game" }
+acnh-ui-api = { path = "../acnh-ui-api", optional = true }
+
+[features]
+framework = ["dep:acnh-ui-api"]
