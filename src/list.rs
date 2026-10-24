@@ -507,13 +507,49 @@ pub unsafe fn link_navigation(seq: *mut u8) {
     }
 }
 
+// The list turns focus coming in from a neighbour into one step from its own cursor. Park the cursor
+// just outside the column the neighbour links to, so that step lands on the linked slot.
+unsafe fn aim_cursor(seq: *mut u8, state: &MouthList, control: *mut u8) {
+    unsafe {
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1);
+        let column_of = |slot: usize| -> i32 {
+            let item = list_item_index_of(state.list, list_button(state.list, slot));
+
+            if item < 0 { -1 } else { item / line_size }
+        };
+
+        for column in 0..NOSE_BUTTONS {
+            if *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8) == control {
+                let line = column_of(column * line_size as usize);
+
+                if line >= 0 {
+                    list_set_cursor(state.list, line, -1);
+                }
+                return;
+            }
+        }
+
+        if *at::<*mut u8>(page, PAGE_BTN_OK) == control {
+            let line = column_of(ok_up_slot(state));
+
+            if line >= 0 {
+                list_set_cursor(state.list, line, line_size);
+            }
+        }
+    }
+}
+
+fn ok_up_slot(state: &MouthList) -> usize {
+    let line_size = unsafe { (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize };
+
+    (line_size + line_size - 1).min(state.slots.saturating_sub(1))
+}
+
 // Up from the OK button lands on the bottom of the list's middle visible column.
 unsafe fn link_ok_up(page: *mut u8, state: &MouthList) {
     unsafe {
-        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize;
-        let slot = (line_size + line_size - 1).min(state.slots.saturating_sub(1));
-
-        set_nav_link(*at::<*mut u8>(page, PAGE_BTN_OK), NAV_LINK_UP, list_button(state.list, slot));
+        set_nav_link(*at::<*mut u8>(page, PAGE_BTN_OK), NAV_LINK_UP, list_button(state.list, ok_up_slot(state)));
     }
 }
 
@@ -572,6 +608,7 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
             // Focus set from outside (e.g. onTabEnter focusing the nose button) doesn't go through
             // the list, which would keep handling the D-pad from its stale cursor.
             list_clear_focus(state.list);
+            aim_cursor(seq, state, control);
         }
     }
 }

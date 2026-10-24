@@ -66,8 +66,12 @@ const LIST_BUTTONS: usize = 0x210;
 // Items per line; CharaMake lists scroll horizontally, so a line is one column.
 pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
-// Slot the list believes is focused; its own D-pad handling only runs while this is set.
+// Slot the list believes is focused.
 const LIST_FOCUSED_SLOT: usize = 0x43c;
+// The list's own cursor: absolute line (column) and position within it. Focus moving into the list
+// is applied to this cursor as a one-step move (State_710375F2AC::cPlay_Exec).
+const LIST_CURSOR_LINE: usize = 0x440;
+const LIST_CURSOR_POS: usize = 0x444;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -367,11 +371,7 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
         if ready {
             let enable: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
 
-            // cPlay_Enter focuses the list's cursor button when no slot is marked focused. The mouth tab
-            // focuses the nose row right after, which the list never sees, so don't let it take focus.
-            *at::<i32>(list, LIST_FOCUSED_SLOT) = 0;
             enable(list.add(0x290), 2);
-            list_clear_focus(list);
         }
     }
 }
@@ -379,6 +379,13 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
 // What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec).
 pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
+}
+
+pub unsafe fn list_set_cursor(list: *mut u8, line: i32, pos: i32) {
+    unsafe {
+        *at::<i32>(list, LIST_CURSOR_LINE) = line;
+        *at::<i32>(list, LIST_CURSOR_POS) = pos;
+    }
 }
 
 pub unsafe fn list_button_count(list: *mut u8) -> usize {
