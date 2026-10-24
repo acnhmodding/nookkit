@@ -68,14 +68,14 @@ pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
 // Slot the list believes is focused.
 const LIST_FOCUSED_SLOT: usize = 0x43c;
-// Per-direction input claims (up/down/left/right, then the two optional page keys). While a claim's
-// +0xbd flag is set, its handler (0x7103765cf8) consumes that direction for the list's player every
-// frame, focused or not. State::cPlay enter sets them all; only disabling the list clears them.
-const LIST_INPUT_CLAIMS: [usize; 6] = [0x480, 0x490, 0x4a0, 0x4b0, 0x4c0, 0x4d0];
-const LIST_PAGE_CLAIMS_ENABLED: usize = 0x3e8;
-const LIST_PLAYER: usize = 0x2e0;
-const CLAIM_PLAYER: usize = 0x10;
-const CLAIM_ENABLED: usize = 0xbc;
+// State machine (Lp::Utl::StateMachine at +0x290, current state at +0x298): 2 = cPlay (handles the
+// D-pad itself), 3 = cPause. +0x2e4 is the button mode cPause applies (2 = buttons stay focusable).
+const LIST_STATE_MACHINE: usize = 0x290;
+const LIST_STATE: usize = 0x298;
+const LIST_PAUSE_MODE: usize = 0x2e4;
+const LIST_STATE_PLAY: u32 = 2;
+const LIST_STATE_PAUSE: u32 = 3;
+const PAUSE_KEEP_BUTTONS: i32 = 2;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -349,11 +349,6 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             return;
         }
 
-        // Both paths enter State::cPlay, whose enter focuses the list's cursor button unless a slot is
-        // already marked focused. The mouth tab focuses the nose row right after, which the list never
-        // sees: it would keep the D-pad. Mark a slot for the call so the list comes up unfocused.
-        *at::<i32>(list, LIST_FOCUSED_SLOT) = 0;
-
         if *at::<u32>(list, 0x298) > 1 {
             let mut params = [0u64; 2];
 
@@ -363,7 +358,6 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             let enable: extern "C" fn(*mut u8, *const u64) = func(LIST_ENABLE);
 
             enable(list, params.as_ptr());
-            list_clear_focus(list);
             return;
         }
 
@@ -381,10 +375,8 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
         if ready {
             let enable: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
 
-            enable(list.add(0x290), 2);
+            enable(list.add(LIST_STATE_MACHINE), LIST_STATE_PLAY);
         }
-
-        list_clear_focus(list);
     }
 }
 
@@ -393,19 +385,18 @@ pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
 }
 
-// Same writes as State::cPlay enter (on) / FUN_7103764b90 (off).
-pub unsafe fn list_set_input_claims(list: *mut u8, on: bool) {
+// What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec leave path): forget
+// the focused slot and pause with its buttons still focusable, so it stops taking the D-pad and
+// navigation back into it goes through the links.
+pub unsafe fn list_pause(list: *mut u8) {
     unsafe {
-        let page_keys = *at::<u8>(list, LIST_PAGE_CLAIMS_ENABLED) & 0x10 != 0;
+        list_clear_focus(list);
 
-        for (i, &offset) in LIST_INPUT_CLAIMS.iter().enumerate() {
-            let claim = *at::<*mut u8>(list, offset);
+        if *at::<u32>(list, LIST_STATE) == LIST_STATE_PLAY {
+            let change_state: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
 
-            if claim.is_null() || *at::<i32>(claim, CLAIM_PLAYER) != *at::<i32>(list, LIST_PLAYER) {
-                continue;
-            }
-
-            *at::<u16>(claim, CLAIM_ENABLED) = if on && (i < 4 || page_keys) { 0x101 } else { 0 };
+            *at::<i32>(list, LIST_PAUSE_MODE) = PAUSE_KEEP_BUTTONS;
+            change_state(list.add(LIST_STATE_MACHINE), LIST_STATE_PAUSE);
         }
     }
 }

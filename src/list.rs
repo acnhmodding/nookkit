@@ -25,8 +25,6 @@ struct MouthList {
     saved_count: i32,
     saved_capacity: i32,
     saved_ptrs: *mut *mut u64,
-    // Whether one of the list's slots holds focus; the list's D-pad claims follow it.
-    focused: bool,
     // Last logged mouth-part load state per slot (debug).
     load_state: [u64; MAX_SLOTS],
 }
@@ -69,7 +67,6 @@ static STATE: State = State(UnsafeCell::new(MouthList {
     saved_count: 0,
     saved_capacity: 0,
     saved_ptrs: null_mut(),
-    focused: false,
     load_state: [u64::MAX; MAX_SLOTS],
 }));
 
@@ -248,13 +245,7 @@ pub unsafe fn set_enabled(seq: *mut u8, enable: bool, mode: u32) {
         println!("[acnh-mouth] enable={} mode={}", enable, mode);
         dump_list("mouth", state.list);
         dump_list("eye", *at::<*mut u8>(page, 0x670));
-        state.focused = false;
         list_set_enabled(state.list, enable, mode);
-
-        // Activating the list claims the D-pad for the whole tab; the nose row gets focus first.
-        if enable {
-            list_set_input_claims(state.list, false);
-        }
 
         dump_list("mouth_after", state.list);
     }
@@ -579,15 +570,13 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
             *at::<i32>(state.list, 0x3f4)
         );
 
-        state.focused = index >= 0;
-        list_set_input_claims(state.list, state.focused);
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);
         } else {
-            // Focus set from outside (e.g. onTabEnter focusing the nose button) doesn't go through
-            // the list, which would keep handling the D-pad from its stale cursor.
-            list_clear_focus(state.list);
+            // Focus set from outside (onTabEnter focusing the nose row) bypasses the list, which would
+            // stay in cPlay and keep handling the D-pad from its own cursor.
+            list_pause(state.list);
         }
     }
 }
