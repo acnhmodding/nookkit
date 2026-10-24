@@ -45,12 +45,14 @@ impl Control {
 pub enum NavDirection {
     Up = 0,
     Down = 1,
+    Left = 2,
+    Right = 3,
 }
 
 #[repr(C)]
 pub struct FocusNode {
     _unk_0: [u8; 0x1460],
-    pub links: [*mut FocusNode; 2],
+    pub links: [*mut FocusNode; 4],
 }
 
 const _: () = assert!(core::mem::offset_of!(FocusNode, links) == 0x1460);

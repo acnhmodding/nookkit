@@ -2,8 +2,7 @@ use core::mem::offset_of;
 
 use native_vtable::native;
 
-use crate::game::ui::AppUniteBtnCtrl;
-use crate::game::ui::app_unite_btn::ChildList;
+use crate::game::ui::{AppUniteBtnCtrl, ChildList};
 use crate::game::ui::chara_make::{FaceParams, IconTexturePool};
 use crate::native::NativeResult;
 

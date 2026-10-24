@@ -19,6 +19,8 @@ rodata_hash = 0xacfdd336a5d95bb0
 "ScrollBtnListCtrl::enable" = 0x3764fe0
 "ScrollBtnListCtrl::itemIndexOf" = 0x3765200
 "ScrollBtnListCtrl::setContent" = 0x3764290
+"game::PlayerControlLockMgr::acquire" = 0x971bb8
+"game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
 "game::UI::CharaMakePage::bindLists" = 0x2b9656c
 "game::UI::CharaMakeSeq::fillMouthList" = 0x2b8fe60
 "game::UI::CharaMakeSeq::onControlDecide" = 0x2b9a8d0
@@ -31,11 +33,14 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::CharaMakeSeq::setupControls" = 0x2b9d7d0
 "game::UI::CharaMakeSeq::tickIcons" = 0x2ba79b0
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
+"game::UI::ViewPage::initialize" = 0x3759dd0
 
 [data]
 "ACNH_Singleton_7104BF00A0::sInstance" = 0x4bf00a0
+"ACNH_Singleton_7104CA4AB8::sInstance" = 0x4ca4ab8
 "ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
 "ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
+"game::UI::CharaMakeSeq::ControlEventDelegate::vtable" = 0x49b4f98
 "game::UI::CharaMakeSeq::ItemDelegate::vtable" = 0x49b5268
 "game::UI::CharaMakeSeq::ListLeaveDelegate::vtable" = 0x49b50d8
 "game::UI::CharaMakeSeq::ListScrollDelegate::vtable" = 0x49b5088
@@ -44,9 +49,11 @@ rodata_hash = 0xacfdd336a5d95bb0
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
 
 [type_info]
+"Lp::UI::BtnPartsCtrl" = 0x55431f8
 "game::UI::AppBodyCtrl" = 0x5543dd0
 "game::UI::AppScrollBtnListCtrl" = 0x55430e0
 
 [type_info_guard]
+"Lp::UI::BtnPartsCtrl" = 0x5543200
 "game::UI::AppBodyCtrl" = 0x5543dd8
 "game::UI::AppScrollBtnListCtrl" = 0x55430e8

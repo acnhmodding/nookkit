@@ -1,11 +1,10 @@
 mod game;
-mod lp;
 mod mouth_list;
 mod native;
-mod sead;
 
 use core::ffi::c_void;
 
+use acnh_game::{lp, sead};
 use game::ui::chara_make::*;
 use lp::ui::Control;
 use native::report;

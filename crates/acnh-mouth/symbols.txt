@@ -1,22 +1,9 @@
-# kind	Ghidra name — every game symbol acnh-mouth uses; ExportSymbols.java writes them to offsets/<version>.toml.
-fn	Lp::UI::Control::findByPath
-fn	Lp::UI::Control::setFocusable
-fn	Lp::Utl::StateMachine::changeState
 fn	CharaMake_findPlayerIcon
 fn	PlayerIcon_resetPart
 fn	PlayerIcon_render
 fn	PlayerIcon_moveFrom
 fn	PlayerIcon_release
 fn	PlayerIcon_tick
-fn	game::UI::CharaMakeSeq::refreshListGroup
-fn	ListItemUpdater::update
-fn	ScrollBtnListCtrl::bindButtons
-fn	ScrollBtnListCtrl::attach
-fn	ScrollBtnListCtrl::setContent
-fn	ScrollBtnListCtrl::enable
-fn	ScrollBtnListCtrl::disable
-fn	ScrollBtnListCtrl::itemIndexOf
-fn	game::UI::ListBtnGroup::isSelectable
 fn	game::UI::CharaMakePage::bindLists
 fn	game::UI::CharaMakeSeq::setupControls
 fn	game::UI::CharaMakeSeq::onControlFocus
@@ -30,13 +17,4 @@ fn	game::UI::CharaMakeSeq::refreshEnter
 data	game::UI::CharaMakeSeq::ListScrollDelegate::vtable
 data	game::UI::CharaMakeSeq::ListLeaveDelegate::vtable
 data	game::UI::CharaMakeSeq::ItemDelegate::vtable
-data	sead::SafeStringBase<char>::vtable
-data	game::UI::ListBtnGroup::SelectableDelegate::vtable
-data	game::UI::ListBtnGroup::vtable
-data	ScrollBtnListCtrl::EnableParams::vtable
-data	ScrollBtnListCtrl::SetContentParams::vtable
 data	ACNH_Singleton_7104BF00A0::sInstance
-type_info	game::UI::AppScrollBtnListCtrl
-type_info	game::UI::AppBodyCtrl
-type_info_guard	game::UI::AppScrollBtnListCtrl
-type_info_guard	game::UI::AppBodyCtrl

@@ -14,4 +14,4 @@ crate-type = ["cdylib"]
 skyline = "0.6.0"
 native-vtable = { path = "../../../native-vtable" }
 acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
-thiserror = "2"
+acnh-game = { path = "../acnh-game" }

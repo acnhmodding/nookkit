@@ -3,13 +3,23 @@
 version = 4
 
 [[package]]
-name = "acnh-mouth"
+name = "acnh-game"
 version = "0.1.0"
 dependencies = [
  "acnh-sym",
  "native-vtable",
  "skyline",
  "thiserror",
+]
+
+[[package]]
+name = "acnh-mouth"
+version = "0.1.0"
+dependencies = [
+ "acnh-game",
+ "acnh-sym",
+ "native-vtable",
+ "skyline",
 ]
 
 [[package]]
@@ -24,6 +34,7 @@ dependencies = [
 name = "acnh-ui"
 version = "0.1.0"
 dependencies = [
+ "acnh-game",
  "acnh-sym",
  "acnh-ui-sys",
  "skyline",
