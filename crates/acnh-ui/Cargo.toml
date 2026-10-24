@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 [dependencies]
 skyline = "0.6.0"
 acnh-ui-sys = { path = "../acnh-ui-sys" }
+acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
