@@ -314,6 +314,16 @@ impl ScrollBtnListCtrl {
         unsafe { self.button((first + line) % lines * line_size + pos) }
     }
 
+    /// The visible line the focused slot is in.
+    pub fn focused_visible_line(&self) -> Option<usize> {
+        let line_size = self.line_size.max(1) as usize;
+        let lines = (self.button_count() / line_size).max(1);
+        let slot = usize::try_from(self.focused_slot).ok()?;
+        let first = self.first_button_line.max(0) as usize;
+
+        Some((slot / line_size + lines - first % lines) % lines)
+    }
+
     pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32 {
         unsafe { native::item_index_of(self, control) }
     }

@@ -49,12 +49,6 @@ const _: () = {
     assert!(offset_of!(CharaMakePage, ok_button) == 0x608);
 };
 
-impl CharaMakePage {
-    pub fn middle_nose_button(&self) -> *mut AppUniteBtnCtrl {
-        self.nose_buttons[self.nose_buttons.len() / 2]
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum RequestState {

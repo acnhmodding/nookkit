@@ -346,16 +346,19 @@ extern "C" fn on_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) {
     }
 }
 
-// Leaving the list vertically: up goes to the nose row, down to the OK button.
+// Leaving the list vertically: up goes to the nose button above the column (the reverse of its down
+// link), down to the OK button. The list still has the slot it leaves from marked focused here.
 extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event: *const LeaveEvent) {
     unsafe {
         let Some(state) = active(seq) else {
             return;
         };
 
+        let line = state.list().focused_visible_line();
         let page = state.page();
+        let nose = line.map_or(page.nose_buttons.len() / 2, |line| line.min(page.nose_buttons.len() - 1));
         let control = match (*event).direction() {
-            Some(LeaveDirection::Up) => page.middle_nose_button(),
+            Some(LeaveDirection::Up) => page.nose_buttons[nose],
             Some(LeaveDirection::Down) => page.ok_button,
             None => null_mut(),
         };
