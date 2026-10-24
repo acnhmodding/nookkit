@@ -25,7 +25,7 @@ struct MouthList {
     saved_count: i32,
     saved_capacity: i32,
     saved_ptrs: *mut *mut u64,
-    // Whether one of the list's slots holds focus; the list itself doesn't check before moving.
+    // Whether one of the list's slots holds focus; the list's D-pad claims follow it.
     focused: bool,
     // Last logged mouth-part load state per slot (debug).
     load_state: [u64; MAX_SLOTS],
@@ -250,6 +250,12 @@ pub unsafe fn set_enabled(seq: *mut u8, enable: bool, mode: u32) {
         dump_list("eye", *at::<*mut u8>(page, 0x670));
         state.focused = false;
         list_set_enabled(state.list, enable, mode);
+
+        // Activating the list claims the D-pad for the whole tab; the nose row gets focus first.
+        if enable {
+            list_set_input_claims(state.list, false);
+        }
+
         dump_list("mouth_after", state.list);
     }
 }
@@ -278,18 +284,6 @@ unsafe fn dump_list(name: &str, list: *mut u8) {
             *at::<i32>(list, 0x3d8),
             *at::<i32>(list, 0x3d4)
         );
-    }
-}
-
-// The list applies D-pad moves even while focus is on the nose row or the OK button; only let it
-// move while one of its own slots is focused, so entering it goes through the navigation links.
-pub unsafe fn before_play_exec(list: *mut u8) {
-    unsafe {
-        let state = state();
-
-        if list == state.list && !state.focused {
-            list_drop_pending_move(list);
-        }
     }
 }
 
@@ -586,6 +580,7 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
         );
 
         state.focused = index >= 0;
+        list_set_input_claims(state.list, state.focused);
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);

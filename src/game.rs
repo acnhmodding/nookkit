@@ -14,8 +14,6 @@ pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
 // (seq, group, enable, mode): enables a tab's control group; group 6 = the four old mouth buttons.
 pub const SEQ_SET_GROUP_ENABLED: usize = 0x2ba7fe0;
 pub const GROUP_MOUTH: u32 = 6;
-// ScrollBtnListCtrl State::cPlay exec (list): applies the pending D-pad move, focused or not.
-pub const LIST_PLAY_EXEC: usize = 0x375fd8c;
 pub const REQUEST_UPDATE_ANCHOR: i32 = 5;
 
 const FIND_BY_PATH: usize = 0x376e6b0;
@@ -70,8 +68,14 @@ pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
 // Slot the list believes is focused.
 const LIST_FOCUSED_SLOT: usize = 0x43c;
-// Pending move kind (0 none, 1 within a line, 2 across lines, 3 scroll) for State::cPlay.
-const LIST_PENDING_MOVE: usize = 0x3ec;
+// Per-direction input claims (up/down/left/right, then the two optional page keys). While a claim's
+// +0xbd flag is set, its handler (0x7103765cf8) consumes that direction for the list's player every
+// frame, focused or not. State::cPlay enter sets them all; only disabling the list clears them.
+const LIST_INPUT_CLAIMS: [usize; 6] = [0x480, 0x490, 0x4a0, 0x4b0, 0x4c0, 0x4d0];
+const LIST_PAGE_CLAIMS_ENABLED: usize = 0x3e8;
+const LIST_PLAYER: usize = 0x2e0;
+const CLAIM_PLAYER: usize = 0x10;
+const CLAIM_ENABLED: usize = 0xbc;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -389,8 +393,21 @@ pub unsafe fn list_clear_focus(list: *mut u8) {
     unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
 }
 
-pub unsafe fn list_drop_pending_move(list: *mut u8) {
-    unsafe { *at::<i32>(list, LIST_PENDING_MOVE) = 0 };
+// Same writes as State::cPlay enter (on) / FUN_7103764b90 (off).
+pub unsafe fn list_set_input_claims(list: *mut u8, on: bool) {
+    unsafe {
+        let page_keys = *at::<u8>(list, LIST_PAGE_CLAIMS_ENABLED) & 0x10 != 0;
+
+        for (i, &offset) in LIST_INPUT_CLAIMS.iter().enumerate() {
+            let claim = *at::<*mut u8>(list, offset);
+
+            if claim.is_null() || *at::<i32>(claim, CLAIM_PLAYER) != *at::<i32>(list, LIST_PLAYER) {
+                continue;
+            }
+
+            *at::<u16>(claim, CLAIM_ENABLED) = if on && (i < 4 || page_keys) { 0x101 } else { 0 };
+        }
+    }
 }
 
 pub unsafe fn list_button_count(list: *mut u8) -> usize {
