@@ -1,0 +1,59 @@
+use core::mem::offset_of;
+
+use crate::native::got;
+
+const GOT_CHARAMAKE_PARAM_MGR: usize = 0x4ab4868;
+
+#[repr(C)]
+struct BcsvHeader {
+    row_count: u32,
+}
+
+#[repr(C)]
+struct BcsvResource {
+    _unk_0: [u8; 0x8],
+    header: *const BcsvHeader,
+}
+
+#[repr(C)]
+struct BcsvTable {
+    _unk_0: [u8; 0xb0],
+    resource: *const BcsvResource,
+    _unk_b8: [u8; 0x108],
+    ordered_count: i32,
+}
+
+const _: () = {
+    assert!(offset_of!(BcsvTable, resource) == 0xb0);
+    assert!(offset_of!(BcsvTable, ordered_count) == 0x1c0);
+};
+
+// ACNH_Singleton_7104BF00A0: the CharaMake bcsv tables.
+#[repr(C)]
+struct CharaMakeParamMgr {
+    _unk_0: [u8; 0x38],
+    mouth_type: *const BcsvTable,
+}
+
+/// Row count of CharaMakeMouthTypeParam.bcsv, read the same way the game's mouth accessor does.
+pub unsafe fn mouth_type_count() -> usize {
+    unsafe {
+        let Some(mgr) = (*got::<*const CharaMakeParamMgr>(GOT_CHARAMAKE_PARAM_MGR)).as_ref() else {
+            return 0;
+        };
+
+        let Some(table) = mgr.mouth_type.as_ref() else {
+            return 0;
+        };
+
+        if table.ordered_count > 0 {
+            return table.ordered_count as usize;
+        }
+
+        table
+            .resource
+            .as_ref()
+            .and_then(|resource| resource.header.as_ref())
+            .map_or(0, |header| header.row_count as usize)
+    }
+}

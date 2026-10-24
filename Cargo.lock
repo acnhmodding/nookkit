@@ -6,6 +6,7 @@ version = 4
 name = "acnh-mouth"
 version = "0.1.0"
 dependencies = [
+ "native-vtable",
  "skyline",
 ]
 
@@ -20,6 +21,24 @@ name = "libc-nnsdk"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1256a11d163c7288d94909f8120ede53294d8c233df314b0e4f01cf0269707da"
+
+[[package]]
+name = "native-vtable"
+version = "0.0.1"
+source = "git+https://github.com/crackheadakira/vtable-rs.git#cdbb68c21bf9bd512c946fa3ff02e39eaed15bc6"
+dependencies = [
+ "native-vtable-macros",
+]
+
+[[package]]
+name = "native-vtable-macros"
+version = "0.0.1"
+source = "git+https://github.com/crackheadakira/vtable-rs.git#cdbb68c21bf9bd512c946fa3ff02e39eaed15bc6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "nnsdk"
@@ -68,7 +87,7 @@ dependencies = [
  "lazy_static",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -76,6 +95,17 @@ name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
+version = "2.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
 dependencies = [
  "proc-macro2",
  "quote",
