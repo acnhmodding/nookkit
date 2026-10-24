@@ -483,41 +483,25 @@ pub unsafe fn link_navigation(seq: *mut u8) {
             return;
         };
 
-        let page = *at::<*mut u8>(seq, SEQ_PAGE);
-        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize;
-
-        // Slots are column-major: the top button of column c is slot c * line_size.
-        for column in 0..NOSE_BUTTONS {
-            let nose = *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8);
-
-            let slot = list_button(state.list, column * line_size);
-
-            set_nav_link(nose, NAV_LINK_DOWN, slot);
-
-            if !nose.is_null() && !slot.is_null() {
-                println!(
-                    "[acnh-mouth] link nose[{}] down={:p} slot_node={:p}",
-                    column,
-                    nav_link(nose, NAV_LINK_DOWN),
-                    *at::<*mut u8>(slot, BTN_NAV_NODE)
-                );
-            }
-        }
-
-        link_ok_up(page, state);
+        relink(*at::<*mut u8>(seq, SEQ_PAGE), state);
     }
 }
 
-fn ok_up_slot(state: &MouthList) -> usize {
-    let line_size = unsafe { (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize };
-
-    (line_size + line_size - 1).min(state.slots.saturating_sub(1))
-}
-
-// Up from the OK button lands on the bottom of the list's middle visible column.
-unsafe fn link_ok_up(page: *mut u8, state: &MouthList) {
+// Nose button c links down to the top of visible line c, OK links up to the bottom of the middle
+// visible line. The list scrolls through a ring of buttons, so this follows its current window.
+unsafe fn relink(page: *mut u8, state: &MouthList) {
     unsafe {
-        set_nav_link(*at::<*mut u8>(page, PAGE_BTN_OK), NAV_LINK_UP, list_button(state.list, ok_up_slot(state)));
+        let line_size = (*at::<i32>(state.list, LIST_LINE_SIZE)).max(1) as usize;
+
+        for column in 0..NOSE_BUTTONS {
+            let nose = *at::<*mut u8>(page, PAGE_BTN_NOSE + column * 8);
+
+            set_nav_link(nose, NAV_LINK_DOWN, list_visible_button(state.list, column, 0));
+        }
+
+        let ok = *at::<*mut u8>(page, PAGE_BTN_OK);
+
+        set_nav_link(ok, NAV_LINK_UP, list_visible_button(state.list, NOSE_BUTTONS / 2, line_size - 1));
     }
 }
 
@@ -545,7 +529,7 @@ pub unsafe fn after_request(seq: *mut u8) {
         println!("[acnh-mouth] after_request ok_up={:p} old={}", up, points_at_old_mouth);
 
         if points_at_old_mouth {
-            link_ok_up(page, state);
+            relink(page, state);
         }
     }
 }
@@ -578,6 +562,7 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
             // stay in cPlay and keep handling the D-pad from its own cursor.
             list_pause(state.list);
             list_enable_visible_buttons(state.list);
+            relink(*at::<*mut u8>(seq, SEQ_PAGE), state);
             println!(
                 "[acnh-mouth] paused state={} first={} visible={} 438={} 2f4={}",
                 *at::<u32>(state.list, 0x298),

@@ -80,6 +80,8 @@ const PAUSE_KEEP_BUTTONS: i32 = 2;
 const LIST_PLAYER: usize = 0x2e0;
 // First visible line and the number of visible lines.
 const LIST_FIRST_LINE: usize = 0x430;
+// The buttons are a ring the list scrolls through: visible line c sits in button line +0x438 + c.
+const LIST_FIRST_BUTTON_LINE: usize = 0x438;
 const LIST_VISIBLE_LINES: usize = 0x2ec;
 // Lp::UI control: set focusable for a player (control, player, enable).
 const CONTROL_SET_FOCUSABLE: usize = 0x3c5d0e0;
@@ -413,6 +415,17 @@ pub unsafe fn list_enable_visible_buttons(list: *mut u8) {
                 set_focusable(button, player, true);
             }
         }
+    }
+}
+
+// The button showing position `pos` of visible line `line`.
+pub unsafe fn list_visible_button(list: *mut u8, line: usize, pos: usize) -> *mut u8 {
+    unsafe {
+        let line_size = (*at::<i32>(list, LIST_LINE_SIZE)).max(1) as usize;
+        let lines = (list_button_count(list) / line_size).max(1);
+        let first = (*at::<i32>(list, LIST_FIRST_BUTTON_LINE)).max(0) as usize;
+
+        list_button(list, (first + line) % lines * line_size + pos)
     }
 }
 
