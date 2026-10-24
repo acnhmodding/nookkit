@@ -5,22 +5,10 @@ use core::ptr::null_mut;
 use crate::game::ui::AppUniteBtnCtrl;
 use crate::lp::ui::{Control, VftControlLayout};
 use crate::lp::utl::StateMachine;
-use crate::native::{got_vtable, guarded_type_info, text_vtable};
+use native_vtable::native;
+
+use crate::native::{NativeResult, got_vtable, guarded_type_info, text_vtable};
 use crate::sead::Delegate;
-
-mod native {
-    use super::{AttachParams, EnableParams, ScrollBtnListCtrl, SetContentParams};
-    use crate::lp::ui::Control;
-
-    crate::native::native_fns! {
-        fn bind_buttons(list: *mut ScrollBtnListCtrl, builder: *mut core::ffi::c_void) = 0x2ab1110;
-        fn attach(list: *mut ScrollBtnListCtrl, params: *const AttachParams) = 0x3763fe0;
-        fn set_content(list: *mut ScrollBtnListCtrl, params: *const SetContentParams) = 0x3764290;
-        fn enable(list: *mut ScrollBtnListCtrl, params: *const EnableParams) = 0x3764fe0;
-        fn disable(list: *mut ScrollBtnListCtrl, mode: u32) = 0x335b550;
-        fn item_index_of(list: *mut ScrollBtnListCtrl, button: *mut Control) -> i32 = 0x3765200;
-    }
-}
 
 const GOT_TYPE_INFO: usize = 0x4ac4d68;
 const GOT_TYPE_INFO_GUARD: usize = 0x4ac4d70;
@@ -163,6 +151,28 @@ impl LeaveEvent {
     }
 }
 
+#[native(resolve = crate::native::resolve)]
+impl ScrollBtnListCtrl {
+    /// Clones the template buttons into slots; the page does this for its lists while building.
+    #[native(symbol = "ScrollBtnListCtrl::bindButtons")]
+    pub unsafe fn bind_buttons(&mut self, builder: *mut c_void);
+
+    #[native(symbol = "ScrollBtnListCtrl::attach")]
+    unsafe fn attach_native(&mut self, params: *const AttachParams);
+
+    #[native(symbol = "ScrollBtnListCtrl::setContent")]
+    unsafe fn set_content_native(&mut self, params: *const SetContentParams);
+
+    #[native(symbol = "ScrollBtnListCtrl::enable")]
+    unsafe fn enable_native(&mut self, params: *const EnableParams);
+
+    #[native(symbol = "ScrollBtnListCtrl::disable")]
+    unsafe fn disable_native(&mut self, mode: u32);
+
+    #[native(symbol = "ScrollBtnListCtrl::itemIndexOf")]
+    pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32;
+}
+
 impl ScrollBtnListCtrl {
     pub unsafe fn cast(control: *mut Control) -> Option<&'static mut Self> {
         unsafe {
@@ -174,14 +184,9 @@ impl ScrollBtnListCtrl {
         }
     }
 
-    /// Clones the template buttons into slots; the page does this for its lists while building.
-    pub unsafe fn bind_buttons(&mut self, builder: *mut c_void) {
-        unsafe { native::bind_buttons(self, builder) }
-    }
-
     /// What the page's list attach routine (0x7102b99900) does for its own lists on every entry:
     /// sets the player and focus manager, links the buttons into the focus graph.
-    pub unsafe fn attach(&mut self, page: *mut c_void, root: *mut Control) {
+    pub unsafe fn attach(&mut self, page: *mut c_void, root: *mut Control) -> NativeResult {
         let root_type = unsafe { guarded_type_info(GOT_PAGE_ROOT_TYPE_INFO, GOT_PAGE_ROOT_TYPE_INFO_GUARD) };
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
         let params = AttachParams {
@@ -193,11 +198,11 @@ impl ScrollBtnListCtrl {
             unk_1c: -1,
         };
 
-        unsafe { native::attach(self, &params) }
+        unsafe { self.attach_native(&params) }
     }
 
     /// Same values the game passes for the eye list on page refresh.
-    pub unsafe fn set_content(&mut self, item_count: i32, selected: i32, player: u8) {
+    pub unsafe fn set_content(&mut self, item_count: i32, selected: i32, player: u8) -> NativeResult {
         let mut flags = [0; 0xc];
 
         flags[0x16 - 0x14] = 1;
@@ -216,14 +221,14 @@ impl ScrollBtnListCtrl {
             _pad_2d: [0; 3],
         };
 
-        unsafe { native::set_content(self, &params) }
+        unsafe { self.set_content_native(&params) }
     }
 
     /// Same as the game's group switch does for the eye list (group 3).
-    pub unsafe fn set_enabled(&mut self, enable: bool, mode: u32) {
+    pub unsafe fn set_enabled(&mut self, enable: bool, mode: u32) -> NativeResult {
         unsafe {
             if !enable {
-                native::disable(self, mode);
+                self.disable_native(mode)?;
             } else if self.state_machine.current_state > 1 {
                 let params = EnableParams {
                     vtable: got_vtable(GOT_ENABLE_PARAMS_VTABLE),
@@ -234,11 +239,13 @@ impl ScrollBtnListCtrl {
                     cursor_item: -1,
                 };
 
-                native::enable(self, &params);
+                self.enable_native(&params)?;
             } else if self.is_ready_to_play() {
-                self.state_machine.change_state(STATE_PLAY);
+                self.state_machine.change_state(STATE_PLAY)?;
             }
         }
+
+        Ok(())
     }
 
     unsafe fn is_ready_to_play(&self) -> bool {
@@ -256,19 +263,21 @@ impl ScrollBtnListCtrl {
     /// What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec): forget the
     /// focused slot and pause with its buttons still focusable, so it stops taking the D-pad and
     /// navigation back into it goes through the links.
-    pub unsafe fn pause(&mut self) {
+    pub unsafe fn pause(&mut self) -> NativeResult {
         self.focused_slot = -1;
 
         if self.state_machine.current_state == STATE_PLAY {
             self.pause_button_mode = PAUSE_KEEP_BUTTONS;
 
-            unsafe { self.state_machine.change_state(STATE_PAUSE) };
+            unsafe { self.state_machine.change_state(STATE_PAUSE)? };
         }
+
+        Ok(())
     }
 
     /// Pausing keeps only the line focus last left from enabled (vanilla re-enters a list where it
     /// was left). Here neighbours link into every visible line, so keep all of them focusable.
-    pub unsafe fn enable_visible_buttons(&mut self) {
+    pub unsafe fn enable_visible_buttons(&mut self) -> NativeResult {
         let line_size = self.line_size.max(1);
         let visible = self.first_line..self.first_line + self.visible_lines;
 
@@ -277,12 +286,14 @@ impl ScrollBtnListCtrl {
                 continue;
             };
 
-            let item = unsafe { self.item_index_of(button.as_control()) };
+            let item = unsafe { self.item_index_of(button.as_control())? };
 
             if item >= 0 && item < self.padded_item_count && visible.contains(&(item / line_size)) {
-                unsafe { (*button.as_control()).set_focusable(self.player, true) };
+                unsafe { (*button.as_control()).set_focusable(self.player, true)? };
             }
         }
+
+        Ok(())
     }
 
     pub fn button_count(&self) -> usize {
@@ -317,9 +328,5 @@ impl ScrollBtnListCtrl {
         let first = self.first_button_line.max(0) as usize;
 
         Some((slot / line_size + lines - first % lines) % lines)
-    }
-
-    pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32 {
-        unsafe { native::item_index_of(self, control) }
     }
 }

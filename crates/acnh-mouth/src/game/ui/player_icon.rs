@@ -1,26 +1,27 @@
 use core::mem::offset_of;
 
+use native_vtable::native;
+
 use crate::game::ui::AppUniteBtnCtrl;
+use crate::game::ui::app_unite_btn::ChildList;
 use crate::game::ui::chara_make::{FaceParams, IconTexturePool};
+use crate::native::NativeResult;
 
-mod native {
-    use super::{IconPart, PlayerIcon};
-    use crate::game::ui::app_unite_btn::ChildList;
-    use crate::game::ui::chara_make::FaceParams;
-
-    crate::native::native_fns! {
-        fn find(children: *mut ChildList) -> *mut PlayerIcon = 0x2baaf20;
-        fn reset_part(part: *mut IconPart) = 0x2fc3694;
-        fn render(icon: *mut PlayerIcon, params: *const FaceParams) = 0x2fc37ac;
-        fn move_from(icon: *mut PlayerIcon, source: *mut PlayerIcon, params: *const FaceParams) = 0x2fc3ff0;
-        fn release(icon: *mut PlayerIcon) = 0x2fc4398;
-        fn tick(icon: *mut PlayerIcon) = 0x2fc47d8;
-    }
+#[native(resolve = crate::native::resolve)]
+unsafe extern "C" {
+    #[native(symbol = "CharaMake_findPlayerIcon")]
+    fn find_player_icon(children: *mut ChildList) -> *mut PlayerIcon;
 }
 
 #[repr(C)]
 pub struct IconPart {
     _unk_0: [u8; 0x50],
+}
+
+#[native(resolve = crate::native::resolve)]
+impl IconPart {
+    #[native(symbol = "PlayerIcon_resetPart")]
+    unsafe fn reset(&mut self);
 }
 
 // Face, hair, eye, pupil, nose, mouth, cheek.
@@ -39,37 +40,36 @@ const _: () = {
 
 impl PlayerIcon {
     /// The button's icon, prepared the way setupControls does for the eye list's icons.
-    pub unsafe fn create(button: &mut AppUniteBtnCtrl, pool: *mut IconTexturePool) -> *mut PlayerIcon {
+    pub unsafe fn create(button: &mut AppUniteBtnCtrl, pool: *mut IconTexturePool) -> NativeResult<*mut PlayerIcon> {
         unsafe {
-            let Some(icon) = native::find(&mut button.children).as_mut() else {
-                return core::ptr::null_mut();
+            let Some(icon) = find_player_icon(&mut button.children)?.as_mut() else {
+                return Ok(core::ptr::null_mut());
             };
 
             icon.texture_pool = pool;
 
             for part in &mut icon.parts {
-                native::reset_part(part);
+                part.reset()?;
             }
 
-            icon
+            Ok(icon)
         }
     }
+}
 
+#[native(resolve = crate::native::resolve)]
+impl PlayerIcon {
     /// Loads the part textures for `params` and shows them once they're ready.
-    pub unsafe fn render(&mut self, params: &FaceParams) {
-        unsafe { native::render(self, params) }
-    }
+    #[native(symbol = "PlayerIcon_render")]
+    pub unsafe fn render(&mut self, params: *const FaceParams);
 
     /// Takes over `source`'s textures, loading only the parts that differ.
-    pub unsafe fn move_from(&mut self, source: *mut PlayerIcon, params: &FaceParams) {
-        unsafe { native::move_from(self, source, params) }
-    }
+    #[native(symbol = "PlayerIcon_moveFrom")]
+    pub unsafe fn move_from(&mut self, source: *mut PlayerIcon, params: *const FaceParams);
 
-    pub unsafe fn release(&mut self) {
-        unsafe { native::release(self) }
-    }
+    #[native(symbol = "PlayerIcon_release")]
+    pub unsafe fn release(&mut self);
 
-    pub unsafe fn tick(&mut self) {
-        unsafe { native::tick(self) }
-    }
+    #[native(symbol = "PlayerIcon_tick")]
+    pub unsafe fn tick(&mut self);
 }

@@ -1,8 +1,4 @@
-mod native {
-    crate::native::native_fns! {
-        fn change_state(machine: *mut super::StateMachine, state: u32) = 0x3dbb160;
-    }
-}
+use native_vtable::native;
 
 #[repr(C)]
 pub struct StateMachine {
@@ -13,9 +9,9 @@ pub struct StateMachine {
 
 const _: () = assert!(core::mem::size_of::<StateMachine>() == 0x48);
 
+#[native(resolve = crate::native::resolve)]
 impl StateMachine {
     /// Runs the current state's exit and the new state's enter.
-    pub unsafe fn change_state(&mut self, state: u32) {
-        unsafe { native::change_state(self, state) }
-    }
+    #[native(symbol = "Lp::Utl::StateMachine::changeState")]
+    pub unsafe fn change_state(&mut self, state: u32);
 }

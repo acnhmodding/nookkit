@@ -8,7 +8,7 @@ use crate::game::ui::chara_make::{
 };
 use crate::game::ui::{ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, PlayerIcon, VftListBtnGroup};
 use crate::lp::ui::{Control, LeaveDirection, LeaveEvent, NavDirection, ScrollBtnListCtrl};
-use crate::native::text_vtable;
+use crate::native::{NativeResult, report, text_vtable};
 use crate::sead::{Delegate, ObjArray, VftDelegate};
 
 const LIST_PATH: &core::ffi::CStr = c"/L_BtnListMouth_00";
@@ -169,18 +169,20 @@ impl MouthList {
         }
     }
 
-    unsafe fn release_icons(&mut self) {
+    unsafe fn release_icons(&mut self) -> NativeResult {
         for &icon in &self.icons[..self.slots] {
             if let Some(icon) = unsafe { icon.as_mut() } {
-                unsafe { icon.release() };
+                unsafe { icon.release()? };
             }
         }
+
+        Ok(())
     }
 }
 
 // CharaMakePage::vf_0d0 runs while parts are built, on every CharaMake entry; look the list up the
 // same way the game does for its six lists and bind its buttons whenever they were rebuilt.
-pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) {
+pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) -> NativeResult {
     unsafe {
         let state = state();
 
@@ -191,29 +193,31 @@ pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut
         }
 
         let Some(parent) = parent.as_mut() else {
-            return;
+            return Ok(());
         };
 
-        let Some(list) = ScrollBtnListCtrl::cast(parent.find_by_path(LIST_PATH)) else {
-            return;
+        let Some(list) = ScrollBtnListCtrl::cast(parent.find_by_path(LIST_PATH)?) else {
+            return Ok(());
         };
 
         if core::ptr::eq(list, state.list) && list.button_count() != 0 {
-            return;
+            return Ok(());
         }
 
-        list.bind_buttons(builder);
+        list.bind_buttons(builder)?;
         state.list = list;
+
+        Ok(())
     }
 }
 
-pub unsafe fn setup(seq: *mut CharaMakeSeq) {
+pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let state = state();
         let seq_ref = &mut *seq;
 
         if state.page != seq_ref.page || state.list.is_null() {
-            return;
+            return Ok(());
         }
 
         state.seq = seq;
@@ -221,7 +225,7 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) {
         let page = &mut *seq_ref.page;
         let list = &mut *state.list;
 
-        list.attach(page as *mut CharaMakePage as *mut c_void, *page.root);
+        list.attach(page as *mut CharaMakePage as *mut c_void, *page.root)?;
         state.group = ListBtnGroup::new();
 
         if !list.scroll_delegate.is_bound() {
@@ -243,7 +247,7 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) {
 
             button.set_list_mode();
             button.bind_to_group(&mut state.group);
-            state.icons[slot] = PlayerIcon::create(button, &mut seq_ref.icon_texture_pool);
+            state.icons[slot] = PlayerIcon::create(button, &mut seq_ref.icon_texture_pool)?;
         }
 
         state.updater = ItemUpdater::new(
@@ -251,16 +255,20 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) {
             Delegate::new(text_vtable(ITEM_DELEGATE_VTABLE), seq, on_item as *const () as usize),
         );
         state.values.own(&mut seq_ref.mouth_values);
+
+        Ok(())
     }
 }
 
 // The tab switches its mouth group on and off; the list takes the old buttons' place in it.
-pub unsafe fn set_enabled(seq: *mut CharaMakeSeq, enable: bool, mode: u32) {
+pub unsafe fn set_enabled(seq: *mut CharaMakeSeq, enable: bool, mode: u32) -> NativeResult {
     unsafe {
         if let Some(state) = active(seq) {
             state.enabled = enable;
-            state.list().set_enabled(enable, mode);
+            state.list().set_enabled(enable, mode)?;
         }
+
+        Ok(())
     }
 }
 
@@ -287,35 +295,38 @@ pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) {
 }
 
 extern "C" fn on_scroll(seq: *mut CharaMakeSeq, event: *mut c_void) {
-    unsafe {
-        let Some(state) = active(seq) else {
-            return;
-        };
+    let result = unsafe {
+        match active(seq) {
+            Some(state) => state.updater.update(event).and_then(|()| state.group.refresh(state.list)),
+            None => Ok(()),
+        }
+    };
 
-        state.updater.update(event);
-        state.group.refresh(state.list);
-    }
+    report("scroll", result);
 }
 
 extern "C" fn on_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) {
+    report("item", unsafe { update_item(seq, event) });
+}
+
+unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
-            return;
+            return Ok(());
         };
 
         let event = &*event;
         let slot_of = |slot: i32| if (0..state.slots as i32).contains(&slot) { slot as usize } else { 0 };
         let Some(icon) = state.icons[slot_of(event.slot)].as_mut() else {
-            return;
+            return Ok(());
         };
 
         let Some(op) = event.op() else {
-            return;
+            return Ok(());
         };
 
         if op == ItemOp::Clear {
-            icon.release();
-            return;
+            return icon.release();
         }
 
         let item = event.item();
@@ -327,7 +338,7 @@ extern "C" fn on_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) {
         match op {
             ItemOp::Move => icon.move_from(state.icons[slot_of(event.from_slot)], &params),
             ItemOp::Render if in_range => icon.render(&params),
-            _ => {}
+            _ => Ok(()),
         }
     }
 }
@@ -357,10 +368,10 @@ extern "C" fn on_leave(seq: *mut CharaMakeSeq, target: *mut *mut Control, event:
 
 // Page refresh: select the current mouth and (re)fill the list, which renders the visible items. The
 // refresh also relinks every tab's grid, so on the mouth tab point the nose row and OK back at the list.
-pub unsafe fn refresh(seq: *mut CharaMakeSeq) {
+pub unsafe fn refresh(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq).filter(|state| state.values.count != 0) else {
-            return;
+            return Ok(());
         };
 
         let mouth = state.seq().face_params[FACE_PARAM_MOUTH] as u32;
@@ -368,11 +379,13 @@ pub unsafe fn refresh(seq: *mut CharaMakeSeq) {
         let (count, player) = (state.values.count as i32, state.seq().player);
 
         state.group.selected = selected;
-        state.list().set_content(count, selected, player);
+        state.list().set_content(count, selected, player)?;
 
         if state.enabled {
             state.relink();
         }
+
+        Ok(())
     }
 }
 
@@ -386,37 +399,39 @@ pub unsafe fn after_request(seq: *mut CharaMakeSeq) {
     }
 }
 
-pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) {
+pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
-            return;
+            return Ok(());
         };
 
-        let index = state.list().item_index_of(control);
+        let index = state.list().item_index_of(control)?;
 
         if index >= 0 {
             state.post_request(RequestState::Focus, index);
         } else if state.enabled {
             // Focus set from outside (onTabEnter focusing the nose row) bypasses the list, which would
             // stay in cPlay and keep handling the D-pad from its own cursor.
-            state.list().pause();
-            state.list().enable_visible_buttons();
+            state.list().pause()?;
+            state.list().enable_visible_buttons()?;
             state.relink();
         }
+
+        Ok(())
     }
 }
 
 // Mirrors the game's eye list branch of onControlDecide.
-pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) {
+pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
-            return;
+            return Ok(());
         };
 
-        let index = state.list().item_index_of(control);
+        let index = state.list().item_index_of(control)?;
 
         if index < 0 || state.group.locked {
-            return;
+            return Ok(());
         }
 
         let list = state.list;
@@ -428,41 +443,47 @@ pub unsafe fn on_decide(seq: *mut CharaMakeSeq, control: *mut Control) {
         } else if !group.toggle {
             group.clear_selection(list);
             group.set_selected(-1);
-            return;
+            return Ok(());
         } else if group.keep == 0 {
-            return;
+            return Ok(());
         }
 
         let selected = group.selected().max(0);
 
         state.post_request(RequestState::Decide, selected);
+
+        Ok(())
     }
 }
 
-pub unsafe fn tick(seq: *mut CharaMakeSeq) {
+pub unsafe fn tick(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
-            return;
+            return Ok(());
         };
 
         for &icon in &state.icons[..state.slots] {
             if let Some(icon) = icon.as_mut() {
-                icon.tick();
+                icon.tick()?;
             }
         }
+
+        Ok(())
     }
 }
 
 // Runs every time CharaMake is left; the seq, page and list stay alive and are reused on return,
 // so only release the textures and hand the value list back (the fill hook takes it again).
-pub unsafe fn exit(seq: *mut CharaMakeSeq) {
+pub unsafe fn exit(seq: *mut CharaMakeSeq) -> NativeResult {
     unsafe {
         let Some(state) = active(seq) else {
-            return;
+            return Ok(());
         };
 
         state.enabled = false;
-        state.release_icons();
+        let released = state.release_icons();
         state.values.release(&mut (*seq).mouth_values);
+
+        released
     }
 }

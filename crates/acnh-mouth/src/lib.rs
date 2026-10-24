@@ -8,46 +8,47 @@ use core::ffi::c_void;
 
 use game::ui::chara_make::*;
 use lp::ui::Control;
+use native::report;
 use sead::ObjArray;
 
 #[skyline::hook(offset = PAGE_BIND_LISTS)]
 unsafe fn page_bind_lists(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) {
     call_original!(page, parent, builder);
 
-    unsafe { mouth_list::bind(page, parent, builder) };
+    report("bind", unsafe { mouth_list::bind(page, parent, builder) });
 }
 
 #[skyline::hook(offset = SEQ_SETUP_CONTROLS)]
 unsafe fn seq_setup_controls(seq: *mut CharaMakeSeq) {
     call_original!(seq);
 
-    unsafe { mouth_list::setup(seq) };
+    report("setup", unsafe { mouth_list::setup(seq) });
 }
 
 #[skyline::hook(offset = SEQ_ON_CONTROL_FOCUS)]
 unsafe fn seq_on_control_focus(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
     call_original!(seq, event);
 
-    unsafe { mouth_list::on_focus(seq, (*event).control) };
+    report("focus", unsafe { mouth_list::on_focus(seq, (*event).control) });
 }
 
 #[skyline::hook(offset = SEQ_ON_CONTROL_DECIDE)]
 unsafe fn seq_on_control_decide(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
     call_original!(seq, event);
 
-    unsafe { mouth_list::on_decide(seq, (*event).control) };
+    report("decide", unsafe { mouth_list::on_decide(seq, (*event).control) });
 }
 
 #[skyline::hook(offset = SEQ_TICK_ICONS)]
 unsafe fn seq_tick_icons(seq: *mut CharaMakeSeq) {
     call_original!(seq);
 
-    unsafe { mouth_list::tick(seq) };
+    report("tick", unsafe { mouth_list::tick(seq) });
 }
 
 #[skyline::hook(offset = SEQ_ON_EXIT)]
 unsafe fn seq_on_exit(seq: *mut CharaMakeSeq) {
-    unsafe { mouth_list::exit(seq) };
+    report("exit", unsafe { mouth_list::exit(seq) });
 
     call_original!(seq);
 }
@@ -73,7 +74,7 @@ unsafe fn seq_set_group_enabled(seq: *mut CharaMakeSeq, group: u32, enable: u32,
     // The old mouth buttons stay hidden and out of navigation; the list stands in for them.
     call_original!(seq, group, 0, mode);
 
-    unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) };
+    report("set_enabled", unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) });
 }
 
 #[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
@@ -85,7 +86,7 @@ unsafe fn seq_fill_mouth_list(values: *mut ObjArray<u32>) {
 unsafe fn seq_refresh_enter(seq: *mut CharaMakeSeq) {
     call_original!(seq);
 
-    unsafe { mouth_list::refresh(seq) };
+    report("refresh", unsafe { mouth_list::refresh(seq) });
 }
 
 #[skyline::main(name = "acnh-mouth")]

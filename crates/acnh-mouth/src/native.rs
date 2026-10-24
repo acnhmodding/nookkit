@@ -29,21 +29,38 @@ pub unsafe fn guarded_type_info(info: usize, guard: usize) -> Option<*const core
     }
 }
 
-/// Declares wrappers for game functions: `fn name(args) -> ret = offset;`.
-macro_rules! native_fns {
-    ($( $(#[$meta:meta])* fn $name:ident($($arg:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? = $offset:literal; )*) => {
-        $(
-            $(#[$meta])*
-            pub(crate) unsafe fn $name($($arg: $ty),*) $(-> $ret)? {
-                unsafe {
-                    let f: unsafe extern "C" fn($($ty),*) $(-> $ret)? =
-                        core::mem::transmute($crate::native::text().add($offset));
+pub type NativeResult<T = ()> = Result<T, native_vtable::Unresolved>;
 
-                    f($($arg),*)
-                }
-            }
-        )*
-    };
+const SYMBOLS: &[(&str, usize)] = &[
+    ("Lp::UI::Control::findByPath", 0x376e6b0),
+    ("Lp::UI::Control::setFocusable", 0x3c5d0e0),
+    ("Lp::Utl::StateMachine::changeState", 0x3dbb160),
+    ("CharaMake_findPlayerIcon", 0x2baaf20),
+    ("PlayerIcon_resetPart", 0x2fc3694),
+    ("PlayerIcon_render", 0x2fc37ac),
+    ("PlayerIcon_moveFrom", 0x2fc3ff0),
+    ("PlayerIcon_release", 0x2fc4398),
+    ("PlayerIcon_tick", 0x2fc47d8),
+    ("game::UI::CharaMakeSeq::refreshListGroup", 0x2ac30b0),
+    ("ListItemUpdater::update", 0x335c380),
+    ("ScrollBtnListCtrl::bindButtons", 0x2ab1110),
+    ("ScrollBtnListCtrl::attach", 0x3763fe0),
+    ("ScrollBtnListCtrl::setContent", 0x3764290),
+    ("ScrollBtnListCtrl::enable", 0x3764fe0),
+    ("ScrollBtnListCtrl::disable", 0x335b550),
+    ("ScrollBtnListCtrl::itemIndexOf", 0x3765200),
+];
+
+pub fn resolve(symbol: &'static str) -> Option<usize> {
+    SYMBOLS
+        .iter()
+        .find(|(name, _)| *name == symbol)
+        .map(|&(_, offset)| text() as usize + offset)
 }
 
-pub(crate) use native_fns;
+/// Hook and callback boundaries return to the game, so a failed native call is logged there.
+pub fn report(context: &str, result: NativeResult) {
+    if let Err(e) = result {
+        println!("[acnh-mouth] {context}: {e}");
+    }
+}

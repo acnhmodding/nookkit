@@ -1,18 +1,9 @@
 use core::ffi::{CStr, c_void};
 
-use native_vtable::{vtable, vtable_impl};
+use native_vtable::{native, vtable, vtable_impl};
 
+use crate::native::NativeResult;
 use crate::sead::SafeString;
-
-mod native {
-    use super::Control;
-    use crate::sead::SafeString;
-
-    crate::native::native_fns! {
-        fn find_by_path(parent: *mut Control, path: *const SafeString<'_>) -> *mut Control = 0x376e6b0;
-        fn set_focusable(control: *mut Control, player: u32, enable: bool) = 0x3c5d0e0;
-    }
-}
 
 #[vtable(path = lp::ui::control::VftControl)]
 pub unsafe trait VftControl {
@@ -29,20 +20,25 @@ pub struct Control {
 #[vtable_impl]
 unsafe impl VftControl for Control {}
 
+#[native(resolve = crate::native::resolve)]
+impl Control {
+    #[native(symbol = "Lp::UI::Control::findByPath")]
+    unsafe fn find_by_path_native(&mut self, path: *const SafeString<'_>) -> *mut Control;
+
+    #[native(symbol = "Lp::UI::Control::setFocusable")]
+    pub unsafe fn set_focusable(&mut self, player: u32, enable: bool);
+}
+
 impl Control {
     /// `type_info` comes from `native::guarded_type_info`; `None` (not initialized yet) is no match.
     pub unsafe fn is_derived(&self, type_info: Option<*const c_void>) -> bool {
         unsafe { type_info.is_some_and(|info| self.check_derived_runtime_type_info(info)) }
     }
 
-    pub unsafe fn find_by_path(&mut self, path: &CStr) -> *mut Control {
+    pub unsafe fn find_by_path(&mut self, path: &CStr) -> NativeResult<*mut Control> {
         let path = SafeString::new(path);
 
-        unsafe { native::find_by_path(self, &path) }
-    }
-
-    pub unsafe fn set_focusable(&mut self, player: u32, enable: bool) {
-        unsafe { native::set_focusable(self, player, enable) }
+        unsafe { self.find_by_path_native(&path) }
     }
 }
 
