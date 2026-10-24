@@ -26,7 +26,6 @@ const _: () = {
     assert!(offset_of!(BcsvTable, ordered_count) == 0x1c0);
 };
 
-// ACNH_Singleton_7104BF00A0: the CharaMake bcsv tables.
 #[repr(C)]
 struct CharaMakeParamMgr {
     _unk_0: [u8; 0x38],

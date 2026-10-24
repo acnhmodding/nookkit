@@ -22,7 +22,6 @@ pub struct AppUniteBtnCtrl {
     _unk_2b4: [u8; 0xc],
     pub mode_bits: u8,
     _unk_2c1: [u8; 0xdf],
-    // Asked whether the button can be selected; owned by its list's group.
     pub selectable_delegate: Delegate,
 }
 

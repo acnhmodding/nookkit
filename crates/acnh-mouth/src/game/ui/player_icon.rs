@@ -24,12 +24,12 @@ impl IconPart {
     unsafe fn reset(&mut self);
 }
 
-// Face, hair, eye, pupil, nose, mouth, cheek.
 #[repr(C)]
 pub struct PlayerIcon {
     _unk_0: [u8; 0x208],
     pub texture_pool: *mut IconTexturePool,
     _unk_210: [u8; 0x18],
+    // Face, hair, eye, pupil, nose, mouth, cheek.
     pub parts: [IconPart; 7],
 }
 
@@ -59,7 +59,6 @@ impl PlayerIcon {
 
 #[native(resolve = crate::native::resolve)]
 impl PlayerIcon {
-    /// Loads the part textures for `params` and shows them once they're ready.
     #[native(symbol = "PlayerIcon_render")]
     pub unsafe fn render(&mut self, params: *const FaceParams);
 

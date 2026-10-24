@@ -19,9 +19,8 @@ const SCROLL_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListScrollDelegate
 const LEAVE_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListLeaveDelegate::vtable";
 const ITEM_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ItemDelegate::vtable";
 
-// Writable replacement storage for the seq's mouth value list (item -> mouth value). The game
-// recycles the list's slots when it refills it, so it can't point at read-only data.
 struct MouthValues {
+    // The game recycles these slots when it refills the list, so they must be writable.
     nodes: [u64; MAX_MOUTHS],
     node_ptrs: [*mut u32; MAX_MOUTHS],
     count: usize,
@@ -69,7 +68,6 @@ unsafe fn state() -> &'static mut MouthList {
     unsafe { &mut *STATE.0.get() }
 }
 
-/// The mouth list, if it's bound to this seq.
 unsafe fn active(seq: *mut CharaMakeSeq) -> Option<&'static mut MouthList> {
     unsafe {
         let state = state();
@@ -260,7 +258,6 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
     }
 }
 
-// The tab switches its mouth group on and off; the list takes the old buttons' place in it.
 pub unsafe fn set_enabled(seq: *mut CharaMakeSeq, enable: bool, mode: u32) -> NativeResult {
     unsafe {
         if let Some(state) = active(seq) {

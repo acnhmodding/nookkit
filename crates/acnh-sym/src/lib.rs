@@ -11,7 +11,6 @@ pub use runtime::*;
 pub const FINGERPRINT_OFFSET: usize = 0x3f6_0000;
 pub const FINGERPRINT_LEN: usize = 0x1_0000;
 
-/// FNV-1a; the Ghidra export (`ExportSymbols.java`) computes the same.
 pub fn fingerprint(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
         (hash ^ b as u64).wrapping_mul(0x0100_0000_01b3)
@@ -59,7 +58,6 @@ pub fn manifest(text: &str) -> impl Iterator<Item = Result<(Kind, &str), &str>> 
         })
 }
 
-/// Names from `manifest` that `file` lacks.
 pub fn missing<'a>(
     file: &SymbolFile,
     manifest_text: &'a str,

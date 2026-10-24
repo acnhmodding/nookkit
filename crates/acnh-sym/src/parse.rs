@@ -39,7 +39,6 @@ pub enum ParseError {
     MissingHeader(&'static str),
 }
 
-/// A per-build symbol file: module-relative offsets keyed by Ghidra name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolFile {
     pub game_version: String,
@@ -69,8 +68,6 @@ fn parse_quoted(value: &str) -> Option<&str> {
     value.strip_prefix('"')?.strip_suffix('"')
 }
 
-/// The TOML subset the Ghidra export writes: a header of `key = value` lines, then sections of
-/// `"name" = 0xoffset` lines.
 pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
     let mut game_version = None;
     let mut rodata_hash = None;

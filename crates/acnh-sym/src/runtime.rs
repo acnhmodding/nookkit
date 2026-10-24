@@ -25,9 +25,6 @@ fn running_fingerprint() -> u64 {
     fingerprint(window)
 }
 
-/// Loads the symbol file for the running build: `<SD_DIR>/<version>.toml` if present, else
-/// `embedded` (the file this crate was built with). The file must match the running build's
-/// fingerprint. Later calls return the already-loaded table.
 pub fn init(embedded: &str) -> Result<&'static SymbolFile, SymError> {
     if let Some(table) = TABLE.get() {
         return Ok(table);
@@ -65,7 +62,6 @@ pub fn address(kind: Kind, name: &str) -> Result<usize, SymError> {
     Ok(module_base() + offset(kind, name)?)
 }
 
-/// Resolver for `native_vtable::native`.
 pub fn resolve(name: &'static str) -> Option<usize> {
     address(Kind::Fn, name).ok()
 }
@@ -74,7 +70,6 @@ pub fn fun_addr(name: &str) -> Result<usize, SymError> {
     address(Kind::Fn, name)
 }
 
-/// The pointer stored in a GOT slot.
 pub fn got<T>(name: &str) -> Result<*mut T, SymError> {
     Ok(unsafe { *(address(Kind::Got, name)? as *const *mut T) })
 }
@@ -88,8 +83,7 @@ pub fn vtable<T>(name: &str) -> Result<*const T, SymError> {
     Ok(address(Kind::Data, name)? as *const T)
 }
 
-/// A `sead` static type info. Guarded function-local statics are only initialised the first time
-/// the game's own code runs their check, so `Ok(None)` means "not yet".
+/// Guarded statics are only initialised once the game runs their check, so `Ok(None)` means "not yet".
 pub fn type_info(name: &str) -> Result<Option<*const c_void>, SymError> {
     let info = address(Kind::TypeInfo, name)? as *const c_void;
 
@@ -103,8 +97,6 @@ pub fn type_info(name: &str) -> Result<Option<*const c_void>, SymError> {
 #[doc(hidden)]
 pub use skyline::hooks::A64HookFunction as __hook_function;
 
-/// A hook on a function named in the symbol file, installed at runtime:
-///
 /// ```ignore
 /// acnh_sym::hook! {
 ///     pub view_page_initialize = "game::UI::ViewPage::initialize";
@@ -114,8 +106,6 @@ pub use skyline::hooks::A64HookFunction as __hook_function;
 /// }
 /// view_page_initialize::install()?;
 /// ```
-///
-/// The body calls the game's implementation through `original`.
 #[macro_export]
 macro_rules! hook {
     (

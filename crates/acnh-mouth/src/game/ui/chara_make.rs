@@ -9,7 +9,6 @@ pub const GROUP_MOUTH: u32 = 6;
 
 pub const FACE_PARAM_MOUTH: usize = 5;
 
-/// Same layout as the save's CharaMakeSetting; [5] is the mouth's CharaMakeMouthTypeParam row.
 pub type FaceParams = [u8; 12];
 
 #[repr(C)]
@@ -97,7 +96,6 @@ const _: () = {
     assert!(offset_of!(CharaMakeSeq, request) == 0x1cfcc);
 };
 
-/// Passed to the page's control focus and decide delegates.
 #[repr(C)]
 pub struct ControlEvent {
     _unk_0: [u8; 0x8],

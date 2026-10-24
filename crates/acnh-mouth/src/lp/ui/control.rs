@@ -30,7 +30,6 @@ impl Control {
 }
 
 impl Control {
-    /// `type_info` comes from `native::type_info`; `None` (not initialized yet) is no match.
     pub unsafe fn is_derived(&self, type_info: Option<*const c_void>) -> bool {
         unsafe { type_info.is_some_and(|info| self.check_derived_runtime_type_info(info)) }
     }

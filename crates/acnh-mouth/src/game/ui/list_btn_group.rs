@@ -110,7 +110,6 @@ impl ItemEvent {
     }
 }
 
-// Turns a list's scroll events into per-slot ItemEvents for its delegate (layout of seq+0x1cf70).
 #[repr(C)]
 pub struct ItemUpdater {
     pub count: u32,

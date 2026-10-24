@@ -20,8 +20,6 @@ pub struct InputClaim {
     pub unk_14: i32,
 }
 
-// The buttons are a ring the list scrolls through: visible line c is button line
-// `first_button_line + c` and item line `first_line + c`. Lines are columns in CharaMake.
 #[repr(C)]
 pub struct ScrollBtnListCtrl {
     pub vtable: *const VftControlLayout,
@@ -52,6 +50,8 @@ pub struct ScrollBtnListCtrl {
     pub padded_item_count: i32,
     pub unk_3d8: i32,
     _unk_3dc: [u8; 0x54],
+    // The buttons are a ring the list scrolls through: visible line c is button line
+    // `first_button_line + c` and item line `first_line + c`. Lines are columns in CharaMake.
     pub first_line: i32,
     _unk_434: [u8; 0x4],
     pub first_button_line: i32,
@@ -315,7 +315,6 @@ impl ScrollBtnListCtrl {
         unsafe { self.button((first + line) % lines * line_size + pos) }
     }
 
-    /// The visible line the focused slot is in.
     pub fn focused_visible_line(&self) -> Option<usize> {
         let line_size = self.line_size.max(1) as usize;
         let lines = (self.button_count() / line_size).max(1);
