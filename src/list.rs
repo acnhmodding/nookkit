@@ -554,7 +554,17 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
 
         let index = list_item_index_of(state.list, control);
 
-        println!("[acnh-mouth] focus {} index={} request={}", describe(seq, state, control), index, *at::<i32>(seq, SEQ_REQUEST));
+        println!(
+            "[acnh-mouth] focus {} index={} request={} focused={} cursor={},{} move={} step={}",
+            describe(seq, state, control),
+            index,
+            *at::<i32>(seq, SEQ_REQUEST),
+            *at::<i32>(state.list, 0x43c),
+            *at::<i32>(state.list, 0x440),
+            *at::<i32>(state.list, 0x444),
+            *at::<i32>(state.list, 0x3ec),
+            *at::<i32>(state.list, 0x3f4)
+        );
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);

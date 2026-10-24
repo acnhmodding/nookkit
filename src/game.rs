@@ -367,7 +367,11 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
         if ready {
             let enable: extern "C" fn(*mut u8, u32) = func(LIST_ENABLE_FOCUS);
 
+            // cPlay_Enter focuses the list's cursor button when no slot is marked focused. The mouth tab
+            // focuses the nose row right after, which the list never sees, so don't let it take focus.
+            *at::<i32>(list, LIST_FOCUSED_SLOT) = 0;
             enable(list.add(0x290), 2);
+            list_clear_focus(list);
         }
     }
 }
