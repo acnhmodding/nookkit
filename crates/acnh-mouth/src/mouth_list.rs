@@ -7,6 +7,7 @@ use crate::game::ui::chara_make::{
     CATEGORY_MOUTH, CharaMakePage, CharaMakeSeq, FACE_PARAM_MOUTH, RequestState,
 };
 use crate::game::ui::{ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, PlayerIcon, VftListBtnGroup};
+use crate::lp::ui::scroll_btn_list::{Content, Enable};
 use crate::lp::ui::{Control, LeaveDirection, LeaveEvent, NavDirection, ScrollBtnListCtrl};
 use crate::native::{NativeResult, report};
 use crate::sead::{Delegate, ObjArray, VftDelegate};
@@ -134,6 +135,67 @@ impl MouthValues {
     }
 }
 
+// What CharaMake passes for its eye list
+const EYE_LIST_ENABLE: Enable = Enable {
+    update_cursor_button: false,
+    cursor_button_arg0: 1,
+    cursor_button_arg1: 0,
+    focus_cursor: true,
+    cursor_item: -1,
+};
+
+fn eye_list_content(item_count: i32, selected: i32) -> Content {
+    let mut flags = [0; 0xc];
+
+    flags[0x16 - 0x14] = 1;
+    flags[0x19 - 0x14] = 1;
+
+    Content {
+        item_count,
+        scroll_item: selected,
+        focus_item: selected,
+        flags,
+        unk_20: 0,
+        unk_24: 0xc,
+        unk_28: 6,
+    }
+}
+
+// The tab group switch, as the game does it for the eye list
+unsafe fn switch_list(list: &mut ScrollBtnListCtrl, enable: bool, mode: u32) -> NativeResult {
+    unsafe {
+        if !enable {
+            list.disable(mode)?;
+        } else if list.state_machine.current_state > 1 {
+            list.enable(&EYE_LIST_ENABLE)?;
+        } else if list.is_ready_to_play() {
+            list.play()?;
+        }
+    }
+
+    Ok(())
+}
+
+// Neighbours link into every visible line, so all of them stay focusable while paused
+unsafe fn enable_visible_buttons(list: &mut ScrollBtnListCtrl) -> NativeResult {
+    let line_size = list.line_size.max(1);
+    let visible = list.first_line..list.first_line + list.visible_lines;
+
+    for slot in 0..list.button_count() {
+        let Some(button) = (unsafe { list.button(slot).as_mut() }) else {
+            continue;
+        };
+
+        let item = unsafe { list.item_index_of(button.as_control())? };
+
+        if item >= 0 && item < list.padded_item_count && visible.contains(&(item / line_size)) {
+            unsafe { (*button.as_control()).set_focusable(list.player, true)? };
+        }
+    }
+
+    Ok(())
+}
+
 impl MouthList {
     unsafe fn seq(&mut self) -> &mut CharaMakeSeq {
         unsafe { &mut *self.seq }
@@ -231,7 +293,7 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
         let page = &mut *seq_ref.page;
         let list = &mut *state.list;
 
-        list.attach(page as *mut CharaMakePage as *mut c_void, *page.root)?;
+        list.attach(page as *mut CharaMakePage as *mut c_void, *page.root, 0)?;
         state.group = ListBtnGroup::new()?;
 
         if !list.scroll_delegate.is_bound() {
@@ -267,7 +329,7 @@ pub unsafe fn set_enabled(seq: *mut CharaMakeSeq, enable: bool, mode: u32) -> Na
     unsafe {
         if let Some(state) = active(seq) {
             state.enabled = enable;
-            state.list().set_enabled(enable, mode)?;
+            switch_list(state.list(), enable, mode)?;
         }
 
         Ok(())
@@ -402,7 +464,9 @@ pub unsafe fn refresh(seq: *mut CharaMakeSeq) -> NativeResult {
         let (count, player) = (state.values.count as i32, state.seq().player);
 
         state.group.selected = selected;
-        state.list().set_content(count, selected, player)?;
+        state
+            .list()
+            .set_content(&eye_list_content(count, selected), player)?;
 
         if state.enabled {
             state.relink();
@@ -434,7 +498,7 @@ pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) -> NativeR
         } else if state.enabled {
             // Outside focus (onTabEnter) bypasses the list, which would keep the D-pad
             state.list().pause()?;
-            state.list().enable_visible_buttons()?;
+            enable_visible_buttons(state.list())?;
             state.relink();
         }
 

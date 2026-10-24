@@ -10,8 +10,8 @@ use native_vtable::native;
 use crate::native::{NativeResult, type_info, vtable};
 use crate::sead::Delegate;
 
-const STATE_PLAY: u32 = 2;
-const STATE_PAUSE: u32 = 3;
+pub const STATE_PLAY: u32 = 2;
+pub const STATE_PAUSE: u32 = 3;
 const PAUSE_KEEP_BUTTONS: i32 = 2;
 
 #[repr(C)]
@@ -92,6 +92,17 @@ const _: () = {
     assert!(offset_of!(ScrollBtnListCtrl, input_claim) == 0x480);
 };
 
+#[derive(Clone, Copy)]
+pub struct Content {
+    pub item_count: i32,
+    pub scroll_item: i32,
+    pub focus_item: i32,
+    pub flags: [u8; 0xc],
+    pub unk_20: i32,
+    pub unk_24: i32,
+    pub unk_28: i32,
+}
+
 #[repr(C)]
 struct SetContentParams {
     vtable: *const c_void,
@@ -107,6 +118,15 @@ struct SetContentParams {
 }
 
 const _: () = assert!(core::mem::size_of::<SetContentParams>() == 0x30);
+
+#[derive(Clone, Copy)]
+pub struct Enable {
+    pub update_cursor_button: bool,
+    pub cursor_button_arg0: u8,
+    pub cursor_button_arg1: u8,
+    pub focus_cursor: bool,
+    pub cursor_item: i32,
+}
 
 #[repr(C)]
 struct EnableParams {
@@ -155,22 +175,22 @@ impl LeaveEvent {
 
 #[native(resolve = crate::native::resolve)]
 impl ScrollBtnListCtrl {
-    #[native(symbol = "ScrollBtnListCtrl::bindButtons")]
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::bindButtons")]
     pub unsafe fn bind_buttons(&mut self, builder: *mut c_void);
 
-    #[native(symbol = "ScrollBtnListCtrl::attach")]
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::attach")]
     unsafe fn attach_native(&mut self, params: *const AttachParams);
 
-    #[native(symbol = "ScrollBtnListCtrl::setContent")]
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::setContent")]
     unsafe fn set_content_native(&mut self, params: *const SetContentParams);
 
-    #[native(symbol = "ScrollBtnListCtrl::enable")]
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::enable")]
     unsafe fn enable_native(&mut self, params: *const EnableParams);
 
-    #[native(symbol = "ScrollBtnListCtrl::disable")]
-    unsafe fn disable_native(&mut self, mode: u32);
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::disable")]
+    pub unsafe fn disable(&mut self, mode: u32);
 
-    #[native(symbol = "ScrollBtnListCtrl::itemIndexOf")]
+    #[native(symbol = "game::UI::ScrollBtnListCtrl::itemIndexOf")]
     pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32;
 }
 
@@ -189,12 +209,17 @@ impl ScrollBtnListCtrl {
         }
     }
 
-    pub unsafe fn attach(&mut self, page: *mut c_void, root: *mut Control) -> NativeResult {
+    pub unsafe fn attach(
+        &mut self,
+        page: *mut c_void,
+        root: *mut Control,
+        player: u32,
+    ) -> NativeResult {
         let root_type = type_info("game::UI::AppBodyCtrl")?;
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
         let params = AttachParams {
             page,
-            player: 0,
+            player,
             _pad_c: 0,
             root: if is_root { root } else { null_mut() },
             unk_18: -1,
@@ -204,27 +229,16 @@ impl ScrollBtnListCtrl {
         unsafe { self.attach_native(&params) }.map_err(Into::into)
     }
 
-    /// Values the game passes for the eye list
-    pub unsafe fn set_content(
-        &mut self,
-        item_count: i32,
-        selected: i32,
-        player: u8,
-    ) -> NativeResult {
-        let mut flags = [0; 0xc];
-
-        flags[0x16 - 0x14] = 1;
-        flags[0x19 - 0x14] = 1;
-
+    pub unsafe fn set_content(&mut self, content: &Content, player: u8) -> NativeResult {
         let params = SetContentParams {
-            vtable: vtable("ScrollBtnListCtrl::SetContentParams::vtable")?,
-            item_count,
-            scroll_item: selected,
-            focus_item: selected,
-            flags,
-            unk_20: 0,
-            unk_24: 0xc,
-            unk_28: 6,
+            vtable: vtable("game::UI::ScrollBtnListCtrl::SetContentParams::vtable")?,
+            item_count: content.item_count,
+            scroll_item: content.scroll_item,
+            focus_item: content.focus_item,
+            flags: content.flags,
+            unk_20: content.unk_20,
+            unk_24: content.unk_24,
+            unk_28: content.unk_28,
             player: if player < 8 { player } else { 0xff },
             _pad_2d: [0; 3],
         };
@@ -232,30 +246,24 @@ impl ScrollBtnListCtrl {
         unsafe { self.set_content_native(&params) }.map_err(Into::into)
     }
 
-    pub unsafe fn set_enabled(&mut self, enable: bool, mode: u32) -> NativeResult {
-        unsafe {
-            if !enable {
-                self.disable_native(mode)?;
-            } else if self.state_machine.current_state > 1 {
-                let params = EnableParams {
-                    vtable: vtable("ScrollBtnListCtrl::EnableParams::vtable")?,
-                    update_cursor_button: false,
-                    cursor_button_arg0: 1,
-                    cursor_button_arg1: 0,
-                    focus_cursor: true,
-                    cursor_item: -1,
-                };
+    pub unsafe fn enable(&mut self, enable: &Enable) -> NativeResult {
+        let params = EnableParams {
+            vtable: vtable("game::UI::ScrollBtnListCtrl::EnableParams::vtable")?,
+            update_cursor_button: enable.update_cursor_button,
+            cursor_button_arg0: enable.cursor_button_arg0,
+            cursor_button_arg1: enable.cursor_button_arg1,
+            focus_cursor: enable.focus_cursor,
+            cursor_item: enable.cursor_item,
+        };
 
-                self.enable_native(&params)?;
-            } else if self.is_ready_to_play() {
-                self.state_machine.change_state(STATE_PLAY)?;
-            }
-        }
-
-        Ok(())
+        unsafe { self.enable_native(&params) }.map_err(Into::into)
     }
 
-    unsafe fn is_ready_to_play(&self) -> bool {
+    pub unsafe fn play(&mut self) -> NativeResult {
+        unsafe { self.state_machine.change_state(STATE_PLAY) }.map_err(Into::into)
+    }
+
+    pub unsafe fn is_ready_to_play(&self) -> bool {
         unsafe {
             self.slot_count != 0
                 && self.button_count != 0
@@ -281,26 +289,6 @@ impl ScrollBtnListCtrl {
             self.pause_button_mode = PAUSE_KEEP_BUTTONS;
 
             unsafe { self.state_machine.change_state(STATE_PAUSE)? };
-        }
-
-        Ok(())
-    }
-
-    /// Every visible line stays focusable since neighbours link into all of them
-    pub unsafe fn enable_visible_buttons(&mut self) -> NativeResult {
-        let line_size = self.line_size.max(1);
-        let visible = self.first_line..self.first_line + self.visible_lines;
-
-        for slot in 0..self.button_count() {
-            let Some(button) = (unsafe { self.button(slot).as_mut() }) else {
-                continue;
-            };
-
-            let item = unsafe { self.item_index_of(button.as_control())? };
-
-            if item >= 0 && item < self.padded_item_count && visible.contains(&(item / line_size)) {
-                unsafe { (*button.as_control()).set_focusable(self.player, true)? };
-            }
         }
 
         Ok(())

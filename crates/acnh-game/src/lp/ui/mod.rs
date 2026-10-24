@@ -1,6 +1,6 @@
 mod btn_parts;
 mod control;
-mod scroll_btn_list;
+pub mod scroll_btn_list;
 
 pub use btn_parts::BtnPartsCtrl;
 pub use control::{Control, FocusNode, NavDirection, VftControlLayout};

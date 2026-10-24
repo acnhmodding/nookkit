@@ -13,12 +13,6 @@ rodata_hash = 0xacfdd336a5d95bb0
 "PlayerIcon_render" = 0x2fc37ac
 "PlayerIcon_resetPart" = 0x2fc3694
 "PlayerIcon_tick" = 0x2fc47d8
-"ScrollBtnListCtrl::attach" = 0x3763fe0
-"ScrollBtnListCtrl::bindButtons" = 0x2ab1110
-"ScrollBtnListCtrl::disable" = 0x335b550
-"ScrollBtnListCtrl::enable" = 0x3764fe0
-"ScrollBtnListCtrl::itemIndexOf" = 0x3765200
-"ScrollBtnListCtrl::setContent" = 0x3764290
 "game::PlayerControlLockMgr::acquire" = 0x971bb8
 "game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
 "game::UI::CharaMakePage::bindLists" = 0x2b9656c
@@ -33,16 +27,22 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::CharaMakeSeq::tickIcons" = 0x2ba79b0
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
 "game::UI::ListBtnGroup::refresh" = 0x2ac30b0
+"game::UI::ScrollBtnListCtrl::attach" = 0x3763fe0
+"game::UI::ScrollBtnListCtrl::bindButtons" = 0x2ab1110
+"game::UI::ScrollBtnListCtrl::disable" = 0x335b550
+"game::UI::ScrollBtnListCtrl::enable" = 0x3764fe0
+"game::UI::ScrollBtnListCtrl::itemIndexOf" = 0x3765200
+"game::UI::ScrollBtnListCtrl::setContent" = 0x3764290
 "game::UI::ViewPage::initialize" = 0x3759dd0
 "operator_new" = 0x37aa260
 
 [data]
 "ACNH_Singleton_7104BF00A0::sInstance" = 0x4bf00a0
 "ACNH_Singleton_7104CA4AB8::sInstance" = 0x4ca4ab8
-"ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
-"ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
 "game::UI::ListBtnGroup::SelectableDelegate::vtable" = 0x4a29758
 "game::UI::ListBtnGroup::vtable" = 0x49aaf10
+"game::UI::ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
+"game::UI::ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
 
 [type_info]
