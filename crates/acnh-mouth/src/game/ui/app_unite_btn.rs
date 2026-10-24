@@ -2,11 +2,8 @@ use core::mem::offset_of;
 
 use crate::game::ui::ListBtnGroup;
 use crate::lp::ui::{Control, FocusNode, NavDirection, VftControlLayout};
-use crate::native::got;
+use crate::native::{NativeResult, fun_addr, vtable};
 use crate::sead::{Delegate, VftDelegate};
-
-const GOT_SELECTABLE_DELEGATE_VTABLE: usize = 0x4ac9b80;
-const GOT_SELECTABLE_DELEGATE_METHOD: usize = 0x4ac9b78;
 
 #[repr(C)]
 pub struct ChildList {
@@ -48,18 +45,20 @@ impl AppUniteBtnCtrl {
         self.list_mode = 2;
     }
 
-    pub unsafe fn bind_to_group(&mut self, group: *mut ListBtnGroup) {
+    pub unsafe fn bind_to_group(&mut self, group: *mut ListBtnGroup) -> NativeResult {
         unsafe {
             if self.selectable_delegate.is_bound() {
-                return;
+                return Ok(());
             }
 
             self.selectable_delegate = Delegate::new(
-                crate::native::got_vtable(GOT_SELECTABLE_DELEGATE_VTABLE),
+                vtable("game::UI::ListBtnGroup::SelectableDelegate::vtable")?,
                 group,
-                got::<u8>(GOT_SELECTABLE_DELEGATE_METHOD) as usize,
+                fun_addr("game::UI::ListBtnGroup::isSelectable")?,
             );
         }
+
+        Ok(())
     }
 
     pub unsafe fn set_link(&mut self, direction: NavDirection, target: *mut AppUniteBtnCtrl) {

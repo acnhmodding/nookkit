@@ -30,15 +30,15 @@ impl Control {
 }
 
 impl Control {
-    /// `type_info` comes from `native::guarded_type_info`; `None` (not initialized yet) is no match.
+    /// `type_info` comes from `native::type_info`; `None` (not initialized yet) is no match.
     pub unsafe fn is_derived(&self, type_info: Option<*const c_void>) -> bool {
         unsafe { type_info.is_some_and(|info| self.check_derived_runtime_type_info(info)) }
     }
 
     pub unsafe fn find_by_path(&mut self, path: &CStr) -> NativeResult<*mut Control> {
-        let path = SafeString::new(path);
+        let path = SafeString::new(path)?;
 
-        unsafe { self.find_by_path_native(&path) }
+        Ok(unsafe { self.find_by_path_native(&path)? })
     }
 }
 

@@ -7,15 +7,8 @@ use crate::lp::ui::{Control, VftControlLayout};
 use crate::lp::utl::StateMachine;
 use native_vtable::native;
 
-use crate::native::{NativeResult, got_vtable, guarded_type_info, text_vtable};
+use crate::native::{NativeResult, type_info, vtable};
 use crate::sead::Delegate;
-
-const GOT_TYPE_INFO: usize = 0x4ac4d68;
-const GOT_TYPE_INFO_GUARD: usize = 0x4ac4d70;
-const GOT_ENABLE_PARAMS_VTABLE: usize = 0x4ac9c80;
-const GOT_PAGE_ROOT_TYPE_INFO: usize = 0x4ac4e58;
-const GOT_PAGE_ROOT_TYPE_INFO_GUARD: usize = 0x4ac4e60;
-const SET_CONTENT_PARAMS_VTABLE: usize = 0x4a2b020;
 
 const STATE_PLAY: u32 = 2;
 const STATE_PAUSE: u32 = 3;
@@ -174,20 +167,22 @@ impl ScrollBtnListCtrl {
 }
 
 impl ScrollBtnListCtrl {
-    pub unsafe fn cast(control: *mut Control) -> Option<&'static mut Self> {
+    pub unsafe fn cast(control: *mut Control) -> NativeResult<Option<&'static mut Self>> {
         unsafe {
-            let control = control.as_mut()?;
+            let Some(control) = control.as_mut() else {
+                return Ok(None);
+            };
 
-            control
-                .is_derived(guarded_type_info(GOT_TYPE_INFO, GOT_TYPE_INFO_GUARD))
-                .then(|| &mut *(control as *mut Control).cast::<Self>())
+            let list_type = type_info("game::UI::AppScrollBtnListCtrl")?;
+
+            Ok(control.is_derived(list_type).then(|| &mut *(control as *mut Control).cast::<Self>()))
         }
     }
 
     /// What the page's list attach routine (0x7102b99900) does for its own lists on every entry:
     /// sets the player and focus manager, links the buttons into the focus graph.
     pub unsafe fn attach(&mut self, page: *mut c_void, root: *mut Control) -> NativeResult {
-        let root_type = unsafe { guarded_type_info(GOT_PAGE_ROOT_TYPE_INFO, GOT_PAGE_ROOT_TYPE_INFO_GUARD) };
+        let root_type = type_info("game::UI::AppBodyCtrl")?;
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
         let params = AttachParams {
             page,
@@ -198,7 +193,7 @@ impl ScrollBtnListCtrl {
             unk_1c: -1,
         };
 
-        unsafe { self.attach_native(&params) }
+        unsafe { self.attach_native(&params) }.map_err(Into::into)
     }
 
     /// Same values the game passes for the eye list on page refresh.
@@ -209,7 +204,7 @@ impl ScrollBtnListCtrl {
         flags[0x19 - 0x14] = 1;
 
         let params = SetContentParams {
-            vtable: text_vtable(SET_CONTENT_PARAMS_VTABLE),
+            vtable: vtable("ScrollBtnListCtrl::SetContentParams::vtable")?,
             item_count,
             scroll_item: selected,
             focus_item: selected,
@@ -221,7 +216,7 @@ impl ScrollBtnListCtrl {
             _pad_2d: [0; 3],
         };
 
-        unsafe { self.set_content_native(&params) }
+        unsafe { self.set_content_native(&params) }.map_err(Into::into)
     }
 
     /// Same as the game's group switch does for the eye list (group 3).
@@ -231,7 +226,7 @@ impl ScrollBtnListCtrl {
                 self.disable_native(mode)?;
             } else if self.state_machine.current_state > 1 {
                 let params = EnableParams {
-                    vtable: got_vtable(GOT_ENABLE_PARAMS_VTABLE),
+                    vtable: vtable("ScrollBtnListCtrl::EnableParams::vtable")?,
                     update_cursor_button: false,
                     cursor_button_arg0: 1,
                     cursor_button_arg1: 0,

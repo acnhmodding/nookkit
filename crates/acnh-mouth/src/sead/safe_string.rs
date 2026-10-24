@@ -1,9 +1,7 @@
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
 
-use crate::native::got_vtable;
-
-const GOT_SAFE_STRING_VTABLE: usize = 0x4ab2020;
+use crate::native::{NativeResult, vtable};
 
 #[repr(C)]
 pub struct SafeString<'a> {
@@ -15,11 +13,11 @@ pub struct SafeString<'a> {
 const _: () = assert!(core::mem::size_of::<SafeString>() == 0x10);
 
 impl<'a> SafeString<'a> {
-    pub fn new(string: &'a CStr) -> Self {
-        Self {
-            vtable: unsafe { got_vtable(GOT_SAFE_STRING_VTABLE) },
+    pub fn new(string: &'a CStr) -> NativeResult<Self> {
+        Ok(Self {
+            vtable: vtable("sead::SafeStringBase<char>::vtable")?,
             string_top: string.as_ptr(),
             _string: PhantomData,
-        }
+        })
     }
 }

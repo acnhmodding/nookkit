@@ -3,10 +3,8 @@ use core::ffi::c_void;
 use native_vtable::{native, vtable, vtable_impl};
 
 use crate::lp::ui::ScrollBtnListCtrl;
-use crate::native::{NativeResult, got_vtable};
+use crate::native::{NativeResult, vtable};
 use crate::sead::Delegate;
-
-const GOT_VTABLE: usize = 0x4ac5170;
 
 #[vtable(path = game::ui::list_btn_group::VftListBtnGroup)]
 pub unsafe trait VftListBtnGroup {
@@ -57,13 +55,13 @@ impl ListBtnGroup {
     }
 
     /// The group setupControls gives the eye list.
-    pub unsafe fn new() -> Self {
-        Self {
-            vtable: unsafe { got_vtable(GOT_VTABLE) },
+    pub fn new() -> NativeResult<Self> {
+        Ok(Self {
+            vtable: vtable("game::UI::ListBtnGroup::vtable")?,
             enabled: true,
             toggle: true,
             ..Self::empty()
-        }
+        })
     }
 }
 
@@ -143,7 +141,7 @@ impl ItemUpdater {
     }
 
     pub unsafe fn update(&mut self, scroll_event: *mut c_void) -> NativeResult {
-        unsafe { self.update_native(&scroll_event) }
+        unsafe { self.update_native(&scroll_event) }.map_err(Into::into)
     }
 }
 

@@ -1,8 +1,6 @@
 use core::mem::offset_of;
 
-use crate::native::got;
-
-const GOT_CHARAMAKE_PARAM_MGR: usize = 0x4ab4868;
+use crate::native::{NativeResult, data};
 
 #[repr(C)]
 struct BcsvHeader {
@@ -36,24 +34,21 @@ struct CharaMakeParamMgr {
 }
 
 /// Row count of CharaMakeMouthTypeParam.bcsv, read the same way the game's mouth accessor does.
-pub unsafe fn mouth_type_count() -> usize {
+pub unsafe fn mouth_type_count() -> NativeResult<usize> {
     unsafe {
-        let Some(mgr) = (*got::<*const CharaMakeParamMgr>(GOT_CHARAMAKE_PARAM_MGR)).as_ref() else {
-            return 0;
-        };
-
-        let Some(table) = mgr.mouth_type.as_ref() else {
-            return 0;
+        let mgr = *data::<*const CharaMakeParamMgr>("ACNH_Singleton_7104BF00A0::sInstance")?;
+        let Some(table) = mgr.as_ref().and_then(|mgr| mgr.mouth_type.as_ref()) else {
+            return Ok(0);
         };
 
         if table.ordered_count > 0 {
-            return table.ordered_count as usize;
+            return Ok(table.ordered_count as usize);
         }
 
-        table
+        Ok(table
             .resource
             .as_ref()
             .and_then(|resource| resource.header.as_ref())
-            .map_or(0, |header| header.row_count as usize)
+            .map_or(0, |header| header.row_count as usize))
     }
 }

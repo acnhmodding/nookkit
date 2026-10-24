@@ -8,16 +8,16 @@ use crate::game::ui::chara_make::{
 };
 use crate::game::ui::{ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, PlayerIcon, VftListBtnGroup};
 use crate::lp::ui::{Control, LeaveDirection, LeaveEvent, NavDirection, ScrollBtnListCtrl};
-use crate::native::{NativeResult, report, text_vtable};
+use crate::native::{NativeResult, report, vtable};
 use crate::sead::{Delegate, ObjArray, VftDelegate};
 
 const LIST_PATH: &core::ffi::CStr = c"/L_BtnListMouth_00";
 const MAX_SLOTS: usize = 32;
 const MAX_MOUTHS: usize = 256;
 
-const SCROLL_DELEGATE_VTABLE: usize = 0x49b5088;
-const LEAVE_DELEGATE_VTABLE: usize = 0x49b50d8;
-const ITEM_DELEGATE_VTABLE: usize = 0x49b5268;
+const SCROLL_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListScrollDelegate::vtable";
+const LEAVE_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListLeaveDelegate::vtable";
+const ITEM_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ItemDelegate::vtable";
 
 // Writable replacement storage for the seq's mouth value list (item -> mouth value). The game
 // recycles the list's slots when it refills it, so it can't point at read-only data.
@@ -89,13 +89,13 @@ impl MouthValues {
 
     // Swap the seq's mouth value list over to our storage: the game's own entries first (in its
     // order), then every other CharaMakeMouthTypeParam row. Without the table, leave the game's list.
-    unsafe fn own(&mut self, list: &mut ObjArray<u32>) {
+    unsafe fn own(&mut self, list: &mut ObjArray<u32>) -> NativeResult {
         unsafe {
             self.release(list);
             self.count = 0;
 
             let game = &list.base;
-            let rows = mouth_type_count().min(MAX_MOUTHS);
+            let rows = mouth_type_count()?.min(MAX_MOUTHS);
             let game_values = (0..game.size.max(0) as usize).map(|i| **game.ptrs.add(i));
             let mut count = 0;
 
@@ -107,7 +107,7 @@ impl MouthValues {
             }
 
             if count == 0 {
-                return;
+                return Ok(());
             }
 
             for (ptr, node) in self.node_ptrs.iter_mut().zip(self.nodes.iter_mut()) {
@@ -121,6 +121,8 @@ impl MouthValues {
             list.base.capacity = count as i32;
             list.base.ptrs = self.node_ptrs.as_mut_ptr();
         }
+
+        Ok(())
     }
 
     fn release(&mut self, list: &mut ObjArray<u32>) {
@@ -196,7 +198,7 @@ pub unsafe fn bind(page: *mut CharaMakePage, parent: *mut Control, builder: *mut
             return Ok(());
         };
 
-        let Some(list) = ScrollBtnListCtrl::cast(parent.find_by_path(LIST_PATH)?) else {
+        let Some(list) = ScrollBtnListCtrl::cast(parent.find_by_path(LIST_PATH)?)? else {
             return Ok(());
         };
 
@@ -226,15 +228,15 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
         let list = &mut *state.list;
 
         list.attach(page as *mut CharaMakePage as *mut c_void, *page.root)?;
-        state.group = ListBtnGroup::new();
+        state.group = ListBtnGroup::new()?;
 
         if !list.scroll_delegate.is_bound() {
             list.scroll_delegate =
-                Delegate::new(text_vtable(SCROLL_DELEGATE_VTABLE), seq, on_scroll as *const () as usize);
+                Delegate::new(vtable(SCROLL_DELEGATE_VTABLE)?, seq, on_scroll as *const () as usize);
         }
 
         if !list.leave_delegate.is_bound() {
-            list.leave_delegate = Delegate::new(text_vtable(LEAVE_DELEGATE_VTABLE), seq, on_leave as *const () as usize);
+            list.leave_delegate = Delegate::new(vtable(LEAVE_DELEGATE_VTABLE)?, seq, on_leave as *const () as usize);
         }
 
         state.slots = list.slot_count().min(MAX_SLOTS);
@@ -246,17 +248,15 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
             };
 
             button.set_list_mode();
-            button.bind_to_group(&mut state.group);
+            button.bind_to_group(&mut state.group)?;
             state.icons[slot] = PlayerIcon::create(button, &mut seq_ref.icon_texture_pool)?;
         }
 
         state.updater = ItemUpdater::new(
             state.slots as u32,
-            Delegate::new(text_vtable(ITEM_DELEGATE_VTABLE), seq, on_item as *const () as usize),
+            Delegate::new(vtable(ITEM_DELEGATE_VTABLE)?, seq, on_item as *const () as usize),
         );
-        state.values.own(&mut seq_ref.mouth_values);
-
-        Ok(())
+        state.values.own(&mut seq_ref.mouth_values)
     }
 }
 
@@ -277,7 +277,7 @@ pub unsafe fn is_active(seq: *mut CharaMakeSeq) -> bool {
 }
 
 // The game refills the mouth value list on enter; let it work on its own storage, then take over.
-pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) {
+pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) -> NativeResult {
     unsafe {
         let state = state();
         let ours = !state.seq.is_null() && core::ptr::eq(&(*state.seq).mouth_values, values);
@@ -289,15 +289,17 @@ pub unsafe fn fill(values: *mut ObjArray<u32>, game_fill: impl FnOnce()) {
         game_fill();
 
         if ours {
-            state.values.own(&mut *values);
+            state.values.own(&mut *values)?;
         }
+
+        Ok(())
     }
 }
 
 extern "C" fn on_scroll(seq: *mut CharaMakeSeq, event: *mut c_void) {
     let result = unsafe {
         match active(seq) {
-            Some(state) => state.updater.update(event).and_then(|()| state.group.refresh(state.list)),
+            Some(state) => state.updater.update(event).and_then(|()| Ok(state.group.refresh(state.list)?)),
             None => Ok(()),
         }
     };
@@ -326,7 +328,7 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
         };
 
         if op == ItemOp::Clear {
-            return icon.release();
+            return Ok(icon.release()?);
         }
 
         let item = event.item();
@@ -336,10 +338,12 @@ unsafe fn update_item(seq: *mut CharaMakeSeq, event: *const ItemEvent) -> Native
         params[FACE_PARAM_MOUTH] = if in_range { state.values.value(item as usize) as u8 } else { 0 };
 
         match op {
-            ItemOp::Move => icon.move_from(state.icons[slot_of(event.from_slot)], &params),
-            ItemOp::Render if in_range => icon.render(&params),
-            _ => Ok(()),
+            ItemOp::Move => icon.move_from(state.icons[slot_of(event.from_slot)], &params)?,
+            ItemOp::Render if in_range => icon.render(&params)?,
+            _ => {}
         }
+
+        Ok(())
     }
 }
 

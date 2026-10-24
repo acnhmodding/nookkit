@@ -11,96 +11,122 @@ use lp::ui::Control;
 use native::report;
 use sead::ObjArray;
 
-#[skyline::hook(offset = PAGE_BIND_LISTS)]
-unsafe fn page_bind_lists(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) {
-    call_original!(page, parent, builder);
+acnh_sym::hook! {
+    page_bind_lists = "game::UI::CharaMakePage::bindLists";
+    fn(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) {
+        unsafe { original(page, parent, builder) };
 
-    report("bind", unsafe { mouth_list::bind(page, parent, builder) });
-}
-
-#[skyline::hook(offset = SEQ_SETUP_CONTROLS)]
-unsafe fn seq_setup_controls(seq: *mut CharaMakeSeq) {
-    call_original!(seq);
-
-    report("setup", unsafe { mouth_list::setup(seq) });
-}
-
-#[skyline::hook(offset = SEQ_ON_CONTROL_FOCUS)]
-unsafe fn seq_on_control_focus(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
-    call_original!(seq, event);
-
-    report("focus", unsafe { mouth_list::on_focus(seq, (*event).control) });
-}
-
-#[skyline::hook(offset = SEQ_ON_CONTROL_DECIDE)]
-unsafe fn seq_on_control_decide(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
-    call_original!(seq, event);
-
-    report("decide", unsafe { mouth_list::on_decide(seq, (*event).control) });
-}
-
-#[skyline::hook(offset = SEQ_TICK_ICONS)]
-unsafe fn seq_tick_icons(seq: *mut CharaMakeSeq) {
-    call_original!(seq);
-
-    report("tick", unsafe { mouth_list::tick(seq) });
-}
-
-#[skyline::hook(offset = SEQ_ON_EXIT)]
-unsafe fn seq_on_exit(seq: *mut CharaMakeSeq) {
-    report("exit", unsafe { mouth_list::exit(seq) });
-
-    call_original!(seq);
-}
-
-#[skyline::hook(offset = SEQ_PROCESS_REQUEST)]
-unsafe fn seq_process_request(seq: *mut CharaMakeSeq) {
-    let anchor = unsafe { (*seq).request.is(RequestState::UpdateAnchor) };
-
-    call_original!(seq);
-
-    if anchor {
-        unsafe { mouth_list::after_request(seq) };
+        report("bind", unsafe { mouth_list::bind(page, parent, builder) });
     }
 }
 
-#[skyline::hook(offset = SEQ_SET_GROUP_ENABLED)]
-unsafe fn seq_set_group_enabled(seq: *mut CharaMakeSeq, group: u32, enable: u32, mode: u32) {
-    if group != GROUP_MOUTH || unsafe { !mouth_list::is_active(seq) } {
-        call_original!(seq, group, enable, mode);
-        return;
+acnh_sym::hook! {
+    seq_setup_controls = "game::UI::CharaMakeSeq::setupControls";
+    fn(seq: *mut CharaMakeSeq) {
+        unsafe { original(seq) };
+
+        report("setup", unsafe { mouth_list::setup(seq) });
     }
-
-    // The old mouth buttons stay hidden and out of navigation; the list stands in for them.
-    call_original!(seq, group, 0, mode);
-
-    report("set_enabled", unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) });
 }
 
-#[skyline::hook(offset = SEQ_FILL_MOUTH_LIST)]
-unsafe fn seq_fill_mouth_list(values: *mut ObjArray<u32>) {
-    unsafe { mouth_list::fill(values, || call_original!(values)) };
+acnh_sym::hook! {
+    seq_on_control_focus = "game::UI::CharaMakeSeq::onControlFocus";
+    fn(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
+        unsafe { original(seq, event) };
+
+        report("focus", unsafe { mouth_list::on_focus(seq, (*event).control) });
+    }
 }
 
-#[skyline::hook(offset = SEQ_REFRESH_ENTER)]
-unsafe fn seq_refresh_enter(seq: *mut CharaMakeSeq) {
-    call_original!(seq);
+acnh_sym::hook! {
+    seq_on_control_decide = "game::UI::CharaMakeSeq::onControlDecide";
+    fn(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
+        unsafe { original(seq, event) };
 
-    report("refresh", unsafe { mouth_list::refresh(seq) });
+        report("decide", unsafe { mouth_list::on_decide(seq, (*event).control) });
+    }
+}
+
+acnh_sym::hook! {
+    seq_tick_icons = "game::UI::CharaMakeSeq::tickIcons";
+    fn(seq: *mut CharaMakeSeq) {
+        unsafe { original(seq) };
+
+        report("tick", unsafe { mouth_list::tick(seq) });
+    }
+}
+
+acnh_sym::hook! {
+    seq_on_exit = "game::UI::CharaMakeSeq::onExit";
+    fn(seq: *mut CharaMakeSeq) {
+        report("exit", unsafe { mouth_list::exit(seq) });
+
+        unsafe { original(seq) };
+    }
+}
+
+acnh_sym::hook! {
+    seq_process_request = "game::UI::CharaMakeSeq::processRequest";
+    fn(seq: *mut CharaMakeSeq) {
+        let anchor = unsafe { (*seq).request.is(RequestState::UpdateAnchor) };
+
+        unsafe { original(seq) };
+
+        if anchor {
+            unsafe { mouth_list::after_request(seq) };
+        }
+    }
+}
+
+acnh_sym::hook! {
+    seq_set_group_enabled = "game::UI::CharaMakeSeq::setGroupEnabled";
+    fn(seq: *mut CharaMakeSeq, group: u32, enable: u32, mode: u32) {
+        if group != GROUP_MOUTH || unsafe { !mouth_list::is_active(seq) } {
+            unsafe { original(seq, group, enable, mode) };
+            return;
+        }
+
+        // The old mouth buttons stay hidden and out of navigation; the list stands in for them.
+        unsafe { original(seq, group, 0, mode) };
+
+        report("set_enabled", unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) });
+    }
+}
+
+acnh_sym::hook! {
+    seq_fill_mouth_list = "game::UI::CharaMakeSeq::fillMouthList";
+    fn(values: *mut ObjArray<u32>) {
+        report("fill", unsafe { mouth_list::fill(values, || original(values)) });
+    }
+}
+
+acnh_sym::hook! {
+    seq_refresh_enter = "game::UI::CharaMakeSeq::refreshEnter";
+    fn(seq: *mut CharaMakeSeq) {
+        unsafe { original(seq) };
+
+        report("refresh", unsafe { mouth_list::refresh(seq) });
+    }
+}
+
+fn install() -> Result<(), acnh_sym::SymError> {
+    acnh_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
+
+    page_bind_lists::install()?;
+    seq_setup_controls::install()?;
+    seq_on_control_focus::install()?;
+    seq_on_control_decide::install()?;
+    seq_tick_icons::install()?;
+    seq_on_exit::install()?;
+    seq_fill_mouth_list::install()?;
+    seq_process_request::install()?;
+    seq_set_group_enabled::install()?;
+    seq_refresh_enter::install()
 }
 
 #[skyline::main(name = "acnh-mouth")]
 pub fn main() {
-    skyline::install_hooks!(
-        page_bind_lists,
-        seq_setup_controls,
-        seq_on_control_focus,
-        seq_on_control_decide,
-        seq_tick_icons,
-        seq_on_exit,
-        seq_fill_mouth_list,
-        seq_process_request,
-        seq_set_group_enabled,
-        seq_refresh_enter,
-    );
+    if let Err(e) = install() {
+        println!("[acnh-mouth] not installed: {e}");
+    }
 }

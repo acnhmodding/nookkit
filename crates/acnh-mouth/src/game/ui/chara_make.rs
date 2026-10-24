@@ -4,20 +4,6 @@ use crate::game::ui::AppUniteBtnCtrl;
 use crate::lp::ui::Control;
 use crate::sead::ObjArray;
 
-// Hooked functions (offsets from .text).
-pub const PAGE_BIND_LISTS: usize = 0x2b9656c;
-pub const SEQ_SETUP_CONTROLS: usize = 0x2b9d7d0;
-pub const SEQ_ON_CONTROL_FOCUS: usize = 0x2b99ff0;
-pub const SEQ_ON_CONTROL_DECIDE: usize = 0x2b9a8d0;
-pub const SEQ_TICK_ICONS: usize = 0x2ba79b0;
-pub const SEQ_ON_EXIT: usize = 0x2ba10e0;
-pub const SEQ_FILL_MOUTH_LIST: usize = 0x2b8fe60;
-pub const SEQ_PROCESS_REQUEST: usize = 0x2ba4a00;
-// (seq, group, enable, mode): enables one of the current tab's control groups.
-pub const SEQ_SET_GROUP_ENABLED: usize = 0x2ba7fe0;
-// Refresh state enter: selects each tab's current items, then builds the tabs' navigation grids.
-pub const SEQ_REFRESH_ENTER: usize = 0x2ba1460;
-
 // The four old mouth buttons.
 pub const GROUP_MOUTH: u32 = 6;
 
