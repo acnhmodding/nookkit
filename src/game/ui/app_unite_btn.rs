@@ -62,10 +62,6 @@ impl AppUniteBtnCtrl {
         }
     }
 
-    pub unsafe fn link(&self, direction: NavDirection) -> *mut FocusNode {
-        unsafe { self.focus_node.as_ref().map_or(core::ptr::null_mut(), |node| node.link(direction)) }
-    }
-
     pub unsafe fn set_link(&mut self, direction: NavDirection, target: *mut AppUniteBtnCtrl) {
         unsafe {
             let (Some(node), Some(target)) = (self.focus_node.as_mut(), target.as_ref()) else {

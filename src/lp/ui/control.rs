@@ -61,10 +61,6 @@ pub struct FocusNode {
 const _: () = assert!(core::mem::offset_of!(FocusNode, links) == 0x1460);
 
 impl FocusNode {
-    pub fn link(&self, direction: NavDirection) -> *mut FocusNode {
-        self.links[direction as usize]
-    }
-
     pub fn set_link(&mut self, direction: NavDirection, target: *mut FocusNode) {
         self.links[direction as usize] = target;
     }

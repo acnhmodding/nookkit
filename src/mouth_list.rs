@@ -38,6 +38,8 @@ struct MouthList {
     icons: [*mut PlayerIcon; MAX_SLOTS],
     slots: usize,
     values: MouthValues,
+    // Whether the nose/mouth tab has the list switched on; the focus delegates run on every tab.
+    enabled: bool,
 }
 
 struct State(UnsafeCell<MouthList>);
@@ -59,6 +61,7 @@ static STATE: State = State(UnsafeCell::new(MouthList {
         count: 0,
         saved: None,
     },
+    enabled: false,
 }));
 
 #[allow(clippy::mut_from_ref)]
@@ -266,6 +269,7 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) {
 pub unsafe fn set_enabled(seq: *mut CharaMakeSeq, enable: bool, mode: u32) {
     unsafe {
         if let Some(state) = active(seq) {
+            state.enabled = enable;
             state.list().set_enabled(enable, mode);
         }
     }
@@ -391,23 +395,7 @@ pub unsafe fn link_navigation(seq: *mut CharaMakeSeq) {
 // focused index.
 pub unsafe fn after_request(seq: *mut CharaMakeSeq) {
     unsafe {
-        let Some(state) = active(seq) else {
-            return;
-        };
-
-        let page = state.page();
-        let Some(ok) = page.ok_button.as_ref() else {
-            return;
-        };
-
-        let up = ok.link(NavDirection::Up);
-        let points_at_old_mouth = !up.is_null()
-            && page
-                .mouth_buttons
-                .iter()
-                .any(|&old| old.as_ref().is_some_and(|old| old.focus_node == up));
-
-        if points_at_old_mouth {
+        if let Some(state) = active(seq).filter(|state| state.enabled) {
             state.relink();
         }
     }
@@ -423,7 +411,7 @@ pub unsafe fn on_focus(seq: *mut CharaMakeSeq, control: *mut Control) {
 
         if index >= 0 {
             state.post_request(RequestState::Focus, index);
-        } else {
+        } else if state.enabled {
             // Focus set from outside (onTabEnter focusing the nose row) bypasses the list, which would
             // stay in cPlay and keep handling the D-pad from its own cursor.
             state.list().pause();
@@ -488,6 +476,7 @@ pub unsafe fn exit(seq: *mut CharaMakeSeq) {
             return;
         };
 
+        state.enabled = false;
         state.release_icons();
         state.values.release(&mut (*seq).mouth_values);
     }
