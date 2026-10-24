@@ -3,7 +3,7 @@ use core::ffi::{CStr, c_void};
 use native_vtable::{native, vtable, vtable_impl};
 
 use crate::native::NativeResult;
-use crate::sead::SafeString;
+use crate::sead::{OffsetList, SafeString};
 
 #[vtable(path = lp::ui::control::VftControl)]
 pub unsafe trait VftControl {
@@ -15,7 +15,16 @@ const _: () = assert!(VftControlLayout::OFFSET_CHECK_DERIVED_RUNTIME_TYPE_INFO =
 #[repr(C)]
 pub struct Control {
     pub vtable: *const VftControlLayout,
+    _unk_8: [u8; 0x10],
+    pub name: SafeString<'static>,
+    _unk_28: [u8; 0x10],
+    pub children: OffsetList,
 }
+
+const _: () = {
+    assert!(core::mem::offset_of!(Control, name) == 0x18);
+    assert!(core::mem::offset_of!(Control, children) == 0x38);
+};
 
 #[vtable_impl]
 unsafe impl VftControl for Control {}
@@ -30,6 +39,14 @@ impl Control {
 }
 
 impl Control {
+    pub unsafe fn name(&self) -> Option<&CStr> {
+        unsafe { (!self.name.string_top.is_null()).then(|| CStr::from_ptr(self.name.string_top)) }
+    }
+
+    pub unsafe fn children(&self) -> impl Iterator<Item = *mut Control> + '_ {
+        unsafe { self.children.iter() }
+    }
+
     pub unsafe fn is_derived(&self, type_info: Option<*const c_void>) -> bool {
         unsafe { type_info.is_some_and(|info| self.check_derived_runtime_type_info(info)) }
     }

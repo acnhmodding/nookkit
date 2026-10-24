@@ -3,7 +3,7 @@ use core::mem::offset_of;
 use crate::game::ui::ListBtnGroup;
 use crate::lp::ui::{Control, FocusNode, NavDirection, VftControlLayout};
 use crate::native::{NativeResult, fun_addr, vtable};
-use crate::sead::{Delegate, VftDelegate};
+use crate::sead::Delegate;
 
 #[repr(C)]
 pub struct ChildList {
@@ -43,18 +43,12 @@ impl AppUniteBtnCtrl {
         self.list_mode = 2;
     }
 
-    pub unsafe fn bind_to_group(&mut self, group: *mut ListBtnGroup) -> NativeResult {
-        unsafe {
-            if self.selectable_delegate.is_bound() {
-                return Ok(());
-            }
-
-            self.selectable_delegate = Delegate::new(
-                vtable("game::UI::ListBtnGroup::SelectableDelegate::vtable")?,
-                group,
-                fun_addr("game::UI::ListBtnGroup::isSelectable")?,
-            );
-        }
+    pub fn bind_to_group(&mut self, group: *mut ListBtnGroup) -> NativeResult {
+        self.selectable_delegate = Delegate::new(
+            vtable("game::UI::ListBtnGroup::SelectableDelegate::vtable")?,
+            group,
+            fun_addr("game::UI::ListBtnGroup::isSelectable")?,
+        );
 
         Ok(())
     }
