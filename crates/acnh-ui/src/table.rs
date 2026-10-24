@@ -4,7 +4,7 @@ use std::ffi::CString;
 
 use acnh_game::game::player_control_lock::{lock_menu, release_menu};
 use acnh_game::game::ui::ViewPage;
-use acnh_game::lp::ui::{BtnPartsCtrl, Control};
+use acnh_game::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
 use acnh_game::native::{Error, NativeResult, type_info};
 use acnh_sym::SymError;
 use acnh_ui_sys::{AcnhUiV1, Callback, Direction, Status, Str};
@@ -21,6 +21,7 @@ pub static TABLE: AcnhUiV1 = AcnhUiV1 {
     set_focusable,
     lock_player,
     release_player,
+    set_visible,
 };
 
 fn status(context: &str, result: NativeResult<Status>) -> Status {
@@ -154,5 +155,21 @@ unsafe extern "C" fn release_player(player: u8) -> Status {
         } else {
             Status::LockFailed
         })
+    })
+}
+
+unsafe extern "C" fn set_visible(pane: *mut c_void, visible: bool) -> Status {
+    guarded("set_visible", || unsafe {
+        let Some(parts) = PartsCtrl::cast(pane.cast())? else {
+            return Ok(Status::TypeMismatch);
+        };
+
+        let Some(pane) = parts.pane.as_mut() else {
+            return Ok(Status::InvalidArg);
+        };
+
+        pane.set_visible(visible);
+
+        Ok(Status::Ok)
     })
 }

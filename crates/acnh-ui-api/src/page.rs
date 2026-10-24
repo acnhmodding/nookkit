@@ -114,6 +114,12 @@ impl Pane {
         Ok(*self)
     }
 
+    pub fn set_visible(&self, visible: bool) -> Result<Pane> {
+        check(unsafe { (self.page.ui.table.set_visible)(self.raw, visible) })?;
+
+        Ok(*self)
+    }
+
     pub fn on_focus(&self, mut f: impl FnMut(Event) -> Result + Send + 'static) -> Result<Pane> {
         let this = *self;
         self.page.on_focus(move |e| {

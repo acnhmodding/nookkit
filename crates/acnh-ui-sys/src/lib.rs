@@ -120,4 +120,5 @@ pub struct AcnhUiV1 {
     pub set_focusable: unsafe extern "C" fn(pane: *mut c_void, player: u32, enable: bool) -> Status,
     pub lock_player: unsafe extern "C" fn(player: u8) -> Status,
     pub release_player: unsafe extern "C" fn(player: u8) -> Status,
+    pub set_visible: unsafe extern "C" fn(pane: *mut c_void, visible: bool) -> Status,
 }

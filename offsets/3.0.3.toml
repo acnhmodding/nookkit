@@ -47,10 +47,12 @@ rodata_hash = 0xacfdd336a5d95bb0
 
 [type_info]
 "Lp::UI::BtnPartsCtrl" = 0x55431f8
+"Lp::UI::PartsCtrl" = 0x5543208
 "game::UI::AppBodyCtrl" = 0x5543dd0
 "game::UI::ScrollBtnListCtrl" = 0x5543148
 
 [type_info_guard]
 "Lp::UI::BtnPartsCtrl" = 0x5543200
+"Lp::UI::PartsCtrl" = 0x5543210
 "game::UI::AppBodyCtrl" = 0x5543dd8
 "game::UI::ScrollBtnListCtrl" = 0x5543150

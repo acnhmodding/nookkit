@@ -3,4 +3,5 @@
 pub mod game;
 pub mod lp;
 pub mod native;
+pub mod nn;
 pub mod sead;
