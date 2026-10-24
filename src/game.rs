@@ -66,6 +66,8 @@ const LIST_BUTTONS: usize = 0x210;
 // Items per line; CharaMake lists scroll horizontally, so a line is one column.
 pub const LIST_LINE_SIZE: usize = 0x2e8;
 const LIST_VISIBLE_SLOTS: usize = 0x2f8;
+// Slot the list believes is focused; its own D-pad handling only runs while this is set.
+const LIST_FOCUSED_SLOT: usize = 0x43c;
 
 // game::UI::AppUniteBtnCtrl
 pub const BTN_NAV_NODE: usize = 0x218;
@@ -368,6 +370,11 @@ pub unsafe fn list_set_enabled(list: *mut u8, enable: bool, mode: u32) {
             enable(list.add(0x290), 2);
         }
     }
+}
+
+// What the list does itself when focus leaves it (State_710375F2AC::cPlay_Exec).
+pub unsafe fn list_clear_focus(list: *mut u8) {
+    unsafe { *at::<i32>(list, LIST_FOCUSED_SLOT) = -1 };
 }
 
 pub unsafe fn list_button_count(list: *mut u8) -> usize {

@@ -558,6 +558,10 @@ pub unsafe fn on_focus(seq: *mut u8, control: *mut u8) {
 
         if index >= 0 {
             post_request(seq, REQUEST_FOCUS, index);
+        } else {
+            // Focus set from outside (e.g. onTabEnter focusing the nose button) doesn't go through
+            // the list, which would keep handling the D-pad from its stale cursor.
+            list_clear_focus(state.list);
         }
     }
 }
