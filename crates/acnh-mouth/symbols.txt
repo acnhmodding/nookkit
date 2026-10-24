@@ -4,12 +4,7 @@ fn	PlayerIcon_render
 fn	PlayerIcon_moveFrom
 fn	PlayerIcon_release
 fn	PlayerIcon_tick
-fn	game::UI::CharaMakePage::bindLists
-fn	game::UI::CharaMakeSeq::setupControls
-fn	game::UI::CharaMakeSeq::onControlFocus
-fn	game::UI::CharaMakeSeq::onControlDecide
-fn	game::UI::CharaMakeSeq::tickIcons
-fn	game::UI::CharaMakeSeq::onExit
+fn	game::UI::CharaMakeSeq::enterIdle
 fn	game::UI::CharaMakeSeq::fillMouthList
 fn	game::UI::CharaMakeSeq::processRequest
 fn	game::UI::CharaMakeSeq::setGroupEnabled

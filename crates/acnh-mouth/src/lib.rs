@@ -1,66 +1,25 @@
 mod game;
-mod mouth_list;
+mod mouths;
 mod native;
 
-use core::ffi::c_void;
-
-use acnh_game::{lp, sead};
+use acnh_game::sead;
 use game::ui::chara_make::*;
-use lp::ui::Control;
 use native::report;
 use sead::ObjArray;
 
 acnh_sym::hook! {
-    page_bind_lists = "game::UI::CharaMakePage::bindLists";
-    fn(page: *mut CharaMakePage, parent: *mut Control, builder: *mut c_void) {
-        unsafe { original(page, parent, builder) };
-
-        report("bind", unsafe { mouth_list::bind(page, parent, builder) });
+    seq_fill_mouth_list = "game::UI::CharaMakeSeq::fillMouthList";
+    fn(values: *mut ObjArray<u32>) {
+        report("fill", unsafe { mouths::fill(values, || original(values)) });
     }
 }
 
 acnh_sym::hook! {
-    seq_setup_controls = "game::UI::CharaMakeSeq::setupControls";
+    seq_refresh_enter = "game::UI::CharaMakeSeq::refreshEnter";
     fn(seq: *mut CharaMakeSeq) {
         unsafe { original(seq) };
 
-        report("setup", unsafe { mouth_list::setup(seq) });
-    }
-}
-
-acnh_sym::hook! {
-    seq_on_control_focus = "game::UI::CharaMakeSeq::onControlFocus";
-    fn(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
-        unsafe { original(seq, event) };
-
-        report("focus", unsafe { mouth_list::on_focus(seq, (*event).control) });
-    }
-}
-
-acnh_sym::hook! {
-    seq_on_control_decide = "game::UI::CharaMakeSeq::onControlDecide";
-    fn(seq: *mut CharaMakeSeq, event: *mut ControlEvent) {
-        unsafe { original(seq, event) };
-
-        report("decide", unsafe { mouth_list::on_decide(seq, (*event).control) });
-    }
-}
-
-acnh_sym::hook! {
-    seq_tick_icons = "game::UI::CharaMakeSeq::tickIcons";
-    fn(seq: *mut CharaMakeSeq) {
-        unsafe { original(seq) };
-
-        report("tick", unsafe { mouth_list::tick(seq) });
-    }
-}
-
-acnh_sym::hook! {
-    seq_on_exit = "game::UI::CharaMakeSeq::onExit";
-    fn(seq: *mut CharaMakeSeq) {
-        report("exit", unsafe { mouth_list::exit(seq) });
-
-        unsafe { original(seq) };
+        ui_report("refresh", unsafe { mouths::refresh(seq) });
     }
 }
 
@@ -72,7 +31,7 @@ acnh_sym::hook! {
         unsafe { original(seq) };
 
         if anchor {
-            unsafe { mouth_list::after_request(seq) };
+            ui_report("relink", unsafe { mouths::after_request(seq) });
         }
     }
 }
@@ -80,7 +39,7 @@ acnh_sym::hook! {
 acnh_sym::hook! {
     seq_set_group_enabled = "game::UI::CharaMakeSeq::setGroupEnabled";
     fn(seq: *mut CharaMakeSeq, group: u32, enable: u32, mode: u32) {
-        if group != GROUP_MOUTH || unsafe { !mouth_list::is_active(seq) } {
+        if group != GROUP_MOUTH || unsafe { !mouths::is_active(seq) } {
             unsafe { original(seq, group, enable, mode) };
             return;
         }
@@ -88,91 +47,43 @@ acnh_sym::hook! {
         // Disables the old mouth buttons
         unsafe { original(seq, group, 0, mode) };
 
-        report("set_enabled", unsafe { mouth_list::set_enabled(seq, enable & 1 != 0, mode) });
+        ui_report("set_enabled", unsafe { mouths::set_enabled(seq, enable & 1 != 0, mode) });
     }
 }
 
 acnh_sym::hook! {
-    seq_fill_mouth_list = "game::UI::CharaMakeSeq::fillMouthList";
-    fn(values: *mut ObjArray<u32>) {
-        report("fill", unsafe { mouth_list::fill(values, || original(values)) });
-    }
-}
-
-acnh_sym::hook! {
-    seq_refresh_enter = "game::UI::CharaMakeSeq::refreshEnter";
+    seq_enter_idle = "game::UI::CharaMakeSeq::enterIdle";
     fn(seq: *mut CharaMakeSeq) {
-        unsafe { original(seq) };
+        report("exit", unsafe { mouths::enter_idle(seq) });
 
-        report("refresh", unsafe { mouth_list::refresh(seq) });
+        unsafe { original(seq) };
+    }
+}
+
+fn ui_report(context: &str, result: acnh_ui_api::Result) {
+    if let Err(e) = result {
+        println!("[acnh-mouth] {context}: {e}");
     }
 }
 
 fn install() -> Result<(), acnh_sym::SymError> {
     acnh_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
 
-    page_bind_lists::install()?;
-    seq_setup_controls::install()?;
-    seq_tick_icons::install()?;
-    seq_on_exit::install()?;
     seq_fill_mouth_list::install()?;
+    seq_refresh_enter::install()?;
     seq_process_request::install()?;
     seq_set_group_enabled::install()?;
-    seq_refresh_enter::install()?;
-
-    if !framework_events() {
-        seq_on_control_focus::install()?;
-        seq_on_control_decide::install()?;
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "framework")]
-fn framework_events() -> bool {
-    use acnh_ui_api::{Event, PageFilter};
-
-    fn control(event: &Event) -> *mut Control {
-        event
-            .control
-            .map_or(core::ptr::null_mut(), |c| c.raw().cast())
-    }
-
-    let registered = acnh_ui_api::connect("acnh-mouth").and_then(|ui| {
-        ui.on_page(PageFilter::Layout("CharaMake"), |page| {
-            page.on_focus(|e| {
-                report("focus", unsafe {
-                    mouth_list::on_focus(mouth_list::seq(), control(&e))
-                });
-                Ok(())
-            })?;
-
-            page.on_decide(|e| {
-                report("decide", unsafe {
-                    mouth_list::on_decide(mouth_list::seq(), control(&e))
-                });
-                Ok(())
-            })
-        })
-    });
-
-    match registered {
-        Ok(()) => true,
-        Err(e) => {
-            println!("[acnh-mouth] acnh-ui: {e}, hooking focus and decide instead");
-            false
-        }
-    }
-}
-
-#[cfg(not(feature = "framework"))]
-fn framework_events() -> bool {
-    false
+    seq_enter_idle::install()
 }
 
 #[skyline::main(name = "acnh-mouth")]
 pub fn main() {
     if let Err(e) = install() {
         println!("[acnh-mouth] not installed: {e}");
+        return;
+    }
+
+    if let Err(e) = acnh_ui_api::connect("acnh-mouth").and_then(|ui| mouths::register(&ui)) {
+        println!("[acnh-mouth] acnh-ui: {e}");
     }
 }

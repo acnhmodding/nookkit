@@ -1,7 +1,7 @@
 use core::mem::offset_of;
 
 use crate::game::ui::AppUniteBtnCtrl;
-use crate::lp::ui::Control;
+use acnh_game::lp::ui::Control;
 use crate::sead::ObjArray;
 
 // The four old mouth buttons
@@ -94,9 +94,3 @@ const _: () = {
     assert!(offset_of!(CharaMakeSeq, icon_texture_pool) == 0xff0);
     assert!(offset_of!(CharaMakeSeq, request) == 0x1cfcc);
 };
-
-#[repr(C)]
-pub struct ControlEvent {
-    _unk_0: [u8; 0x8],
-    pub control: *mut Control,
-}
