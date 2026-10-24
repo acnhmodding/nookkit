@@ -31,6 +31,8 @@ const ICON_TICK: usize = 0x2fc47d8;
 const LIST_ENABLE: usize = 0x3764fe0;
 const LIST_ENABLE_FOCUS: usize = 0x3dbb160;
 const LIST_DISABLE: usize = 0x335b550;
+// ScrollBtnListCtrl attach: player, the page's focus manager, nav nodes, arrow buttons.
+const LIST_ATTACH: usize = 0x3763fe0;
 
 // Data (offsets from .text)
 pub const LIST_SCROLL_DELEGATE_VTABLE: usize = 0x49b5088;
@@ -45,8 +47,11 @@ const GOT_LIST_GROUP_VTABLE: usize = 0x4ac5170;
 const GOT_BTN_GROUP_DELEGATE_VTABLE: usize = 0x4ac9b80;
 const GOT_BTN_GROUP_DELEGATE_FN: usize = 0x4ac9b78;
 const GOT_LIST_ENABLE_PARAMS_VTABLE: usize = 0x4ac9c80;
+const GOT_PAGE_ROOT_TYPE_INFO: usize = 0x4ac4e58;
+const GOT_PAGE_ROOT_TYPE_INFO_GUARD: usize = 0x4ac4e60;
 
 // game::UI::CharaMakePage
+const PAGE_ROOT: usize = 0x3f8;
 pub const PAGE_BTN_NOSE: usize = 0x598;
 pub const PAGE_BTN_MOUTH: usize = 0x5b0;
 pub const PAGE_BTN_OK: usize = 0x608;
@@ -296,6 +301,31 @@ pub unsafe fn set_button_mode(button: *mut u8) {
 
         *bits = (*bits & 0xf8) | 1;
         *at::<i32>(button, BTN_MODE_FLAGS) = 2;
+    }
+}
+
+// Attaches a list to the page the way the page's list attach routine (0x7102b99900) does for
+// its own six lists on every CharaMake entry.
+pub unsafe fn list_attach(list: *mut u8, page: *mut u8) {
+    unsafe {
+        let mut params = [0u64; 4];
+        let root = **at::<*mut *mut u8>(page, PAGE_ROOT);
+
+        params[0] = page as u64;
+        params[3] = u64::MAX;
+
+        // The type info is a guarded local static; the game's own attach initializes it.
+        if !root.is_null() && *(got(GOT_PAGE_ROOT_TYPE_INFO_GUARD) as *const u8) & 1 != 0 {
+            let is_derived: extern "C" fn(*mut u8, usize) -> bool = vcall(root, 0);
+
+            if is_derived(root, got(GOT_PAGE_ROOT_TYPE_INFO)) {
+                params[2] = root as u64;
+            }
+        }
+
+        let attach: extern "C" fn(*mut u8, *const u64) = func(LIST_ATTACH);
+
+        attach(list, params.as_ptr());
     }
 }
 

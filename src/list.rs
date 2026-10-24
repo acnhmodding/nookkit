@@ -157,6 +157,8 @@ pub unsafe fn setup(seq: *mut u8) {
         let list = state.list;
         state.seq = seq;
 
+        list_attach(list, page);
+
         state.group = ListGroup {
             vtable: list_group_vtable(),
             enabled: 1,
@@ -238,14 +240,40 @@ pub unsafe fn set_enabled(seq: *mut u8, enable: bool, mode: u32) {
             return;
         };
 
-        println!(
-            "[acnh-mouth] enable={} mode={} items={} state={}",
-            enable,
-            mode,
-            *at::<i32>(state.list, 0x3d4),
-            *at::<u32>(state.list, 0x298)
-        );
+        let page = *at::<*mut u8>(seq, SEQ_PAGE);
+
+        println!("[acnh-mouth] enable={} mode={}", enable, mode);
+        dump_list("mouth", state.list);
+        dump_list("eye", *at::<*mut u8>(page, 0x670));
         list_set_enabled(state.list, enable, mode);
+        dump_list("mouth_after", state.list);
+    }
+}
+
+// The fields the game's list enable path checks (see list_set_enabled).
+unsafe fn dump_list(name: &str, list: *mut u8) {
+    unsafe {
+        if list.is_null() {
+            return;
+        }
+
+        let slots = *at::<*mut u8>(list, 0x270);
+        let scroll = *at::<*mut u8>(list, 0x480);
+
+        println!(
+            "[acnh-mouth] {} state={} 2f8={} 208={} 270={:p} 270+8={:p} 480={:p} 480+14={} 2d8={:p} 3d8={} 3d4={}",
+            name,
+            *at::<u32>(list, 0x298),
+            *at::<i32>(list, 0x2f8),
+            *at::<i32>(list, 0x208),
+            slots,
+            if slots.is_null() { null_mut() } else { *at::<*mut u8>(slots, 8) },
+            scroll,
+            if scroll.is_null() { 0 } else { *at::<i32>(scroll, 0x14) },
+            *at::<*mut u8>(list, 0x2d8),
+            *at::<i32>(list, 0x3d8),
+            *at::<i32>(list, 0x3d4)
+        );
     }
 }
 
