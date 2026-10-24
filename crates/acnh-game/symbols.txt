@@ -21,3 +21,4 @@ type_info	Lp::UI::BtnPartsCtrl
 type_info_guard	game::UI::AppScrollBtnListCtrl
 type_info_guard	game::UI::AppBodyCtrl
 type_info_guard	Lp::UI::BtnPartsCtrl
+fn	operator_new

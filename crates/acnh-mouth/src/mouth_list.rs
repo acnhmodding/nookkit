@@ -8,16 +8,12 @@ use crate::game::ui::chara_make::{
 };
 use crate::game::ui::{ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, PlayerIcon, VftListBtnGroup};
 use crate::lp::ui::{Control, LeaveDirection, LeaveEvent, NavDirection, ScrollBtnListCtrl};
-use crate::native::{NativeResult, report, vtable};
+use crate::native::{NativeResult, report};
 use crate::sead::{Delegate, ObjArray, VftDelegate};
 
 const LIST_PATH: &core::ffi::CStr = c"/L_BtnListMouth_00";
 const MAX_SLOTS: usize = 32;
 const MAX_MOUTHS: usize = 256;
-
-const SCROLL_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListScrollDelegate::vtable";
-const LEAVE_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ListLeaveDelegate::vtable";
-const ITEM_DELEGATE_VTABLE: &str = "game::UI::CharaMakeSeq::ItemDelegate::vtable";
 
 struct MouthValues {
     // The game reuses these slots on refill
@@ -239,19 +235,11 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
         state.group = ListBtnGroup::new()?;
 
         if !list.scroll_delegate.is_bound() {
-            list.scroll_delegate = Delegate::new(
-                vtable(SCROLL_DELEGATE_VTABLE)?,
-                seq,
-                on_scroll as *const () as usize,
-            );
+            list.scroll_delegate = Delegate::bind(seq, on_scroll as *const () as usize);
         }
 
         if !list.leave_delegate.is_bound() {
-            list.leave_delegate = Delegate::new(
-                vtable(LEAVE_DELEGATE_VTABLE)?,
-                seq,
-                on_leave as *const () as usize,
-            );
+            list.leave_delegate = Delegate::bind(seq, on_leave as *const () as usize);
         }
 
         state.slots = list.slot_count().min(MAX_SLOTS);
@@ -269,11 +257,7 @@ pub unsafe fn setup(seq: *mut CharaMakeSeq) -> NativeResult {
 
         state.updater = ItemUpdater::new(
             state.slots as u32,
-            Delegate::new(
-                vtable(ITEM_DELEGATE_VTABLE)?,
-                seq,
-                on_item as *const () as usize,
-            ),
+            Delegate::bind(seq, on_item as *const () as usize),
         );
         state.values.own(&mut seq_ref.mouth_values)
     }

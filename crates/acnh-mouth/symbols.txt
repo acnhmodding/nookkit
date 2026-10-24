@@ -14,7 +14,4 @@ fn	game::UI::CharaMakeSeq::fillMouthList
 fn	game::UI::CharaMakeSeq::processRequest
 fn	game::UI::CharaMakeSeq::setGroupEnabled
 fn	game::UI::CharaMakeSeq::refreshEnter
-data	game::UI::CharaMakeSeq::ListScrollDelegate::vtable
-data	game::UI::CharaMakeSeq::ListLeaveDelegate::vtable
-data	game::UI::CharaMakeSeq::ItemDelegate::vtable
 data	ACNH_Singleton_7104BF00A0::sInstance

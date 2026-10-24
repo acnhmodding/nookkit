@@ -34,16 +34,13 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::CharaMakeSeq::tickIcons" = 0x2ba79b0
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
 "game::UI::ViewPage::initialize" = 0x3759dd0
+"operator_new" = 0x37aa260
 
 [data]
 "ACNH_Singleton_7104BF00A0::sInstance" = 0x4bf00a0
 "ACNH_Singleton_7104CA4AB8::sInstance" = 0x4ca4ab8
 "ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
 "ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
-"game::UI::CharaMakeSeq::ControlEventDelegate::vtable" = 0x49b4f98
-"game::UI::CharaMakeSeq::ItemDelegate::vtable" = 0x49b5268
-"game::UI::CharaMakeSeq::ListLeaveDelegate::vtable" = 0x49b50d8
-"game::UI::CharaMakeSeq::ListScrollDelegate::vtable" = 0x49b5088
 "game::UI::ListBtnGroup::SelectableDelegate::vtable" = 0x4a29758
 "game::UI::ListBtnGroup::vtable" = 0x49aaf10
 "sead::SafeStringBase<char>::vtable" = 0x47f9770

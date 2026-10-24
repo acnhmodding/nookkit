@@ -3,11 +3,9 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use acnh_game::game::ui::{ControlEvent, ViewPage};
-use acnh_game::native::{NativeResult, vtable};
+use acnh_game::native::NativeResult;
 use acnh_game::sead::{Delegate, VftDelegate};
 use acnh_ui_sys::{Callback, ControlEvent as Event, Status};
-
-const CONTROL_EVENT_DELEGATE: &str = "game::UI::CharaMakeSeq::ControlEventDelegate::vtable";
 
 struct PageListener {
     layout: String,
@@ -149,11 +147,7 @@ pub unsafe fn on_control_event(
         cbs: Mutex::new(vec![cb]),
     });
 
-    *free = Delegate::new(
-        vtable(CONTROL_EVENT_DELEGATE)?,
-        &mut *slot as *mut EventSlot,
-        dispatch as *const () as usize,
-    );
+    *free = Delegate::bind(&mut *slot as *mut EventSlot, dispatch as *const () as usize);
     slots.push(slot);
 
     Ok(Status::Ok)
