@@ -1,0 +1,8 @@
+[package]
+name = "acnh-ui-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+acnh-ui-sys = { path = "../acnh-ui-sys" }
+thiserror = "2"

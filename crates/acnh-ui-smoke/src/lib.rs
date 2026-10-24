@@ -1,18 +1,32 @@
-use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_get};
+use acnh_ui_api::{PageFilter, Result, connect};
+
+fn start() -> Result {
+    let ui = connect("acnh-ui-smoke")?;
+    println!("[acnh-ui-smoke] connected");
+
+    ui.on_page(PageFilter::Layout("CharaMake"), |page| {
+        println!("[acnh-ui-smoke] CharaMake built {:p}", page.raw());
+
+        match page.pane("L_BtnOk") {
+            Ok(pane) => println!("[acnh-ui-smoke] L_BtnOk {:p}", pane.raw()),
+            Err(e) => println!("[acnh-ui-smoke] L_BtnOk: {e}"),
+        }
+
+        page.on_focus(|e| {
+            println!("[acnh-ui-smoke] focus {:?}", e.control.map(|c| c.raw()));
+            Ok(())
+        })?;
+
+        page.on_decide(|e| {
+            println!("[acnh-ui-smoke] decide {:?}", e.control.map(|c| c.raw()));
+            Ok(())
+        })
+    })
+}
 
 #[skyline::main(name = "acnh-ui-smoke")]
 pub fn main() {
-    let table = unsafe {
-        sl_api_get(API_NAME.as_ptr(), API_VERSION)
-            .cast::<AcnhUiV1>()
-            .as_ref()
-    };
-
-    match table {
-        Some(t) => println!(
-            "[acnh-ui-smoke] got api: size {} version {}",
-            t.size, t.framework_version
-        ),
-        None => println!("[acnh-ui-smoke] acnh-ui api not found"),
+    if let Err(e) = start() {
+        println!("[acnh-ui-smoke] {e}");
     }
 }
