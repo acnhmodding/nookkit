@@ -23,3 +23,24 @@ impl Pane {
         }
     }
 }
+
+const TEXT_BOX_SET_STRING: usize = 0x5e0;
+
+#[repr(C)]
+pub struct TextBox {
+    pub base: Pane,
+}
+
+crate::derive_base!(TextBox => Pane);
+
+impl TextBox {
+    /// Calls `SetString(text, 0)` through `vtable`, the one the pane's owner caches
+    pub unsafe fn set_string_with(this: *mut Self, vtable: *const usize, text: *const u16) -> u16 {
+        unsafe {
+            let set_string: unsafe extern "C" fn(*mut Self, *const u16, u16) -> u16 =
+                core::mem::transmute(*vtable.add(TEXT_BOX_SET_STRING / 8));
+
+            set_string(this, text, 0)
+        }
+    }
+}

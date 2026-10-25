@@ -29,3 +29,39 @@ impl<'a> SafeString<'a> {
         unsafe { self.as_c_str()?.to_str().ok() }
     }
 }
+
+#[repr(C)]
+pub struct FixedSafeString<const N: usize> {
+    pub vtable: *const c_void,
+    pub string_top: *const c_char,
+    pub buffer_size: i32,
+    pub buffer: [u8; N],
+}
+
+impl<const N: usize> FixedSafeString<N> {
+    /// Truncates to `N - 1` bytes
+    pub fn new(string: &str) -> NativeResult<Self> {
+        let mut fixed = Self {
+            vtable: vtable(&format!("sead::FixedSafeString<{N}>::vtable"))?,
+            string_top: core::ptr::null(),
+            buffer_size: N as i32,
+            buffer: [0; N],
+        };
+
+        let len = string.len().min(N - 1);
+        fixed.buffer[..len].copy_from_slice(&string.as_bytes()[..len]);
+
+        Ok(fixed)
+    }
+
+    /// `string_top` points into the buffer, so call this once the string is at its final address
+    pub fn pin(&mut self) {
+        self.string_top = self.buffer.as_ptr().cast();
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        let len = self.buffer.iter().position(|&b| b == 0)?;
+
+        core::str::from_utf8(&self.buffer[..len]).ok()
+    }
+}

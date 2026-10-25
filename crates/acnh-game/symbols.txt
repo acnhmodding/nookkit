@@ -28,3 +28,9 @@ vtable	game::UI::ListBtnGroup::SelectableDelegate::vtable
 vtable	game::UI::ListBtnGroup::vtable
 vtable	game::UISys::ScrollBtnListCtrl::EnableParams::vtable
 vtable	game::UISys::ScrollBtnListCtrl::SetContentParams::vtable
+fn	Lp::UI::Page::addKeyHandler
+fn	Lp::UI::TextAnimCtrl::refreshLayout
+fn	game::UI::AppLocatorCtrl::getRuntimeTypeInfo
+fn	game::UI::KeyGuideSeq::getRuntimeTypeInfo
+fn	game::UI::KeyGuideSeq::addGuide
+vtable	sead::FixedSafeString<64>::vtable

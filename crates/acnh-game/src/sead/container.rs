@@ -75,6 +75,27 @@ impl OffsetList {
         self.len() == 0
     }
 
+    /// Relinks an item's node, already in this list, so the item comes first
+    pub unsafe fn move_to_front(&mut self, node: *mut ListNode) {
+        let head = &mut self.start_end as *mut ListNode;
+
+        unsafe {
+            let first = (*head).next;
+
+            if node.is_null() || first == node {
+                return;
+            }
+
+            (*(*node).prev).next = (*node).next;
+            (*(*node).next).prev = (*node).prev;
+
+            (*node).prev = head;
+            (*node).next = first;
+            (*first).prev = node;
+            (*head).next = node;
+        }
+    }
+
     pub unsafe fn iter<T>(&self) -> impl Iterator<Item = *mut T> + '_ {
         let end = &self.start_end as *const ListNode;
         let mut node = self.start_end.next.cast_const();
