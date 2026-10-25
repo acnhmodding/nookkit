@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use acnh_game::game::ui::{KeyGuideEntry, KeyGuideSeq, ViewPage};
 use acnh_game::lp::ui::{ButtonId, Control, KeyEvent as GameKeyEvent, KeyHandler, PartsCtrl};
 use acnh_game::native::NativeResult;
-use acnh_game::sead::Delegate;
+use acnh_game::sead::{Delegate, SafeString};
 use acnh_ui_sys::{Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KeyEvent, Status};
 
 use crate::pages::{PAGES, call, snapshot, with_page};
@@ -297,53 +297,48 @@ acnh_sym::hook! {
     }
 }
 
+#[repr(C)]
+struct WideBuffer {
+    vtable: *const c_void,
+    buffer: *mut u16,
+    size: i32,
+}
+
+// Every message lookup goes through here, so a sentinel label is answered with its literal text
 acnh_sym::hook! {
-    pub key_guide_fill = "game::UI::KeyGuideSeq::fillGuides";
-    fn(seq: *mut KeyGuideSeq) {
-        unsafe { original(seq) };
-        report("key guide text", unsafe { write_texts(seq) });
+    pub message_find = "Lp::UI::UIMgr::findMessage";
+    fn(dst: *mut WideBuffer, file: *const SafeString<'static>, label: *const SafeString<'static>) -> bool {
+        match unsafe { literal_text(dst, label) } {
+            Some(found) => found,
+            None => unsafe { original(dst, file, label) },
+        }
     }
 }
 
-unsafe fn write_texts(seq: *mut KeyGuideSeq) -> NativeResult {
-    let Some(seq) = (unsafe { seq.as_mut() }) else {
-        return Ok(());
+unsafe fn literal_text(dst: *mut WideBuffer, label: *const SafeString<'static>) -> Option<bool> {
+    let label = unsafe { label.as_ref()?.as_c_str()? }.to_bytes();
+    let id = core::str::from_utf8(label.strip_prefix(SENTINEL.as_bytes())?)
+        .ok()?
+        .parse::<u32>()
+        .ok()?;
+
+    let texts = TEXTS.lock().ok()?;
+    let Some(text) = texts.get(&id) else {
+        return Some(false);
     };
 
-    let Ok(texts) = TEXTS.lock() else {
-        return Ok(());
-    };
+    let dst = unsafe { dst.as_mut()? };
 
-    for index in 0..seq
-        .display
-        .len()
-        .min(acnh_game::game::ui::key_guide::KEY_GUIDE_PARTS)
-    {
-        let Some(entry) = (unsafe { seq.display.get(index).as_ref() }) else {
-            continue;
-        };
-
-        let Some(text) = entry
-            .label
-            .as_str()
-            .and_then(|label| label.strip_prefix(SENTINEL))
-            .and_then(|id| id.parse::<u32>().ok())
-            .and_then(|id| texts.get(&id))
-        else {
-            continue;
-        };
-
-        let Some(part) = (unsafe { seq.part(index) }) else {
-            continue;
-        };
-
-        // The text box fillGuides writes the label to
-        let slot = (part.texts.len() > 1) as usize;
-
-        if let Some(ctrl) = unsafe { part.texts.get(slot).as_mut() } {
-            unsafe { ctrl.set_text(text)? };
-        }
+    if dst.buffer.is_null() || dst.size <= 0 {
+        return Some(false);
     }
 
-    Ok(())
+    let len = text.len().min(dst.size as usize);
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(text.as_ptr(), dst.buffer, len);
+        *dst.buffer.add(len - 1) = 0;
+    }
+
+    Some(true)
 }

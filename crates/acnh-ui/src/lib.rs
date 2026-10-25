@@ -57,7 +57,7 @@ fn start() -> Result<(), acnh_sym::SymError> {
     seqs::sequence_on_deactivated::install()?;
     seqs::sequence_update::install()?;
     keys::key_guide_add::install()?;
-    keys::key_guide_fill::install()
+    keys::message_find::install()
 }
 
 #[skyline::main(name = "acnh-ui")]
