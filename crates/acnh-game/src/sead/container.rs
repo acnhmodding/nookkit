@@ -112,3 +112,29 @@ impl OffsetList {
         })
     }
 }
+
+#[repr(C)]
+pub struct Buffer<T> {
+    pub size: i32,
+    pub buffer: *mut T,
+}
+
+const _: () = assert!(core::mem::size_of::<Buffer<u8>>() == 0x10);
+
+impl<T> Buffer<T> {
+    pub fn len(&self) -> usize {
+        self.size.max(0) as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub unsafe fn as_slice(&self) -> &[T] {
+        if self.buffer.is_null() {
+            return &[];
+        }
+
+        unsafe { core::slice::from_raw_parts(self.buffer, self.len()) }
+    }
+}
