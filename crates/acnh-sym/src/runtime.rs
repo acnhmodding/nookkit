@@ -1,27 +1,13 @@
-use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use skyline::hooks::{Region, getRegionAddress};
 
 use crate::{FINGERPRINT_LEN, FINGERPRINT_OFFSET, Kind, SymError, SymbolFile, fingerprint, parse};
 
-const SD_DIR: &str = "sd:/atmosphere/contents/01006F8002326000/acnh-ui/offsets";
-
 static TABLE: OnceLock<SymbolFile> = OnceLock::new();
 
 pub fn module_base() -> usize {
     unsafe { getRegionAddress(Region::Text) as usize }
-}
-
-pub fn display_version() -> String {
-    let mut version = skyline::nn::oe::DisplayVersion { name: [0; 16] };
-    unsafe { skyline::nn::oe::GetDisplayVersion(&mut version) };
-    let len = version
-        .name
-        .iter()
-        .position(|&b| b == 0)
-        .unwrap_or(version.name.len());
-    String::from_utf8_lossy(&version.name[..len]).into_owned()
 }
 
 fn running_fingerprint() -> u64 {
@@ -34,24 +20,16 @@ fn running_fingerprint() -> u64 {
     fingerprint(window)
 }
 
-pub fn init(embedded: &str) -> Result<&'static SymbolFile, SymError> {
+pub fn init(text: &str) -> Result<&'static SymbolFile, SymError> {
     if let Some(table) = TABLE.get() {
         return Ok(table);
     }
 
-    let version = display_version();
-    let path = format!("{SD_DIR}/{version}.toml");
-    let (source_name, text) = match std::fs::read_to_string(&path) {
-        Ok(text) => (path, text),
-        Err(_) => ("embedded".to_owned(), embedded.to_owned()),
-    };
-
-    let file = parse(&text).map_err(|error| SymError::Parse { source_name, error })?;
+    let file = parse(text)?;
     let actual = running_fingerprint();
 
     if file.rodata_hash != actual {
         return Err(SymError::UnsupportedBuild {
-            version,
             expected: file.rodata_hash,
             actual,
         });
@@ -86,28 +64,8 @@ pub fn fun_addr(name: &str) -> Result<usize, SymError> {
     address(Kind::Fn, name)
 }
 
-pub fn got<T>(name: &str) -> Result<*mut T, SymError> {
-    Ok(unsafe { *(address(Kind::Got, name)? as *const *mut T) })
-}
-
-pub fn data<T>(name: &str) -> Result<*mut T, SymError> {
-    Ok(address(Kind::Data, name)? as *mut T)
-}
-
-/// The vptr value (slot 0), not the typeinfo header
 pub fn vtable<T>(name: &str) -> Result<*const T, SymError> {
-    Ok(address(Kind::Data, name)? as *const T)
-}
-
-/// `Ok(None)` until the game has run the guarded init
-pub fn type_info(name: &str) -> Result<Option<*const c_void>, SymError> {
-    let info = address(Kind::TypeInfo, name)? as *const c_void;
-
-    match address(Kind::TypeInfoGuard, name) {
-        Ok(guard) => Ok((unsafe { *(guard as *const u8) } & 1 != 0).then_some(info)),
-        Err(SymError::Missing { .. }) => Ok(Some(info)),
-        Err(e) => Err(e),
-    }
+    Ok(address(Kind::Vtable, name)? as *const T)
 }
 
 #[doc(hidden)]

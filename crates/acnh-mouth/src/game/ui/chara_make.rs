@@ -1,6 +1,6 @@
 use core::mem::offset_of;
 
-use acnh_game::game::ui::{PageBase, SequenceBase, VftPageBase, VftSequenceBase};
+use acnh_ui_api::game::game::ui::{PageBase, SequenceBase, VftPageBase, VftSequenceBase};
 use native_vtable::vtable_impl;
 
 use crate::game::ui::AppUniteBtnCtrl;
@@ -34,7 +34,7 @@ const _: () = {
     assert!(offset_of!(CharaMakePage, ok_button) == 0x608);
 };
 
-acnh_game::derive_base!(CharaMakePage => PageBase);
+acnh_ui_api::game::derive_base!(CharaMakePage => PageBase);
 
 #[vtable_impl]
 unsafe impl VftPageBase for CharaMakePage {}
@@ -97,7 +97,7 @@ const _: () = {
     assert!(offset_of!(CharaMakeSeq, request) == 0x1cfcc);
 };
 
-acnh_game::derive_base!(CharaMakeSeq => SequenceBase);
+acnh_ui_api::game::derive_base!(CharaMakeSeq => SequenceBase);
 
 #[vtable_impl]
 unsafe impl VftSequenceBase for CharaMakeSeq {}

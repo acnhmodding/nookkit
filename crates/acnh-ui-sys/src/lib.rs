@@ -123,6 +123,9 @@ pub struct ItemUpdate {
 
 pub const NO_LINE: u32 = u32::MAX;
 
+pub const SYMBOL_FN: u32 = 0;
+pub const SYMBOL_VTABLE: u32 = 1;
+
 #[repr(C)]
 pub struct LeaveQuery {
     pub direction: Direction,
@@ -147,6 +150,12 @@ pub struct ListTarget {
 pub struct AcnhUiV1 {
     pub size: usize,
     pub framework_version: u32,
+
+    /// `false` when the running game build isn't the supported one, every other entry then fails
+    pub started: unsafe extern "C" fn() -> bool,
+
+    /// Absolute address of a symbol in the framework's table, 0 when missing
+    pub resolve: unsafe extern "C" fn(name: Str, kind: u32) -> usize,
 
     /// Empty `layout` or `class` matches any. `cb` gets the page pointer after it is built
     pub on_page_built: unsafe extern "C" fn(layout: Str, class: Str, cb: Callback) -> Status,

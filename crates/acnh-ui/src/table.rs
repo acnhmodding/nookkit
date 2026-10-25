@@ -6,8 +6,10 @@ use acnh_game::game::player_control_lock::{lock_menu, release_menu};
 use acnh_game::game::ui::ViewPage;
 use acnh_game::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
 use acnh_game::native::{Error, NativeResult, type_info_named};
-use acnh_sym::SymError;
-use acnh_ui_sys::{AcnhUiV1, Callback, Direction, ListTarget, Status, Str};
+use acnh_sym::Kind;
+use acnh_ui_sys::{
+    AcnhUiV1, Callback, Direction, ListTarget, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
+};
 
 use crate::lists::{self, ListState};
 use crate::{STARTED, pages, seqs};
@@ -15,6 +17,8 @@ use crate::{STARTED, pages, seqs};
 pub static TABLE: AcnhUiV1 = AcnhUiV1 {
     size: core::mem::size_of::<AcnhUiV1>(),
     framework_version: 1,
+    started,
+    resolve,
     on_page_built,
     find_pane,
     on_control_event,
@@ -45,8 +49,7 @@ fn status(context: &str, result: NativeResult<Status>) -> Status {
             println!("[acnh-ui] {context}: {e}");
 
             match e {
-                Error::Symbol(SymError::Missing { .. }) | Error::Native(_) => Status::MissingSymbol,
-                Error::Symbol(_) => Status::UnsupportedBuild,
+                Error::Missing(_) | Error::Native(_) => Status::MissingSymbol,
             }
         }
     }
@@ -58,6 +61,23 @@ fn guarded(context: &str, f: impl FnOnce() -> NativeResult<Status>) -> Status {
     }
 
     status(context, f())
+}
+
+unsafe extern "C" fn started() -> bool {
+    STARTED.load(Ordering::Acquire)
+}
+
+unsafe extern "C" fn resolve(name: Str, kind: u32) -> usize {
+    let kind = match kind {
+        SYMBOL_FN => Kind::Fn,
+        SYMBOL_VTABLE => Kind::Vtable,
+        _ => return 0,
+    };
+
+    match unsafe { name.as_str() } {
+        Some(name) if STARTED.load(Ordering::Acquire) => acnh_sym::address(kind, name).unwrap_or(0),
+        _ => 0,
+    }
 }
 
 unsafe extern "C" fn on_page_built(layout: Str, class: Str, cb: Callback) -> Status {

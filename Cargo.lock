@@ -6,7 +6,6 @@ version = 4
 name = "acnh-game"
 version = "0.1.0"
 dependencies = [
- "acnh-sym",
  "native-vtable",
  "skyline",
  "thiserror",
@@ -16,8 +15,6 @@ dependencies = [
 name = "acnh-mouth"
 version = "0.1.0"
 dependencies = [
- "acnh-game",
- "acnh-sym",
  "acnh-ui-api",
  "native-vtable",
  "skyline",
@@ -45,7 +42,9 @@ dependencies = [
 name = "acnh-ui-api"
 version = "0.1.0"
 dependencies = [
+ "acnh-game",
  "acnh-ui-sys",
+ "skyline",
  "thiserror",
 ]
 

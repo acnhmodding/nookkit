@@ -1,21 +1,24 @@
 mod game;
 mod mouths;
 mod native;
+mod offsets;
 
-use acnh_game::sead;
+use acnh_ui_api::game::sead;
 use game::ui::chara_make::*;
 use native::report;
 use sead::ObjArray;
 
-acnh_sym::hook! {
-    seq_fill_mouth_list = "game::UI::CharaMakeSeq::fillMouthList";
+acnh_ui_api::hook! {
+    resolve = crate::offsets::resolve;
+    seq_fill_mouth_list = "fill_mouth_list";
     fn(values: *mut ObjArray<u32>) {
         report("fill", unsafe { mouths::fill(values, || original(values)) });
     }
 }
 
-acnh_sym::hook! {
-    seq_refresh_enter = "game::UI::CharaMakeSeq::refreshEnter";
+acnh_ui_api::hook! {
+    resolve = crate::offsets::resolve;
+    seq_refresh_enter = "refresh_enter";
     fn(seq: *mut CharaMakeSeq) {
         unsafe { original(seq) };
 
@@ -23,8 +26,9 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
-    seq_process_request = "game::UI::CharaMakeSeq::processRequest";
+acnh_ui_api::hook! {
+    resolve = crate::offsets::resolve;
+    seq_process_request = "process_request";
     fn(seq: *mut CharaMakeSeq) {
         let anchor = unsafe { (*seq).request.is(RequestState::UpdateAnchor) };
 
@@ -36,8 +40,9 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
-    seq_set_group_enabled = "game::UI::CharaMakeSeq::setGroupEnabled";
+acnh_ui_api::hook! {
+    resolve = crate::offsets::resolve;
+    seq_set_group_enabled = "set_group_enabled";
     fn(seq: *mut CharaMakeSeq, group: u32, enable: u32, mode: u32) {
         if group != GROUP_MOUTH || unsafe { !mouths::is_active(seq) } {
             unsafe { original(seq, group, enable, mode) };
@@ -51,8 +56,9 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
-    seq_enter_idle = "game::UI::CharaMakeSeq::enterIdle";
+acnh_ui_api::hook! {
+    resolve = crate::offsets::resolve;
+    seq_enter_idle = "enter_idle";
     fn(seq: *mut CharaMakeSeq) {
         report("exit", unsafe { mouths::enter_idle(seq) });
 
@@ -66,24 +72,21 @@ fn ui_report(context: &str, result: acnh_ui_api::Result) {
     }
 }
 
-fn install() -> Result<(), acnh_sym::SymError> {
-    acnh_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
+fn install() -> acnh_ui_api::Result {
+    let ui = acnh_ui_api::connect("acnh-mouth")?;
 
     seq_fill_mouth_list::install()?;
     seq_refresh_enter::install()?;
     seq_process_request::install()?;
     seq_set_group_enabled::install()?;
-    seq_enter_idle::install()
+    seq_enter_idle::install()?;
+
+    mouths::register(&ui)
 }
 
 #[skyline::main(name = "acnh-mouth")]
 pub fn main() {
     if let Err(e) = install() {
         println!("[acnh-mouth] not installed: {e}");
-        return;
-    }
-
-    if let Err(e) = acnh_ui_api::connect("acnh-mouth").and_then(|ui| mouths::register(&ui)) {
-        println!("[acnh-mouth] acnh-ui: {e}");
     }
 }

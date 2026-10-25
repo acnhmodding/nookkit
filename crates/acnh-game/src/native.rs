@@ -1,16 +1,50 @@
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::sead::runtime_type_info::Interface;
 
-pub use acnh_sym::resolve;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymbolKind {
+    Fn,
+
+    /// The address an object's vptr holds
+    Vtable,
+}
+
+/// Returns the absolute address of a symbol, or `None` when the symbol file lacks it
+pub type Resolver = fn(name: &str, kind: SymbolKind) -> Option<usize>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
     Native(#[from] native_vtable::Unresolved),
-    #[error(transparent)]
-    Symbol(#[from] acnh_sym::SymError),
+    #[error("symbol \"{0}\" is missing")]
+    Missing(String),
 }
 
 pub type NativeResult<T = ()> = Result<T, Error>;
+
+static RESOLVER: AtomicUsize = AtomicUsize::new(0);
+
+/// Set once by whoever owns the symbol table, the framework core or `acnh_ui_api::connect`
+pub fn set_resolver(resolver: Resolver) {
+    RESOLVER.store(resolver as usize, Ordering::Release);
+}
+
+fn lookup(name: &str, kind: SymbolKind) -> Option<usize> {
+    let resolver = RESOLVER.load(Ordering::Acquire);
+
+    if resolver == 0 {
+        return None;
+    }
+
+    let resolver: Resolver = unsafe { core::mem::transmute(resolver) };
+
+    resolver(name, kind)
+}
+
+pub fn resolve(name: &'static str) -> Option<usize> {
+    lookup(name, SymbolKind::Fn)
+}
 
 /// A game class with sead runtime type info
 pub unsafe trait Class {
@@ -19,15 +53,13 @@ pub unsafe trait Class {
 }
 
 pub fn vtable<T>(name: &str) -> NativeResult<*const T> {
-    Ok(acnh_sym::vtable(name)?)
-}
-
-pub fn data<T>(name: &str) -> NativeResult<*mut T> {
-    Ok(acnh_sym::data(name)?)
+    lookup(name, SymbolKind::Vtable)
+        .map(|address| address as *const T)
+        .ok_or_else(|| Error::Missing(name.to_owned()))
 }
 
 pub fn fun_addr(name: &str) -> NativeResult<usize> {
-    Ok(acnh_sym::fun_addr(name)?)
+    lookup(name, SymbolKind::Fn).ok_or_else(|| Error::Missing(name.to_owned()))
 }
 
 pub fn type_info_of(get_runtime_type_info: &str) -> NativeResult<*const Interface> {

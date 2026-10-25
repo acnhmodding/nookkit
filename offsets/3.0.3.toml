@@ -3,7 +3,6 @@ game_version = "3.0.3"
 rodata_hash = 0xacfdd336a5d95bb0
 
 [fn]
-"CharaMake_findPlayerIcon" = 0x2baaf20
 "Lp::UI::BtnPartsCtrl::getRuntimeTypeInfo" = 0x3c5e36c
 "Lp::UI::Control::findByPath" = 0x376e6b0
 "Lp::UI::Control::getRuntimeTypeInfo" = 0x3b5e36c
@@ -11,21 +10,11 @@ rodata_hash = 0xacfdd336a5d95bb0
 "Lp::UI::PartsCtrl::getRuntimeTypeInfo" = 0x3c66d84
 "Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = 0x3c877b8
 "Lp::Utl::StateMachine::changeState" = 0x3dbb160
-"PlayerIcon_moveFrom" = 0x2fc3ff0
-"PlayerIcon_release" = 0x2fc4398
-"PlayerIcon_render" = 0x2fc37ac
-"PlayerIcon_resetPart" = 0x2fc3694
-"PlayerIcon_tick" = 0x2fc47d8
-"game::PlayerControlLockMgr::acquire" = 0x971bb8
 "game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
 "game::UI::AppBodyCtrl::getRuntimeTypeInfo" = 0x2fb9964
 "game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo" = 0x2fbd914
 "game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo" = 0x2fc0fac
-"game::UI::CharaMakeSeq::enterIdle" = 0x2ba10e0
-"game::UI::CharaMakeSeq::fillMouthList" = 0x2b8fe60
-"game::UI::CharaMakeSeq::processRequest" = 0x2ba4a00
-"game::UI::CharaMakeSeq::refreshEnter" = 0x2ba1460
-"game::UI::CharaMakeSeq::setGroupEnabled" = 0x2ba7fe0
+"game::UI::FieldMenuRequestSeq::tryLockPlayer" = 0x2df7758
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
 "game::UI::ListBtnGroup::refresh" = 0x2ac30b0
 "game::UI::ListItemUpdater::update" = 0x335c380
@@ -48,9 +37,7 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UISys::Sequence::getRuntimeTypeInfo" = 0x3769f70
 "operator_new" = 0x37aa260
 
-[data]
-"ACNH_Singleton_7104BF00A0::sInstance" = 0x4bf00a0
-"ACNH_Singleton_7104CA4AB8::sInstance" = 0x4ca4ab8
+[vtable]
 "game::UI::ListBtnGroup::SelectableDelegate::vtable" = 0x4a29758
 "game::UI::ListBtnGroup::vtable" = 0x49aaf10
 "game::UISys::ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050

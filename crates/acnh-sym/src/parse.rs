@@ -3,33 +3,23 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
     Fn,
-    Got,
-    Data,
-    TypeInfo,
-    TypeInfoGuard,
+
+    /// The address an object's vptr holds
+    Vtable,
 }
 
 impl Kind {
     pub fn section(self) -> &'static str {
         match self {
             Kind::Fn => "fn",
-            Kind::Got => "got",
-            Kind::Data => "data",
-            Kind::TypeInfo => "type_info",
-            Kind::TypeInfoGuard => "type_info_guard",
+            Kind::Vtable => "vtable",
         }
     }
 
-    fn from_section(name: &str) -> Option<Self> {
-        [
-            Kind::Fn,
-            Kind::Got,
-            Kind::Data,
-            Kind::TypeInfo,
-            Kind::TypeInfoGuard,
-        ]
-        .into_iter()
-        .find(|k| k.section() == name)
+    pub fn from_section(name: &str) -> Option<Self> {
+        [Kind::Fn, Kind::Vtable]
+            .into_iter()
+            .find(|k| k.section() == name)
     }
 }
 
@@ -170,8 +160,8 @@ rodata_hash = 0x1234abcd
 
 [fn]
 "Lp::UI::Control::findByPath" = 0x376e6b0  # comment
-[type_info]
-"Lp::UI::UniteBtnCtrl" = 0x55431e8
+[vtable]
+"Lp::UI::UniteBtnCtrl::vtable" = 0x4a92730
 "#;
 
     #[test]
@@ -184,10 +174,10 @@ rodata_hash = 0x1234abcd
             Some(0x376e6b0)
         );
         assert_eq!(
-            f.get(Kind::TypeInfo, "Lp::UI::UniteBtnCtrl"),
-            Some(0x55431e8)
+            f.get(Kind::Vtable, "Lp::UI::UniteBtnCtrl::vtable"),
+            Some(0x4a92730)
         );
-        assert_eq!(f.get(Kind::Fn, "Lp::UI::UniteBtnCtrl"), None);
+        assert_eq!(f.get(Kind::Fn, "Lp::UI::UniteBtnCtrl::vtable"), None);
         assert_eq!(f.len(), 2);
     }
 

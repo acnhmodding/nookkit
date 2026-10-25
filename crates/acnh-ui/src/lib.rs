@@ -5,7 +5,7 @@ mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use acnh_game::native::NativeResult;
+use acnh_game::native::{NativeResult, SymbolKind};
 use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
 
 #[unsafe(no_mangle)]
@@ -39,6 +39,15 @@ fn start() -> Result<(), acnh_sym::SymError> {
         symbols.len(),
         symbols.game_version
     );
+
+    acnh_game::native::set_resolver(|name, kind| {
+        let kind = match kind {
+            SymbolKind::Fn => acnh_sym::Kind::Fn,
+            SymbolKind::Vtable => acnh_sym::Kind::Vtable,
+        };
+
+        acnh_sym::address(kind, name).ok()
+    });
 
     pages::view_page_initialize::install()?;
     pages::view_page_layout_built::install()?;

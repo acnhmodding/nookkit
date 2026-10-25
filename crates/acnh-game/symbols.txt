@@ -23,8 +23,8 @@ fn	game::UISys::Sequence::getRuntimeTypeInfo
 fn	game::UI::SequenceBase::getRuntimeTypeInfo
 fn	game::UI::ViewPage::getRuntimeTypeInfo
 fn	game::UI::PageBase::getRuntimeTypeInfo
-data	sead::SafeStringBase<char>::vtable
-data	game::UI::ListBtnGroup::SelectableDelegate::vtable
-data	game::UI::ListBtnGroup::vtable
-data	game::UISys::ScrollBtnListCtrl::EnableParams::vtable
-data	game::UISys::ScrollBtnListCtrl::SetContentParams::vtable
+vtable	sead::SafeStringBase<char>::vtable
+vtable	game::UI::ListBtnGroup::SelectableDelegate::vtable
+vtable	game::UI::ListBtnGroup::vtable
+vtable	game::UISys::ScrollBtnListCtrl::EnableParams::vtable
+vtable	game::UISys::ScrollBtnListCtrl::SetContentParams::vtable

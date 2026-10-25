@@ -7,12 +7,20 @@
 
 mod callback;
 mod list;
+mod offsets;
 mod page;
 
-use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, Status, Str, sl_api_get};
+use core::sync::atomic::{AtomicPtr, Ordering};
 
+use acnh_game::native::SymbolKind;
+use acnh_ui_sys::{
+    API_NAME, API_VERSION, AcnhUiV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str, sl_api_get,
+};
+
+pub use acnh_game as game;
 pub use acnh_ui_sys::Direction;
 pub use list::{ItemUpdate, List, ListTarget};
+pub use offsets::{__hook_function, module_base};
 pub use page::{Event, Page, Pane, PaneRef, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -66,18 +74,43 @@ pub struct Ui {
     name: &'static str,
 }
 
+static TABLE: AtomicPtr<AcnhUiV1> = AtomicPtr::new(core::ptr::null_mut());
+
+fn resolve(name: &str, kind: SymbolKind) -> Option<usize> {
+    let table = unsafe { TABLE.load(Ordering::Acquire).as_ref() }?;
+    let kind = match kind {
+        SymbolKind::Fn => SYMBOL_FN,
+        SymbolKind::Vtable => SYMBOL_VTABLE,
+    };
+
+    let address = unsafe { (table.resolve)(Str::new(name), kind) };
+
+    (address != 0).then_some(address)
+}
+
+/// Fails with [`UiError::UnsupportedBuild`] unless the game is the build this crate version supports.
 /// `name` prefixes the errors printed for failed callbacks
 pub fn connect(name: &'static str) -> Result<Ui> {
     let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<AcnhUiV1>();
-    let Some(table) = (unsafe { table.as_ref() }) else {
+    let Some(table_ref) = (unsafe { table.as_ref() }) else {
         return Err(UiError::FrameworkMissing);
     };
 
-    if table.size < core::mem::size_of::<AcnhUiV1>() {
+    if table_ref.size < core::mem::size_of::<AcnhUiV1>() {
         return Err(UiError::ApiTooOld);
     }
 
-    Ok(Ui { table, name })
+    if !unsafe { (table_ref.started)() } {
+        return Err(UiError::UnsupportedBuild);
+    }
+
+    TABLE.store(table.cast_mut(), Ordering::Release);
+    game::native::set_resolver(resolve);
+
+    Ok(Ui {
+        table: table_ref,
+        name,
+    })
 }
 
 impl Ui {

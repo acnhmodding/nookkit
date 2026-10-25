@@ -6,5 +6,4 @@ edition = "2024"
 [dependencies]
 skyline = "0.6.0"
 native-vtable = { path = "../../../native-vtable" }
-acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
 thiserror = "2"

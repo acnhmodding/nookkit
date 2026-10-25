@@ -23,19 +23,10 @@ pub enum SymError {
     NotLoaded,
     #[error("symbol \"{name}\" missing from [{}]", kind.section())]
     Missing { kind: Kind, name: String },
-    #[error(
-        "unsupported game build: version {version}, fingerprint {actual:#x} (file expects {expected:#x})"
-    )]
-    UnsupportedBuild {
-        version: String,
-        expected: u64,
-        actual: u64,
-    },
-    #[error("bad symbol file {source_name}: {error}")]
-    Parse {
-        source_name: String,
-        error: ParseError,
-    },
+    #[error("unsupported game build: fingerprint {actual:#x}, expected {expected:#x}")]
+    UnsupportedBuild { expected: u64, actual: u64 },
+    #[error("bad symbol file: {0}")]
+    Parse(#[from] ParseError),
 }
 
 pub fn manifest(text: &str) -> impl Iterator<Item = Result<(Kind, &str), &str>> {
@@ -44,16 +35,7 @@ pub fn manifest(text: &str) -> impl Iterator<Item = Result<(Kind, &str), &str>> 
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(|l| {
             let (kind, name) = l.split_once('\t').ok_or(l)?;
-            let kind = [
-                Kind::Fn,
-                Kind::Got,
-                Kind::Data,
-                Kind::TypeInfo,
-                Kind::TypeInfoGuard,
-            ]
-            .into_iter()
-            .find(|k| k.section() == kind)
-            .ok_or(l)?;
+            let kind = Kind::from_section(kind).ok_or(l)?;
             Ok((kind, name))
         })
 }
@@ -87,7 +69,6 @@ mod tests {
         for manifest in [
             include_str!("../../acnh-game/symbols.txt"),
             include_str!("../../acnh-ui/symbols.txt"),
-            include_str!("../../acnh-mouth/symbols.txt"),
         ] {
             assert_eq!(missing(&file, manifest), vec![]);
         }
@@ -97,13 +78,13 @@ mod tests {
     fn manifest_reports_missing_and_malformed() {
         let file =
             parse("game_version = \"3.0.3\"\nrodata_hash = 0x1\n[fn]\n\"A::b\" = 0x10\n").unwrap();
-        let text = "# core\nfn\tA::b\nfn\tA::c\ntype_info\tB\nbogus line\n";
+        let text = "# core\nfn\tA::b\nfn\tA::c\nvtable\tB::vtable\nbogus line\n";
         let missing = missing(&file, text);
         assert_eq!(
             missing,
             vec![
                 Ok((Kind::Fn, "A::c")),
-                Ok((Kind::TypeInfo, "B")),
+                Ok((Kind::Vtable, "B::vtable")),
                 Err("bogus line")
             ]
         );
