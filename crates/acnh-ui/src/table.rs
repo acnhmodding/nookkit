@@ -11,6 +11,7 @@ use acnh_ui_sys::{
     AcnhUiV1, Callback, Direction, ListTarget, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
 };
 
+use crate::keys::{self, KeyState};
 use crate::lists::{self, ListState};
 use crate::{STARTED, pages, seqs};
 
@@ -36,7 +37,16 @@ pub static TABLE: AcnhUiV1 = AcnhUiV1 {
     list_relink,
     list_slot_count,
     list_button,
+    key_bind,
+    key_on,
+    key_set_enabled,
+    key_set_guide,
+    key_set_hint_pane,
 };
+
+unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
+    unsafe { key.cast::<KeyState>().as_ref() }
+}
 
 unsafe fn list_ref<'a>(list: *mut c_void) -> Option<&'a ListState> {
     unsafe { list.cast::<ListState>().as_ref() }
@@ -316,5 +326,70 @@ unsafe extern "C" fn list_button(list: *mut c_void, slot: u32, out: *mut *mut c_
         *out = button;
 
         Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn key_bind(
+    page: *mut c_void,
+    player: u32,
+    key: i32,
+    flags: u32,
+    out: *mut *mut c_void,
+) -> Status {
+    guarded("key_bind", || unsafe {
+        if out.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
+        Ok(match keys::bind(page.cast(), player, key, flags)? {
+            Ok(key) => {
+                *out = key.cast();
+                Status::Ok
+            }
+            Err(status) => status,
+        })
+    })
+}
+
+unsafe extern "C" fn key_on(key: *mut c_void, kind: u32, cb: Callback) -> Status {
+    guarded("key_on", || unsafe {
+        Ok(key_ref(key).map_or(Status::InvalidArg, |key| keys::on(key, kind, cb)))
+    })
+}
+
+unsafe extern "C" fn key_set_enabled(key: *mut c_void, enable: bool) -> Status {
+    guarded("key_set_enabled", || unsafe {
+        let Some(key) = key_ref(key) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        keys::set_enabled(key, enable);
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn key_set_guide(key: *mut c_void, text: Str, label: Str) -> Status {
+    guarded("key_set_guide", || unsafe {
+        let (Some(key), Some(text), Some(label)) = (key_ref(key), text.as_str(), label.as_str())
+        else {
+            return Ok(Status::InvalidArg);
+        };
+
+        Ok(keys::set_guide(key, text, label))
+    })
+}
+
+unsafe extern "C" fn key_set_hint_pane(key: *mut c_void, path: Str) -> Status {
+    guarded("key_set_hint_pane", || unsafe {
+        let (Some(key_state), Some(path)) = (key_ref(key), path.as_str()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        let Some(page) = keys::page_of(key_state) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        keys::set_hint_pane(page, key_state, path)
     })
 }

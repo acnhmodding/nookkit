@@ -6,3 +6,4 @@ fn	game::UISys::Sequence::create
 fn	game::UI::SequenceBase::onActivate
 fn	game::UI::SequenceBase::onDeactivated
 fn	game::UI::SequenceBase::update
+fn	game::UI::KeyGuideSeq::fillGuides

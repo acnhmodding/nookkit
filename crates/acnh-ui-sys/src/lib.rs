@@ -123,6 +123,25 @@ pub struct ItemUpdate {
 
 pub const NO_LINE: u32 = u32::MAX;
 
+pub const KEY_TRIGGER: u32 = 0;
+pub const KEY_RELEASE: u32 = 1;
+pub const KEY_CANCEL: u32 = 2;
+pub const KEY_REPEAT: u32 = 3;
+pub const KEY_HOLD: u32 = 4;
+pub const KEY_EVENT_KINDS: usize = 5;
+
+/// Takes the key from the page's own handlers
+pub const KEY_FLAG_CONSUME: u32 = 1 << 0;
+
+#[repr(C)]
+pub struct KeyEvent {
+    pub kind: u32,
+    pub player: u32,
+
+    /// ButtonId
+    pub key: i32,
+}
+
 pub const SYMBOL_FN: u32 = 0;
 pub const SYMBOL_VTABLE: u32 = 1;
 
@@ -202,4 +221,27 @@ pub struct AcnhUiV1 {
     pub list_slot_count: unsafe extern "C" fn(list: *mut c_void, out: *mut u32) -> Status,
     pub list_button:
         unsafe extern "C" fn(list: *mut c_void, slot: u32, out: *mut *mut c_void) -> Status,
+
+    /// One binding per page, player and key; binding again returns it. Dropped when the page is
+    /// built again
+    pub key_bind: unsafe extern "C" fn(
+        page: *mut c_void,
+        player: u32,
+        key: i32,
+        flags: u32,
+        out: *mut *mut c_void,
+    ) -> Status,
+
+    /// `cb` gets a `*const KeyEvent`
+    pub key_on: unsafe extern "C" fn(key: *mut c_void, kind: u32, cb: Callback) -> Status,
+
+    pub key_set_enabled: unsafe extern "C" fn(key: *mut c_void, enable: bool) -> Status,
+
+    /// Shows the key in the key-guide bar with literal `text`, or a `label` from
+    /// LayoutMsg/KeyGuide.msbt when `text` is empty; both empty removes it. Takes effect at the
+    /// page's next guide refresh
+    pub key_set_guide: unsafe extern "C" fn(key: *mut c_void, text: Str, label: Str) -> Status,
+
+    /// A pane in the page's layout shown while the binding is enabled, empty for none
+    pub key_set_hint_pane: unsafe extern "C" fn(key: *mut c_void, path: Str) -> Status,
 }

@@ -22,6 +22,7 @@ acnh_sym::hook! {
     pub sequence_on_activate = "game::UI::SequenceBase::onActivate";
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
+        unsafe { set_active(seq, true) };
         unsafe { fire(seq, SEQ_ACTIVATE) };
     }
 }
@@ -34,6 +35,8 @@ acnh_sym::hook! {
         for list in unsafe { lists_of(seq) } {
             list.set_active(false);
         }
+
+        unsafe { set_active(seq, false) };
 
         unsafe { fire(seq, SEQ_DEACTIVATED) };
     }
@@ -49,6 +52,16 @@ acnh_sym::hook! {
 
 unsafe fn page_of(seq: *mut SequenceBase) -> *mut ViewPage {
     unsafe { seq.as_ref() }.map_or(core::ptr::null_mut(), |seq| unsafe { seq.page() })
+}
+
+unsafe fn set_active(seq: *mut SequenceBase, active: bool) {
+    let page = unsafe { page_of(seq) } as usize;
+
+    if let Ok(mut pages) = PAGES.lock()
+        && let Some(state) = pages.get_mut(&page)
+    {
+        state.active = active;
+    }
 }
 
 unsafe fn lists_of(seq: *mut SequenceBase) -> Vec<&'static crate::lists::ListState> {

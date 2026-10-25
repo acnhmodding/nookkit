@@ -1,3 +1,4 @@
+mod keys;
 mod lists;
 mod pages;
 mod seqs;
@@ -54,7 +55,9 @@ fn start() -> Result<(), acnh_sym::SymError> {
     seqs::sequence_create::install()?;
     seqs::sequence_on_activate::install()?;
     seqs::sequence_on_deactivated::install()?;
-    seqs::sequence_update::install()
+    seqs::sequence_update::install()?;
+    keys::key_guide_add::install()?;
+    keys::key_guide_fill::install()
 }
 
 #[skyline::main(name = "acnh-ui")]

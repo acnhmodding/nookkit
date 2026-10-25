@@ -9,6 +9,7 @@ use acnh_game::native::NativeResult;
 use acnh_game::sead::{Delegate, VftDelegate};
 use acnh_ui_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
 
+use crate::keys::KeyState;
 use crate::lists::ListState;
 use crate::report;
 
@@ -36,6 +37,13 @@ pub struct PageState {
 
     pub seq: [Vec<Callback>; SEQ_EVENT_KINDS],
     pub lists: Vec<&'static ListState>,
+
+    // Boxed so the key handlers in the page's input root keep pointing at them
+    #[allow(clippy::vec_box)]
+    pub keys: Vec<Box<KeyState>>,
+
+    /// Its seq is active, so its key guides belong in the bar
+    pub active: bool,
 }
 
 pub static PAGES: Mutex<BTreeMap<usize, PageState>> = Mutex::new(BTreeMap::new());
