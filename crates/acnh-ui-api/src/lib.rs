@@ -6,6 +6,7 @@
 )]
 
 mod callback;
+mod key;
 mod list;
 mod offsets;
 mod page;
@@ -19,6 +20,7 @@ use acnh_ui_sys::{
 
 pub use acnh_game as game;
 pub use acnh_ui_sys::Direction;
+pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
 pub use offsets::{__hook_function, module_base};
 pub use page::{Event, Page, Pane, PaneRef, Seq};

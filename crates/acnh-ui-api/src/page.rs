@@ -5,7 +5,7 @@ use acnh_ui_sys::{
     SEQ_UPDATE, Str,
 };
 
-use crate::{List, ListTarget, Result, Ui, callback, check};
+use crate::{Key, KeyBuilder, List, ListTarget, Result, Ui, callback, check};
 
 pub trait PaneRef {
     fn path(&self) -> &str;
@@ -43,7 +43,7 @@ impl Page {
         self.find(path.path(), "")
     }
 
-    /// `class` must be a `[type_info]` entry of the symbol file
+    /// `class` needs its `<class>::getRuntimeTypeInfo` in the framework's symbol file
     pub fn pane_as(&self, path: impl PaneRef, class: &str) -> Result<Pane> {
         self.find(path.path(), class)
     }
@@ -85,6 +85,11 @@ impl Page {
         check(unsafe { (self.ui.table.list_get)(self.raw, Str::new(path.path()), &mut raw) })?;
 
         Ok(List::new(*self, raw))
+    }
+
+    /// Binds `key` on this page, see [`KeyBuilder`]
+    pub fn bind_key(&self, key: Key) -> KeyBuilder {
+        KeyBuilder::new(*self, key)
     }
 
     /// After the page's seq has set up its controls
