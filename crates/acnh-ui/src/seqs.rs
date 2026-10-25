@@ -1,6 +1,7 @@
 use core::ffi::c_void;
 
 use acnh_game::game::ui::{SequenceBase, ViewPage};
+use acnh_game::game::ui_sys::Sequence;
 use acnh_ui_sys::{
     Callback, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_EVENT_KINDS, SEQ_READY, SEQ_UPDATE, Status,
 };
@@ -10,9 +11,9 @@ use crate::report;
 
 acnh_sym::hook! {
     pub sequence_create = "game::UISys::Sequence::create";
-    fn(seq: *mut SequenceBase, arg: *mut c_void) {
+    fn(seq: *mut Sequence, arg: *mut c_void) {
         unsafe { original(seq, arg) };
-        unsafe { ready(seq) };
+        unsafe { ready(seq.cast()) };
     }
 }
 
@@ -47,7 +48,7 @@ acnh_sym::hook! {
 }
 
 unsafe fn page_of(seq: *mut SequenceBase) -> *mut ViewPage {
-    unsafe { seq.as_ref() }.map_or(core::ptr::null_mut(), |seq| seq.page)
+    unsafe { seq.as_ref() }.map_or(core::ptr::null_mut(), |seq| unsafe { seq.page() })
 }
 
 unsafe fn lists_of(seq: *mut SequenceBase) -> Vec<&'static crate::lists::ListState> {

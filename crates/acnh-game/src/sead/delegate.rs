@@ -7,14 +7,17 @@ use crate::sead::{Heap, VftHeap};
 
 #[vtable(path = sead::delegate::VftDelegate)]
 pub unsafe trait VftDelegate {
-    #[vtable(offset = 0x10)]
+    // Takes whatever arguments the delegate's owner invokes it with
+    #[vtable(raw_this)]
+    unsafe fn invoke(this: *mut Self);
+
+    unsafe fn clone(&self, heap: *mut Heap) -> *mut Self;
     unsafe fn is_bound(&self) -> bool;
 }
 
 const _: () = assert!(VftDelegateLayout::OFFSET_IS_BOUND == 0x10);
 
 #[repr(C)]
-#[derive(Clone, Copy)]
 pub struct Delegate {
     pub vtable: *const VftDelegateLayout,
     pub object: *mut c_void,
@@ -77,7 +80,7 @@ unsafe extern "C" fn clone(this: *const Delegate, heap: *mut Heap) -> *mut Deleg
         .cast::<Delegate>();
 
         if !memory.is_null() {
-            memory.write(*this);
+            memory.write(core::ptr::read(this));
         }
 
         memory
@@ -92,6 +95,15 @@ unsafe extern "C" fn is_bound(this: *const Delegate) -> bool {
 }
 
 impl Delegate {
+    pub const fn empty() -> Self {
+        Self {
+            vtable: core::ptr::null(),
+            object: core::ptr::null_mut(),
+            method: 0,
+            method_adj: 0,
+        }
+    }
+
     pub fn new<T>(vtable: *const VftDelegateLayout, object: *mut T, method: usize) -> Self {
         Self {
             vtable,

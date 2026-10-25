@@ -5,7 +5,7 @@ use std::ffi::CString;
 use acnh_game::game::player_control_lock::{lock_menu, release_menu};
 use acnh_game::game::ui::ViewPage;
 use acnh_game::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
-use acnh_game::native::{Error, NativeResult, type_info};
+use acnh_game::native::{Error, NativeResult, type_info_named};
 use acnh_sym::SymError;
 use acnh_ui_sys::{AcnhUiV1, Callback, Direction, ListTarget, Status, Str};
 
@@ -99,7 +99,7 @@ unsafe extern "C" fn find_pane(
             return Ok(Status::PaneNotFound);
         };
 
-        if !class.is_empty() && !pane.is_derived(type_info(class)?) {
+        if !class.is_empty() && !pane.is_derived(type_info_named(class)?) {
             return Ok(Status::TypeMismatch);
         }
 
@@ -117,24 +117,24 @@ unsafe extern "C" fn on_control_event(page: *mut c_void, kind: u32, cb: Callback
 
 unsafe extern "C" fn link(from: *mut c_void, direction: Direction, to: *mut c_void) -> Status {
     guarded("link", || unsafe {
-        let Some(from) = BtnPartsCtrl::cast(from.cast())? else {
+        let Some(from) = Control::cast_ptr::<BtnPartsCtrl>(from.cast())? else {
             return Ok(Status::TypeMismatch);
         };
 
         let target = if to.is_null() {
-            core::ptr::null_mut()
+            None
         } else {
-            match BtnPartsCtrl::cast(to.cast())? {
-                Some(to) => to.focus_node,
+            match Control::cast_ptr::<BtnPartsCtrl>(to.cast())? {
+                Some(to) => Some(&*to),
                 None => return Ok(Status::TypeMismatch),
             }
         };
 
-        let Some(node) = from.focus_node.as_mut() else {
+        if from.focus_node.is_null() {
             return Ok(Status::InvalidArg);
-        };
+        }
 
-        node.links[direction as usize] = target;
+        from.set_link(crate::nav(direction), target);
 
         Ok(Status::Ok)
     })
@@ -174,11 +174,11 @@ unsafe extern "C" fn release_player(player: u8) -> Status {
 
 unsafe extern "C" fn set_visible(pane: *mut c_void, visible: bool) -> Status {
     guarded("set_visible", || unsafe {
-        let Some(parts) = PartsCtrl::cast(pane.cast())? else {
+        let Some(parts) = Control::cast_ptr::<PartsCtrl>(pane.cast())? else {
             return Ok(Status::TypeMismatch);
         };
 
-        let Some(pane) = parts.pane.as_mut() else {
+        let Some(pane) = parts.pane() else {
             return Ok(Status::InvalidArg);
         };
 

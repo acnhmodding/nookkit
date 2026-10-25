@@ -4,10 +4,10 @@ use core::ptr::null_mut;
 use std::ffi::CString;
 
 use acnh_game::game::ui::{
-    ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, VftListBtnGroup, ViewPage,
+    AppUniteBtnCtrl, ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, VftListBtnGroup, ViewPage,
 };
-use acnh_game::lp::ui::scroll_btn_list::{Content, Enable};
-use acnh_game::lp::ui::{BtnPartsCtrl, Control, LeaveDirection, LeaveEvent, ScrollBtnListCtrl};
+use acnh_game::game::ui_sys::{Content, Enable, LeaveDirection, LeaveEvent, ScrollBtnListCtrl};
+use acnh_game::lp::ui::{BtnPartsCtrl, Control};
 use acnh_game::native::NativeResult;
 use acnh_game::sead::Delegate;
 use acnh_ui_sys::{
@@ -182,9 +182,8 @@ impl ListState {
                     continue;
                 };
 
-                if let (Some(node), false) = (from.focus_node.as_mut(), target.focus_node.is_null())
-                {
-                    node.links[link.direction as usize] = target.focus_node;
+                if !target.focus_node.is_null() {
+                    from.set_link(crate::nav(link.direction), Some(target));
                 }
             }
         }
@@ -201,10 +200,11 @@ impl ListState {
                 continue;
             };
 
-            let item = unsafe { list.item_index_of(button.as_control())? };
+            let control = (button as *mut AppUniteBtnCtrl).cast::<Control>();
+            let item = unsafe { list.item_index_of(control)? };
 
             if item >= 0 && item < list.padded_item_count && visible.contains(&(item / line_size)) {
-                unsafe { (*button.as_control()).set_focusable(list.player, true)? };
+                unsafe { (*control).set_focusable(list.player, true)? };
             }
         }
 
@@ -371,7 +371,7 @@ pub unsafe fn get(
         return Ok(Err(Status::PaneNotFound));
     }
 
-    let Some(list) = (unsafe { ScrollBtnListCtrl::cast(control)? }) else {
+    let Some(list) = (unsafe { Control::cast_ptr::<ScrollBtnListCtrl>(control)? }) else {
         return Ok(Err(Status::TypeMismatch));
     };
 
@@ -438,7 +438,7 @@ pub unsafe fn link_into(
     list: &ListState,
     target: ListTarget,
 ) -> NativeResult<Status> {
-    let Some(from) = (unsafe { BtnPartsCtrl::cast(from.cast())? }) else {
+    let Some(from) = (unsafe { Control::cast_ptr::<BtnPartsCtrl>(from.cast())? }) else {
         return Ok(Status::TypeMismatch);
     };
 

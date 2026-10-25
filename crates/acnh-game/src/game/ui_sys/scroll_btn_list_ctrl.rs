@@ -2,42 +2,58 @@ use core::ffi::c_void;
 use core::mem::offset_of;
 use core::ptr::null_mut;
 
-use crate::game::ui::AppUniteBtnCtrl;
-use crate::lp::ui::{Control, VftControlLayout};
-use crate::lp::utl::StateMachine;
-use native_vtable::native;
+use native_vtable::{VTableLayout, native, vtable, vtable_impl};
 
-use crate::native::{NativeResult, type_info, vtable};
+use crate::game::ui::AppUniteBtnCtrl;
+use crate::lp::ui::{Control, PartsCtrl, VftPartsCtrl};
+use crate::lp::utl::StateMachine;
+use crate::native::{Class, NativeResult, type_info_named, vtable};
 use crate::sead::Delegate;
 
-pub const STATE_PLAY: u32 = 2;
-pub const STATE_PAUSE: u32 = 3;
+pub const STATE_PLAY: i32 = 2;
+pub const STATE_PAUSE: i32 = 3;
 const PAUSE_KEEP_BUTTONS: i32 = 2;
 
+#[vtable(path = game::ui_sys::scroll_btn_list_ctrl::VftScrollBtnListCtrl)]
+pub unsafe trait VftScrollBtnListCtrl: VftPartsCtrl {
+    unsafe fn register_child(&mut self, child: *mut Control);
+    unsafe fn on_attach(&mut self, params: *const AttachParams);
+    unsafe fn on_set_content(&mut self, params: *const SetContentParams);
+    unsafe fn vf_108(&mut self);
+    unsafe fn on_slot_focus(&mut self, slot: *mut u32);
+    unsafe fn unfocus_slot(&mut self, slot: u32);
+    unsafe fn on_scroll(&mut self, from: i32, to: i32);
+    unsafe fn vf_128(&mut self);
+    unsafe fn vf_130(&mut self);
+    unsafe fn vf_138(&mut self);
+}
+
 #[repr(C)]
-pub struct InputClaim {
+pub struct PointerHandler {
     _unk_0: [u8; 0x14],
     pub unk_14: i32,
 }
 
 #[repr(C)]
 pub struct ScrollBtnListCtrl {
-    pub vtable: *const VftControlLayout,
-    _unk_8: [u8; 0x200],
+    pub base: PartsCtrl,
+    pub scroll_bar: *mut c_void,
     pub button_count: i32,
     _unk_20c: [u8; 0x4],
     pub buttons: *mut *mut AppUniteBtnCtrl,
     _unk_218: [u8; 0x58],
-    pub unk_270: *mut [*mut c_void; 2],
-    _unk_278: [u8; 0x18],
+    pub slide_area: *mut [*mut c_void; 2],
+    pub next_scroll_sign: *mut c_void,
+    pub prev_scroll_sign: *mut c_void,
+    _unk_288: [u8; 0x8],
 
-    /// 2 = cPlay (handles the D-pad), 3 = cPause
+    /// [`STATE_PLAY`] handles the D-pad
     pub state_machine: StateMachine,
 
     pub focus_manager: *mut c_void,
     pub player: u32,
 
-    /// Button mode under cPause, 2 keeps them focusable
+    /// Button mode under [`STATE_PAUSE`], 2 keeps them focusable
     pub pause_button_mode: i32,
 
     pub line_size: i32,
@@ -47,33 +63,37 @@ pub struct ScrollBtnListCtrl {
     _unk_2fc: [u8; 0x34],
     pub scroll_delegate: Delegate,
 
-    // Called when the D-pad leaves the list, writes the target control
+    /// Called when the D-pad leaves the list, writes the target control
     pub leave_delegate: Delegate,
 
     _unk_370: [u8; 0x5c],
     pub item_count: i32,
     _unk_3d0: [u8; 0x4],
     pub padded_item_count: i32,
-    pub unk_3d8: i32,
+    pub scroll_range: i32,
     _unk_3dc: [u8; 0x54],
 
     /// Ring buffer: visible line C is button line `first_button_line + C` and item line `first_line + C`
     pub first_line: i32,
 
-    _unk_434: [u8; 0x4],
+    pub line_count: i32,
     pub first_button_line: i32,
 
     /// -1 for none
     pub focused_slot: i32,
 
-    _unk_440: [u8; 0x40],
-    pub input_claim: *mut InputClaim,
+    _unk_440: [u8; 0x10],
+    pub anim_450: *mut c_void,
+    _unk_458: [u8; 0x28],
+    pub pointer_handler: *mut PointerHandler,
+    _unk_488: [u8; 0x70],
 }
 
 const _: () = {
+    assert!(offset_of!(ScrollBtnListCtrl, scroll_bar) == 0x200);
     assert!(offset_of!(ScrollBtnListCtrl, button_count) == 0x208);
     assert!(offset_of!(ScrollBtnListCtrl, buttons) == 0x210);
-    assert!(offset_of!(ScrollBtnListCtrl, unk_270) == 0x270);
+    assert!(offset_of!(ScrollBtnListCtrl, slide_area) == 0x270);
     assert!(offset_of!(ScrollBtnListCtrl, state_machine) == 0x290);
     assert!(offset_of!(ScrollBtnListCtrl, focus_manager) == 0x2d8);
     assert!(offset_of!(ScrollBtnListCtrl, player) == 0x2e0);
@@ -85,12 +105,24 @@ const _: () = {
     assert!(offset_of!(ScrollBtnListCtrl, leave_delegate) == 0x350);
     assert!(offset_of!(ScrollBtnListCtrl, item_count) == 0x3cc);
     assert!(offset_of!(ScrollBtnListCtrl, padded_item_count) == 0x3d4);
-    assert!(offset_of!(ScrollBtnListCtrl, unk_3d8) == 0x3d8);
+    assert!(offset_of!(ScrollBtnListCtrl, scroll_range) == 0x3d8);
     assert!(offset_of!(ScrollBtnListCtrl, first_line) == 0x430);
     assert!(offset_of!(ScrollBtnListCtrl, first_button_line) == 0x438);
     assert!(offset_of!(ScrollBtnListCtrl, focused_slot) == 0x43c);
-    assert!(offset_of!(ScrollBtnListCtrl, input_claim) == 0x480);
+    assert!(offset_of!(ScrollBtnListCtrl, anim_450) == 0x450);
+    assert!(offset_of!(ScrollBtnListCtrl, pointer_handler) == 0x480);
+    assert!(core::mem::size_of::<ScrollBtnListCtrl>() == 0x4f8);
+    assert!(VftScrollBtnListCtrlLayout::SLOT_COUNT == 40);
 };
+
+crate::derive_base!(ScrollBtnListCtrl => PartsCtrl);
+
+#[vtable_impl]
+unsafe impl VftScrollBtnListCtrl for ScrollBtnListCtrl {}
+
+unsafe impl Class for ScrollBtnListCtrl {
+    const RUNTIME_TYPE_INFO: &'static str = "game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo";
+}
 
 #[derive(Clone, Copy)]
 pub struct Content {
@@ -104,16 +136,16 @@ pub struct Content {
 }
 
 #[repr(C)]
-struct SetContentParams {
-    vtable: *const c_void,
-    item_count: i32,
-    scroll_item: i32,
-    focus_item: i32,
-    flags: [u8; 0xc],
-    unk_20: i32,
-    unk_24: i32,
-    unk_28: i32,
-    player: u8,
+pub struct SetContentParams {
+    pub vtable: *const c_void,
+    pub item_count: i32,
+    pub scroll_item: i32,
+    pub focus_item: i32,
+    pub flags: [u8; 0xc],
+    pub unk_20: i32,
+    pub unk_24: i32,
+    pub unk_28: i32,
+    pub player: u8,
     _pad_2d: [u8; 0x3],
 }
 
@@ -129,25 +161,28 @@ pub struct Enable {
 }
 
 #[repr(C)]
-struct EnableParams {
-    vtable: *const c_void,
-    update_cursor_button: bool,
-    cursor_button_arg0: u8,
-    cursor_button_arg1: u8,
-    focus_cursor: bool,
-    cursor_item: i32,
+pub struct EnableParams {
+    pub vtable: *const c_void,
+    pub update_cursor_button: bool,
+    pub cursor_button_arg0: u8,
+    pub cursor_button_arg1: u8,
+    pub focus_cursor: bool,
+    pub cursor_item: i32,
 }
 
 const _: () = assert!(core::mem::size_of::<EnableParams>() == 0x10);
 
 #[repr(C)]
-struct AttachParams {
-    page: *mut c_void,
-    player: u32,
+pub struct AttachParams {
+    pub page: *mut c_void,
+    pub player: u32,
     _pad_c: u32,
-    root: *mut Control,
-    unk_18: i32,
-    unk_1c: i32,
+    pub root: *mut Control,
+
+    /// Extra key IDs, -1 for none
+    pub key_18: i32,
+
+    pub key_1c: i32,
 }
 
 const _: () = assert!(core::mem::size_of::<AttachParams>() == 0x20);
@@ -175,55 +210,41 @@ impl LeaveEvent {
 
 #[native(resolve = crate::native::resolve)]
 impl ScrollBtnListCtrl {
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::bindButtons")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::bindButtons")]
     pub unsafe fn bind_buttons(&mut self, builder: *mut c_void);
 
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::attach")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::attach")]
     unsafe fn attach_native(&mut self, params: *const AttachParams);
 
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::setContent")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::setContent")]
     unsafe fn set_content_native(&mut self, params: *const SetContentParams);
 
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::enable")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::enable")]
     unsafe fn enable_native(&mut self, params: *const EnableParams);
 
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::disable")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::disable")]
     pub unsafe fn disable(&mut self, mode: u32);
 
-    #[native(symbol = "game::UI::ScrollBtnListCtrl::itemIndexOf")]
+    #[native(symbol = "game::UISys::ScrollBtnListCtrl::itemIndexOf")]
     pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32;
 }
 
 impl ScrollBtnListCtrl {
-    pub unsafe fn cast(control: *mut Control) -> NativeResult<Option<&'static mut Self>> {
-        unsafe {
-            let Some(control) = control.as_mut() else {
-                return Ok(None);
-            };
-
-            let list_type = type_info("game::UI::ScrollBtnListCtrl")?;
-
-            Ok(control
-                .is_derived(list_type)
-                .then(|| &mut *(control as *mut Control).cast::<Self>()))
-        }
-    }
-
     pub unsafe fn attach(
         &mut self,
         page: *mut c_void,
         root: *mut Control,
         player: u32,
     ) -> NativeResult {
-        let root_type = type_info("game::UI::AppBodyCtrl")?;
+        let root_type = type_info_named("game::UI::AppBodyCtrl")?;
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
         let params = AttachParams {
             page,
             player,
             _pad_c: 0,
             root: if is_root { root } else { null_mut() },
-            unk_18: -1,
-            unk_1c: -1,
+            key_18: -1,
+            key_1c: -1,
         };
 
         unsafe { self.attach_native(&params) }.map_err(Into::into)
@@ -231,7 +252,7 @@ impl ScrollBtnListCtrl {
 
     pub unsafe fn set_content(&mut self, content: &Content, player: u8) -> NativeResult {
         let params = SetContentParams {
-            vtable: vtable("game::UI::ScrollBtnListCtrl::SetContentParams::vtable")?,
+            vtable: vtable("game::UISys::ScrollBtnListCtrl::SetContentParams::vtable")?,
             item_count: content.item_count,
             scroll_item: content.scroll_item,
             focus_item: content.focus_item,
@@ -248,7 +269,7 @@ impl ScrollBtnListCtrl {
 
     pub unsafe fn enable(&mut self, enable: &Enable) -> NativeResult {
         let params = EnableParams {
-            vtable: vtable("game::UI::ScrollBtnListCtrl::EnableParams::vtable")?,
+            vtable: vtable("game::UISys::ScrollBtnListCtrl::EnableParams::vtable")?,
             update_cursor_button: enable.update_cursor_button,
             cursor_button_arg0: enable.cursor_button_arg0,
             cursor_button_arg1: enable.cursor_button_arg1,
@@ -268,15 +289,15 @@ impl ScrollBtnListCtrl {
             self.slot_count != 0
                 && self.button_count != 0
                 && self
-                    .unk_270
+                    .slide_area
                     .as_ref()
                     .is_some_and(|slots| !slots[1].is_null())
                 && self
-                    .input_claim
+                    .pointer_handler
                     .as_ref()
-                    .is_none_or(|claim| claim.unk_14 != -1)
+                    .is_none_or(|handler| handler.unk_14 != -1)
                 && !self.focus_manager.is_null()
-                && self.unk_3d8 > 0
+                && self.scroll_range > 0
                 && self.padded_item_count != 0
         }
     }

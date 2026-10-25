@@ -2,14 +2,15 @@ use core::mem::offset_of;
 
 use native_vtable::native;
 
+use crate::game::ui::AppUniteBtnCtrl;
 use crate::game::ui::chara_make::{FaceParams, IconTexturePool};
-use crate::game::ui::{AppUniteBtnCtrl, ChildList};
 use crate::native::NativeResult;
+use crate::sead::OffsetList;
 
 #[native(resolve = crate::native::resolve)]
 unsafe extern "C" {
     #[native(symbol = "CharaMake_findPlayerIcon")]
-    fn find_player_icon(children: *mut ChildList) -> *mut PlayerIcon;
+    fn find_player_icon(children: *mut OffsetList) -> *mut PlayerIcon;
 }
 
 #[repr(C)]
@@ -43,7 +44,7 @@ impl PlayerIcon {
         pool: *mut IconTexturePool,
     ) -> NativeResult<*mut PlayerIcon> {
         unsafe {
-            let Some(icon) = find_player_icon(&mut button.children)?.as_mut() else {
+            let Some(icon) = find_player_icon(&mut button.child_list)?.as_mut() else {
                 return Ok(core::ptr::null_mut());
             };
 

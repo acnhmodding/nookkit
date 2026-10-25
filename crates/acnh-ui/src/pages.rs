@@ -2,8 +2,9 @@ use core::ffi::c_void;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use acnh_game::game::ui::{ControlEvent, ViewPage};
-use acnh_game::lp::ui::{Control, ScrollBtnListCtrl};
+use acnh_game::game::ui::{ControlEvent, LayoutBuiltEvent, ViewPage};
+use acnh_game::game::ui_sys::ScrollBtnListCtrl;
+use acnh_game::lp::ui::Control;
 use acnh_game::native::NativeResult;
 use acnh_game::sead::{Delegate, VftDelegate};
 use acnh_ui_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
@@ -69,15 +70,9 @@ acnh_sym::hook! {
     }
 }
 
-#[repr(C)]
-pub struct LayoutBuilt {
-    parent: *mut Control,
-    builder: *mut c_void,
-}
-
 acnh_sym::hook! {
     pub view_page_layout_built = "game::UI::ViewPage::dispatchLayoutBuilt";
-    fn(page: *mut ViewPage, event: *mut LayoutBuilt) {
+    fn(page: *mut ViewPage, event: *mut LayoutBuiltEvent) {
         unsafe { original(page, event) };
 
         if let Some(event) = unsafe { event.as_ref() } {
@@ -93,14 +88,11 @@ unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> Nat
             return Ok(());
         };
 
-        if let Some(list) = ScrollBtnListCtrl::cast(control)? {
+        if let Some(list) = control_ref.cast::<ScrollBtnListCtrl>()? {
             if list.button_count() == 0 {
                 list.bind_buttons(builder)?;
 
-                let name = control_ref
-                    .name()
-                    .and_then(|n| n.to_str().ok())
-                    .unwrap_or("?");
+                let name = list.name().and_then(|n| n.to_str().ok()).unwrap_or("?");
                 println!(
                     "[acnh-ui] bound list {name} ({} buttons)",
                     list.button_count()
@@ -213,7 +205,7 @@ pub unsafe fn on_control_event(
         return Ok(Status::InvalidArg);
     };
 
-    let Some(table) = (unsafe { page_ref.event_slots(kind) }) else {
+    let Some(table) = (unsafe { page_ref.control_events.kind(kind) }) else {
         return Ok(Status::NoEventTable);
     };
 

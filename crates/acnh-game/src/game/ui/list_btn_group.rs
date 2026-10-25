@@ -2,7 +2,7 @@ use core::ffi::c_void;
 
 use native_vtable::{native, vtable, vtable_impl};
 
-use crate::lp::ui::ScrollBtnListCtrl;
+use crate::game::ui_sys::ScrollBtnListCtrl;
 use crate::native::{NativeResult, vtable};
 use crate::sead::Delegate;
 
@@ -121,12 +121,7 @@ impl ItemUpdater {
         Self {
             count: 0,
             _pad_4: 0,
-            delegate: Delegate {
-                vtable: core::ptr::null(),
-                object: core::ptr::null_mut(),
-                method: 0,
-                method_adj: 0,
-            },
+            delegate: Delegate::empty(),
         }
     }
 
@@ -145,6 +140,6 @@ impl ItemUpdater {
 
 #[native(resolve = crate::native::resolve)]
 impl ItemUpdater {
-    #[native(symbol = "ListItemUpdater::update")]
+    #[native(symbol = "game::UI::ListItemUpdater::update")]
     unsafe fn update_native(&mut self, event: *const *mut c_void);
 }

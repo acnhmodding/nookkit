@@ -1,7 +1,9 @@
 use core::mem::offset_of;
 
+use acnh_game::game::ui::{PageBase, SequenceBase, VftPageBase, VftSequenceBase};
+use native_vtable::vtable_impl;
+
 use crate::game::ui::AppUniteBtnCtrl;
-use acnh_game::lp::ui::Control;
 use crate::sead::ObjArray;
 
 // The four old mouth buttons
@@ -18,9 +20,8 @@ pub struct IconTexturePool {
 
 #[repr(C)]
 pub struct CharaMakePage {
-    _unk_0: [u8; 0x3f8],
-    pub root: *mut *mut Control,
-    _unk_400: [u8; 0x198],
+    pub base: PageBase,
+    _unk_570: [u8; 0x28],
     pub nose_buttons: [*mut AppUniteBtnCtrl; 3],
     pub mouth_buttons: [*mut AppUniteBtnCtrl; 4],
     _unk_5d0: [u8; 0x38],
@@ -28,11 +29,15 @@ pub struct CharaMakePage {
 }
 
 const _: () = {
-    assert!(offset_of!(CharaMakePage, root) == 0x3f8);
     assert!(offset_of!(CharaMakePage, nose_buttons) == 0x598);
     assert!(offset_of!(CharaMakePage, mouth_buttons) == 0x5b0);
     assert!(offset_of!(CharaMakePage, ok_button) == 0x608);
 };
+
+acnh_game::derive_base!(CharaMakePage => PageBase);
+
+#[vtable_impl]
+unsafe impl VftPageBase for CharaMakePage {}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -72,9 +77,7 @@ impl Request {
 
 #[repr(C)]
 pub struct CharaMakeSeq {
-    _unk_0: [u8; 0x1f8],
-    pub player: u8,
-    _unk_1f9: [u8; 0x17],
+    pub base: SequenceBase,
     pub page: *mut CharaMakePage,
     _unk_218: [u8; 0xfc],
     pub face_params: FaceParams,
@@ -87,10 +90,14 @@ pub struct CharaMakeSeq {
 }
 
 const _: () = {
-    assert!(offset_of!(CharaMakeSeq, player) == 0x1f8);
     assert!(offset_of!(CharaMakeSeq, page) == 0x210);
     assert!(offset_of!(CharaMakeSeq, face_params) == 0x314);
     assert!(offset_of!(CharaMakeSeq, mouth_values) == 0xbc0);
     assert!(offset_of!(CharaMakeSeq, icon_texture_pool) == 0xff0);
     assert!(offset_of!(CharaMakeSeq, request) == 0x1cfcc);
 };
+
+acnh_game::derive_base!(CharaMakeSeq => SequenceBase);
+
+#[vtable_impl]
+unsafe impl VftSequenceBase for CharaMakeSeq {}

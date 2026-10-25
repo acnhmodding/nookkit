@@ -14,6 +14,18 @@ pub static __sl_framework: u8 = 0;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+fn nav(direction: acnh_ui_sys::Direction) -> acnh_game::lp::ui::NavDirection {
+    use acnh_game::lp::ui::NavDirection;
+    use acnh_ui_sys::Direction;
+
+    match direction {
+        Direction::Up => NavDirection::Up,
+        Direction::Down => NavDirection::Down,
+        Direction::Left => NavDirection::Left,
+        Direction::Right => NavDirection::Right,
+    }
+}
+
 fn report(context: &str, result: NativeResult) {
     if let Err(e) = result {
         println!("[acnh-ui] {context}: {e}");

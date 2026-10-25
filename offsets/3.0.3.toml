@@ -4,9 +4,12 @@ rodata_hash = 0xacfdd336a5d95bb0
 
 [fn]
 "CharaMake_findPlayerIcon" = 0x2baaf20
-"ListItemUpdater::update" = 0x335c380
+"Lp::UI::BtnPartsCtrl::getRuntimeTypeInfo" = 0x3c5e36c
 "Lp::UI::Control::findByPath" = 0x376e6b0
+"Lp::UI::Control::getRuntimeTypeInfo" = 0x3b5e36c
 "Lp::UI::Control::setFocusable" = 0x3c5d0e0
+"Lp::UI::PartsCtrl::getRuntimeTypeInfo" = 0x3c66d84
+"Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = 0x3c877b8
 "Lp::Utl::StateMachine::changeState" = 0x3dbb160
 "PlayerIcon_moveFrom" = 0x2fc3ff0
 "PlayerIcon_release" = 0x2fc4398
@@ -15,6 +18,9 @@ rodata_hash = 0xacfdd336a5d95bb0
 "PlayerIcon_tick" = 0x2fc47d8
 "game::PlayerControlLockMgr::acquire" = 0x971bb8
 "game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
+"game::UI::AppBodyCtrl::getRuntimeTypeInfo" = 0x2fb9964
+"game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo" = 0x2fbd914
+"game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo" = 0x2fc0fac
 "game::UI::CharaMakeSeq::enterIdle" = 0x2ba10e0
 "game::UI::CharaMakeSeq::fillMouthList" = 0x2b8fe60
 "game::UI::CharaMakeSeq::processRequest" = 0x2ba4a00
@@ -22,18 +28,24 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::CharaMakeSeq::setGroupEnabled" = 0x2ba7fe0
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
 "game::UI::ListBtnGroup::refresh" = 0x2ac30b0
-"game::UI::ScrollBtnListCtrl::attach" = 0x3763fe0
-"game::UI::ScrollBtnListCtrl::bindButtons" = 0x2ab1110
-"game::UI::ScrollBtnListCtrl::disable" = 0x335b550
-"game::UI::ScrollBtnListCtrl::enable" = 0x3764fe0
-"game::UI::ScrollBtnListCtrl::itemIndexOf" = 0x3765200
-"game::UI::ScrollBtnListCtrl::setContent" = 0x3764290
+"game::UI::ListItemUpdater::update" = 0x335c380
+"game::UI::PageBase::getRuntimeTypeInfo" = 0x2af1844
+"game::UI::SequenceBase::getRuntimeTypeInfo" = 0x2b0d088
 "game::UI::SequenceBase::onActivate" = 0x2b0c4c8
 "game::UI::SequenceBase::onDeactivated" = 0x2b0c534
 "game::UI::SequenceBase::update" = 0x2b0c720
 "game::UI::ViewPage::dispatchLayoutBuilt" = 0x375b544
+"game::UI::ViewPage::getRuntimeTypeInfo" = 0x375b6f0
 "game::UI::ViewPage::initialize" = 0x3759dd0
+"game::UISys::ScrollBtnListCtrl::attach" = 0x3763fe0
+"game::UISys::ScrollBtnListCtrl::bindButtons" = 0x2ab1110
+"game::UISys::ScrollBtnListCtrl::disable" = 0x335b550
+"game::UISys::ScrollBtnListCtrl::enable" = 0x3764fe0
+"game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo" = 0x37661e4
+"game::UISys::ScrollBtnListCtrl::itemIndexOf" = 0x3765200
+"game::UISys::ScrollBtnListCtrl::setContent" = 0x3764290
 "game::UISys::Sequence::create" = 0x376890c
+"game::UISys::Sequence::getRuntimeTypeInfo" = 0x3769f70
 "operator_new" = 0x37aa260
 
 [data]
@@ -41,18 +53,6 @@ rodata_hash = 0xacfdd336a5d95bb0
 "ACNH_Singleton_7104CA4AB8::sInstance" = 0x4ca4ab8
 "game::UI::ListBtnGroup::SelectableDelegate::vtable" = 0x4a29758
 "game::UI::ListBtnGroup::vtable" = 0x49aaf10
-"game::UI::ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
-"game::UI::ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
+"game::UISys::ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
+"game::UISys::ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
-
-[type_info]
-"Lp::UI::BtnPartsCtrl" = 0x55431f8
-"Lp::UI::PartsCtrl" = 0x5543208
-"game::UI::AppBodyCtrl" = 0x5543dd0
-"game::UI::ScrollBtnListCtrl" = 0x5543148
-
-[type_info_guard]
-"Lp::UI::BtnPartsCtrl" = 0x5543200
-"Lp::UI::PartsCtrl" = 0x5543210
-"game::UI::AppBodyCtrl" = 0x5543dd8
-"game::UI::ScrollBtnListCtrl" = 0x5543150
