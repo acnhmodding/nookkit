@@ -12,7 +12,6 @@ pub unsafe trait VftTable: VftBcsv {
     unsafe fn setup_rows(&mut self, name: *const SafeString<'static>, heap: *mut Heap);
 }
 
-/// An Itanium pointer to member function
 #[repr(C)]
 pub struct MemberFn {
     pub ptr: usize,

@@ -19,7 +19,6 @@ const _: () = {
     assert!(core::mem::size_of::<NameIndexEntry>() == 0x28);
 };
 
-/// Rows indexed by the hash of a name column
 #[repr(C)]
 pub struct NamedTable {
     pub base: Table,

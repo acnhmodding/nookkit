@@ -75,6 +75,7 @@ checksum = "1256a11d163c7288d94909f8120ede53294d8c233df314b0e4f01cf0269707da"
 [[package]]
 name = "native-vtable"
 version = "0.0.1"
+source = "git+https://github.com/crackheadakira/vtable-rs#b2760613773c9ca1b6f645fd4ec9525ce67b80b6"
 dependencies = [
  "native-vtable-macros",
  "thiserror",
@@ -83,6 +84,7 @@ dependencies = [
 [[package]]
 name = "native-vtable-macros"
 version = "0.0.1"
+source = "git+https://github.com/crackheadakira/vtable-rs#b2760613773c9ca1b6f645fd4ec9525ce67b80b6"
 dependencies = [
  "proc-macro2",
  "quote",

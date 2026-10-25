@@ -5,7 +5,6 @@ use native_vtable::vtable_impl;
 use crate::bcsv::{MemberFn, Table, VftTable};
 use crate::sead::Buffer;
 
-/// Rows indexed by a u16 key column
 #[repr(C)]
 pub struct KeyedTable {
     pub base: Table,
