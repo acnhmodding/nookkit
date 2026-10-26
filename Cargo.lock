@@ -12,15 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "acnh-mouth"
-version = "0.1.0"
-dependencies = [
- "acnh-ui-api",
- "native-vtable",
- "skyline",
-]
-
-[[package]]
 name = "acnh-sym"
 version = "0.1.0"
 dependencies = [
@@ -46,14 +37,6 @@ dependencies = [
  "acnh-ui-sys",
  "skyline",
  "thiserror",
-]
-
-[[package]]
-name = "acnh-ui-smoke"
-version = "0.1.0"
-dependencies = [
- "acnh-ui-api",
- "skyline",
 ]
 
 [[package]]
