@@ -20,7 +20,7 @@ use nookkit_types::native::SymbolKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
-pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, kind, layouts, pages};
+pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, RelPath, kind, layouts, pages};
 pub use nookkit_sys::Direction;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;

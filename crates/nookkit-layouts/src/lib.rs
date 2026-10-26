@@ -92,12 +92,61 @@ impl<K> PanePath<K> {
     }
 
     /// A parts pane inside this one, e.g. `page_pane.then(layouts::LBtnList::L_BTN_00)`
-    pub fn then<K2>(&self, child: PanePath<K2>) -> PanePath<K2> {
+    pub fn then<K2>(&self, child: RelPath<K2>) -> PanePath<K2> {
         PanePath {
-            path: Cow::Owned(format!("{}/{}", self.path, child.path)),
+            path: Cow::Owned(format!("{}/{}", self.path, child.name)),
             layout: child.layout,
             kind: PhantomData,
         }
+    }
+}
+
+/// A parts pane inside a part layout, only usable through [`PanePath::then`] since the same part layout
+/// appears at many places
+///
+/// ```compile_fail
+/// fn pane(_: impl nookkit_layouts::PaneRef) {}
+///
+/// pane(nookkit_layouts::layouts::CharaMake::L_BTN_OK_00);
+/// ```
+pub struct RelPath<K> {
+    name: &'static str,
+    layout: &'static str,
+    kind: PhantomData<K>,
+}
+
+impl<K> RelPath<K> {
+    #[doc(hidden)]
+    pub const fn new(name: &'static str, layout: &'static str) -> Self {
+        Self {
+            name,
+            layout,
+            kind: PhantomData,
+        }
+    }
+
+    /// The pane's name within its part layout
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// The part layout this pane instantiates
+    pub fn layout(&self) -> &'static str {
+        self.layout
+    }
+}
+
+impl<K> Clone for RelPath<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for RelPath<K> {}
+
+impl<K> core::fmt::Debug for RelPath<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("RelPath").field(&self.name).finish()
     }
 }
 
@@ -117,7 +166,7 @@ impl<K> core::fmt::Debug for PanePath<K> {
     }
 }
 
-/// One zero-sized struct per layout, holding its parts panes as paths relative to that layout
+/// One zero-sized struct per layout, holding its parts panes as [`RelPath`]s for [`PanePath::then`]
 #[allow(non_camel_case_types)]
 pub mod layouts {
     include!(concat!(env!("OUT_DIR"), "/layouts.rs"));

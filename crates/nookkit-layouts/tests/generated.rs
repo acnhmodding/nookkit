@@ -19,7 +19,10 @@ fn chara_make_page() {
 
 #[test]
 fn nested_paths_join_with_slash() {
-    let first = pages::CharaMake::L_BTN_LIST_EYE_00.then(layouts::LBtnListCharaMakeEye::L_BTN_00);
+    let inner = layouts::LBtnListCharaMakeEye::L_BTN_00;
+    assert_eq!(inner.name(), "L_Btn_00");
+
+    let first = pages::CharaMake::L_BTN_LIST_EYE_00.then(inner);
     is_button(&first);
     assert_eq!(first.path(), "/L_BtnListEye_00/L_Btn_00");
     assert_eq!(first.layout(), "LCharaMakeEyeBtn");

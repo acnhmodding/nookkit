@@ -121,10 +121,10 @@ fn consts(
         }
 
         let control = all.get(part).map_or("", |l| l.control.as_str());
-        let path = if root {
-            format!("/{pane}")
+        let (ty, path) = if root {
+            ("PanePath", format!("/{pane}"))
         } else {
-            pane.clone()
+            ("RelPath", pane.clone())
         };
         let doc = if control.is_empty() {
             format!("Part layout `{part}`")
@@ -134,7 +134,7 @@ fn consts(
         writeln!(out, "    /// {doc}").unwrap();
         writeln!(
             out,
-            "    pub const {name}: crate::PanePath<{}> = crate::PanePath::new({path:?}, {part:?});",
+            "    pub const {name}: crate::{ty}<{}> = crate::{ty}::new({path:?}, {part:?});",
             kind(control)
         )
         .unwrap();
