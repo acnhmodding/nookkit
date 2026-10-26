@@ -13,6 +13,8 @@ concurrency:
 
 env:
   CARGO_SKYLINE_VERSION: 3.5.0
+  # The nightly skyline-v3 is built on, which unlike skyline-v3 ships clippy
+  HOST_NIGHTLY: nightly-2026-02-14
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -23,8 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Only used to install cargo-skyline; the build itself runs on the skyline-v3 toolchain
-      - uses: dtolnay/rust-toolchain@stable
+      # Installs cargo-skyline, then lints and tests on the host
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.HOST_NIGHTLY }}
+          components: clippy
 
       - name: Cache cargo-skyline and the skyline toolchain
         id: skyline-cache
@@ -52,10 +57,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo "+$HOST_NIGHTLY" clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test -p nookkit-sym
+        run: cargo "+$HOST_NIGHTLY" test -p nookkit-sym
 
       - name: Build the plugin
         working-directory: crates/nookkit-core
