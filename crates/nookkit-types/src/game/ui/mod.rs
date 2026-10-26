@@ -7,6 +7,7 @@ pub mod list_btn_group;
 pub mod page_base;
 pub mod pocket_menu;
 pub mod sequence_base;
+pub mod storage;
 pub mod view_page;
 
 pub use app_locator_ctrl::AppLocatorCtrl;
@@ -21,6 +22,10 @@ pub use list_btn_group::{
     VftListBtnGroupLayout,
 };
 pub use page_base::{PageBase, VftPageBase, VftPageBaseLayout};
-pub use pocket_menu::{PocketOpenOptions, open_pocket_menu};
+pub use pocket_menu::{
+    COMMAND_RECORDS, CommandRecord, CommandSelectSeq, POCKET_EVENT_OPEN_COMMANDS, POCKET_SLOTS,
+    PocketMenuPage, PocketMenuSeq, PocketOpenOptions, open_pocket_menu,
+};
 pub use sequence_base::{SequenceBase, VftSequenceBase, VftSequenceBaseLayout};
+pub use storage::StorageSeq;
 pub use view_page::{EventTable, VftViewPage, VftViewPageLayout, ViewPage};

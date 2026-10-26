@@ -10,6 +10,7 @@ mod key;
 mod list;
 mod offsets;
 mod page;
+pub mod screens;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 

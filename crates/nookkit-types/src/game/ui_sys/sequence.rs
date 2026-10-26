@@ -5,7 +5,7 @@ use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::game::ui::ViewPage;
 use crate::lp::ui::{Name, PageHolder};
-use crate::native::{Class, Fn, sym};
+use crate::native::{Class, Fn, NativeResult, sym, type_info};
 use crate::sead::runtime_type_info::Interface;
 use crate::sead::{CriticalSection, ListNode, OffsetList};
 
@@ -116,6 +116,17 @@ unsafe impl Class for Sequence {
 }
 
 impl Sequence {
+    pub unsafe fn is_derived(&self, type_info: *const Interface) -> bool {
+        unsafe { !type_info.is_null() && self.check_derived_runtime_type_info(type_info) }
+    }
+
+    /// The game's own RTTI check, e.g. `seq.cast::<PocketMenuSeq>()`
+    pub unsafe fn cast<T: Class>(&mut self) -> NativeResult<Option<&mut T>> {
+        let is = unsafe { self.is_derived(type_info::<T>()?) };
+
+        Ok(is.then(|| unsafe { &mut *(self as *mut Self).cast::<T>() }))
+    }
+
     pub unsafe fn name(&self) -> Option<&CStr> {
         unsafe { self.name.as_c_str() }
     }

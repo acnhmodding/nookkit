@@ -35,3 +35,6 @@ fn	game::UI::KeyGuideSeq::getRuntimeTypeInfo
 fn	game::UI::KeyGuideSeq::addGuide
 vtable	sead::FixedSafeString<64>::vtable
 fn	game::UI::PocketMenuSeq::requestOpen
+fn	game::UI::PocketMenuSeq::getRuntimeTypeInfo
+fn	game::UI::CommandSelectSeq::getRuntimeTypeInfo
+fn	game::UI::StorageSeq::getRuntimeTypeInfo
