@@ -98,14 +98,20 @@ fn screaming(name: &str) -> String {
 
 fn kind(control: &str) -> &'static str {
     match control {
-        "UISysScrollBtnList" => "crate::List",
+        "UISysScrollBtnList" => "crate::kind::List",
         "LpUniteButton" | "FixedButton" | "AppDragButton" | "ButtonNormal" | "ButtonCheck"
-        | "ButtonRepeat" => "crate::Button",
-        _ => "crate::Parts",
+        | "ButtonRepeat" => "crate::kind::Button",
+        _ => "crate::kind::Parts",
     }
 }
 
-fn consts(layout: &Layout, all: &BTreeMap<String, Layout>, root: bool, owner: &str, out: &mut String) {
+fn consts(
+    layout: &Layout,
+    all: &BTreeMap<String, Layout>,
+    root: bool,
+    owner: &str,
+    out: &mut String,
+) {
     let mut seen = HashMap::new();
 
     for (pane, part) in &layout.parts {
@@ -115,7 +121,11 @@ fn consts(layout: &Layout, all: &BTreeMap<String, Layout>, root: bool, owner: &s
         }
 
         let control = all.get(part).map_or("", |l| l.control.as_str());
-        let path = if root { format!("/{pane}") } else { pane.clone() };
+        let path = if root {
+            format!("/{pane}")
+        } else {
+            pane.clone()
+        };
         let doc = if control.is_empty() {
             format!("Part layout `{part}`")
         } else {

@@ -4,17 +4,64 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-/// Any parts pane
-pub struct Parts;
-/// A button control (LpUniteButton, FixedButton, …)
-pub struct Button;
-/// A UISysScrollBtnList
-pub struct List;
+/// What a [`PanePath`] points at, from its part layout's cnt1 control
+pub mod kind {
+    /// Any parts pane
+    pub struct Parts;
+    /// A button control (LpUniteButton, FixedButton, …)
+    pub struct Button;
+    /// A UISysScrollBtnList
+    pub struct List;
+}
+
+/// Anything naming a pane, a typed [`PanePath`] or a string for panes outside the generated layouts
+pub trait PaneRef {
+    fn path(&self) -> &str;
+}
+
+impl PaneRef for &str {
+    fn path(&self) -> &str {
+        self
+    }
+}
+
+impl PaneRef for String {
+    fn path(&self) -> &str {
+        self
+    }
+}
+
+impl<K> PaneRef for PanePath<K> {
+    fn path(&self) -> &str {
+        PanePath::path(self)
+    }
+}
+
+/// A scroll list path. Typed paths must be [`kind::List`] panes, strings are accepted for lists a mod adds
+/// in its own layout
+///
+/// ```
+/// fn list(_: impl nookkit_layouts::ListRef) {}
+///
+/// list(nookkit_layouts::pages::CharaMake::L_BTN_LIST_EYE_00);
+/// list("/L_BtnListMouth_00");
+/// ```
+///
+/// ```compile_fail
+/// fn list(_: impl nookkit_layouts::ListRef) {}
+///
+/// list(nookkit_layouts::pages::CharaMake::L_BTN_OK_00);
+/// ```
+pub trait ListRef: PaneRef {}
+
+impl ListRef for &str {}
+impl ListRef for String {}
+impl ListRef for PanePath<kind::List> {}
 
 /// A page class the game builds, keyed by its runtime class name (`getClassInfo`)
 pub trait PageClass {
     const CLASS: &'static str;
-    /// The page's root layout, empty for the one page without a layout archive
+    /// The page's root layout
     const LAYOUT: &'static str;
 }
 

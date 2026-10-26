@@ -20,11 +20,12 @@ use nookkit_types::native::SymbolKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
+pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, kind, layouts, pages};
 pub use nookkit_sys::Direction;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
 pub use offsets::{__hook_function, module_base};
-pub use page::{Event, Page, Pane, PaneRef, Seq};
+pub use page::{Event, Page, Pane, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UiError {
@@ -126,7 +127,25 @@ pub fn connect(name: &'static str) -> Result<Ui> {
 }
 
 impl Ui {
-    pub fn on_page(
+    /// Runs `f` each time the game builds a `P` page
+    ///
+    /// ```no_run
+    /// use nookkit::pages::CharaMake;
+    ///
+    /// fn hook(ui: nookkit::Ui) -> nookkit::Result {
+    ///     ui.on_page::<CharaMake>(|page| {
+    ///         let eyes = page.list(CharaMake::L_BTN_LIST_EYE_00)?;
+    ///         let ok = page.pane(CharaMake::L_BTN_OK_00)?;
+    ///         Ok(())
+    ///     })
+    /// }
+    /// ```
+    pub fn on_page<P: PageClass>(&self, f: impl FnMut(Page) -> Result + 'static) -> Result {
+        self.on_page_filter(PageFilter::Class(P::CLASS), f)
+    }
+
+    /// [`on_page`](Self::on_page) by name, for pages missing from [`pages`]
+    pub fn on_page_filter(
         &self,
         filter: PageFilter<'_>,
         mut f: impl FnMut(Page) -> Result + 'static,

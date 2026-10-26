@@ -1,4 +1,5 @@
-use nookkit_layouts::{Button, List, PageClass, PanePath, layouts, pages};
+use nookkit_layouts::kind::{Button, List};
+use nookkit_layouts::{PageClass, PanePath, layouts, pages};
 
 fn is_list(_: &PanePath<List>) {}
 fn is_button(_: &PanePath<Button>) {}

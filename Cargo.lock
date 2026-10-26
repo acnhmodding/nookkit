@@ -46,6 +46,7 @@ dependencies = [
 name = "nookkit"
 version = "0.1.0"
 dependencies = [
+ "nookkit-layouts",
  "nookkit-sys",
  "nookkit-types",
  "skyline",

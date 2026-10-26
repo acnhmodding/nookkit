@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+nookkit-layouts = { workspace = true }
 nookkit-sys = { workspace = true }
 nookkit-types = { workspace = true }
 skyline = { workspace = true }

@@ -5,23 +5,7 @@ use nookkit_sys::{
     SEQ_UPDATE, Str,
 };
 
-use crate::{Key, KeyBuilder, List, ListTarget, Result, Ui, callback, check};
-
-pub trait PaneRef {
-    fn path(&self) -> &str;
-}
-
-impl PaneRef for &str {
-    fn path(&self) -> &str {
-        self
-    }
-}
-
-impl PaneRef for String {
-    fn path(&self) -> &str {
-        self
-    }
-}
+use crate::{Key, KeyBuilder, List, ListRef, ListTarget, PaneRef, Result, Ui, callback, check};
 
 /// Valid while the game keeps the page built, which covers its callbacks
 #[derive(Clone, Copy)]
@@ -79,7 +63,7 @@ impl Page {
     }
 
     /// The scroll list at `path`; lists a layout mod added are bound by the framework while the page builds
-    pub fn list(&self, path: impl PaneRef) -> Result<List> {
+    pub fn list(&self, path: impl ListRef) -> Result<List> {
         let mut raw = core::ptr::null_mut();
 
         check(unsafe { (self.ui.table.list_get)(self.raw, Str::new(path.path()), &mut raw) })?;
