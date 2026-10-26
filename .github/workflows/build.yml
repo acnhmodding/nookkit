@@ -78,3 +78,24 @@ jobs:
         with:
           files: target/aarch64-skyline-switch/release/libnookkit_core.nro
           generate_release_notes: true
+
+      # The release action won't move an existing tag, so point `latest` at this commit first
+      - name: Move the latest tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git tag -f latest
+          git push -f origin latest
+
+      - name: Latest build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          prerelease: true
+          make_latest: false
+          body: |
+            Built from ${{ github.sha }} on `main`, replaced on every push.
+            For a stable build, use the newest versioned release.
+          files: target/aarch64-skyline-switch/release/libnookkit_core.nro
+          overwrite_files: true
