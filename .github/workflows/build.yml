@@ -35,11 +35,12 @@ jobs:
             ~/.cargo/skyline
           key: skyline-${{ runner.os }}-${{ env.CARGO_SKYLINE_VERSION }}
 
+      # Outside the repo, since rust-toolchain.toml asks for skyline-v3 before it exists
       - name: Install cargo-skyline
         if: steps.skyline-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
         run: cargo install cargo-skyline --locked --version "$CARGO_SKYLINE_VERSION"
 
-      # Outside the repo, since rust-toolchain.toml asks for skyline-v3 before it exists
       - name: Install the skyline toolchain
         if: steps.skyline-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
