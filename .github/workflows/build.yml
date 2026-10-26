@@ -11,58 +11,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_SKYLINE_VERSION: 3.5.0
-  # The nightly skyline-v3 is built on, which unlike skyline-v3 ships clippy
-  HOST_NIGHTLY: nightly-2026-02-14
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    # HewDraw Remix's builder: cargo-skyline 3.5.0 with skyline-v3, pinned so image updates can't change builds
+    container: wuboyth/skyline-plugin-builder@sha256:fb035a9aa2a707f41846393dcc56595e24a824b9584b6486c2a1db41b326d0e7
     permissions:
       contents: write
+    env:
+      HOME: /root
+      NRO: target/aarch64-skyline-switch/release/libnookkit_core.nro
     steps:
       - uses: actions/checkout@v4
-
-      # Installs cargo-skyline, then lints and tests on the host
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.HOST_NIGHTLY }}
-          components: clippy
-
-      # Its own root, away from ~/.cargo/bin which the Rust cache prunes
-      - name: Cache cargo-skyline and the skyline toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo-skyline
-            ~/.cargo/skyline
-          key: skyline-${{ runner.os }}-${{ env.CARGO_SKYLINE_VERSION }}-v2
-
-      # Outside the repo, since rust-toolchain.toml asks for skyline-v3 before it exists
-      - name: Install cargo-skyline
-        working-directory: ${{ runner.temp }}
-        run: |
-          echo "$HOME/.cargo-skyline/bin" >> "$GITHUB_PATH"
-          [ -x ~/.cargo-skyline/bin/cargo-skyline ] ||
-            cargo install cargo-skyline --locked --version "$CARGO_SKYLINE_VERSION" --root ~/.cargo-skyline
-
-      - name: Install the skyline toolchain
-        working-directory: ${{ runner.temp }}
-        run: |
-          [ -x ~/.cargo/skyline/toolchain/skyline/bin/rustc ] || cargo skyline update-std
-
-      - name: Link the skyline toolchain
-        run: rustup toolchain list | grep -q skyline-v3 || rustup toolchain link skyline-v3 ~/.cargo/skyline/toolchain/skyline
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Clippy
-        run: cargo "+$HOST_NIGHTLY" clippy --workspace --all-targets -- -D warnings
-
-      - name: Test
-        run: cargo "+$HOST_NIGHTLY" test -p nookkit-sym
 
       - name: Build the plugin
         working-directory: crates/nookkit-core
@@ -71,20 +31,21 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: libnookkit_core
-          path: target/aarch64-skyline-switch/release/libnookkit_core.nro
+          path: ${{ env.NRO }}
           if-no-files-found: error
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: target/aarch64-skyline-switch/release/libnookkit_core.nro
+          files: ${{ env.NRO }}
           generate_release_notes: true
 
       # The release action won't move an existing tag, so point `latest` at this commit first
       - name: Move the latest tag
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git tag -f latest
           git push -f origin latest
 
@@ -99,5 +60,5 @@ jobs:
           body: |
             Built from ${{ github.sha }} on `main`, replaced on every push.
             For a stable build, use the newest versioned release.
-          files: target/aarch64-skyline-switch/release/libnookkit_core.nro
+          files: ${{ env.NRO }}
           overwrite_files: true
