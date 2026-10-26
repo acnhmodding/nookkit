@@ -22,6 +22,7 @@ pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
 pub use nookkit_sys::Direction;
 pub use nookkit_types as types;
+pub use nookkit_types::native::sym;
 pub use offsets::{__hook_function, module_base};
 pub use page::{Event, Page, Pane, PaneRef, Seq};
 
