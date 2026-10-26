@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/nookkit",
+    "crates/nookkit-core",
+    "crates/nookkit-sym",
+    "crates/nookkit-sys",
+    "crates/nookkit-types",
+]
 resolver = "3"
 
 [profile.dev]
@@ -8,3 +14,14 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 lto = true
+
+[workspace.dependencies]
+skyline = "0.6.0"
+native-vtable = { git = "https://github.com/crackheadakira/vtable-rs" }
+thiserror = "2"
+
+nookkit = { path = "crates/nookkit" }
+nookkit-core = { path = "crates/nookkit-core" }
+nookkit-sym = { path = "crates/nookkit-sym" }
+nookkit-sys = { path = "crates/nookkit-sys" }
+nookkit-types = { path = "crates/nookkit-types" }

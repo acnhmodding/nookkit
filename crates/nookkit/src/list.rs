@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use acnh_ui_sys::{
+use nookkit_sys::{
     Direction, ITEM_CLEAR, ITEM_MOVE, ITEM_RENDER, ItemUpdate as RawItemUpdate, LIST_DECIDE,
     LIST_FOCUS, LIST_ITEM, LIST_LEAVE, LeaveQuery, ListTarget as RawListTarget, NO_LINE,
 };

@@ -67,8 +67,8 @@ mod tests {
         let file = parse(include_str!("../../../offsets/3.0.3.toml")).unwrap();
         assert_eq!(file.game_version, "3.0.3");
         for manifest in [
-            include_str!("../../acnh-game/symbols.txt"),
-            include_str!("../../acnh-ui/symbols.txt"),
+            include_str!("../../nookkit-core/symbols.txt"),
+            include_str!("../../nookkit-types/symbols.txt"),
         ] {
             assert_eq!(missing(&file, manifest), vec![]);
         }

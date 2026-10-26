@@ -13,15 +13,15 @@ mod page;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 
-use acnh_game::native::SymbolKind;
-use acnh_ui_sys::{
+use nookkit_sys::{
     API_NAME, API_VERSION, AcnhUiV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str, sl_api_get,
 };
+use nookkit_types::native::SymbolKind;
 
-pub use acnh_game as game;
-pub use acnh_ui_sys::Direction;
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
+pub use nookkit_sys::Direction;
+pub use nookkit_types as types;
 pub use offsets::{__hook_function, module_base};
 pub use page::{Event, Page, Pane, PaneRef, Seq};
 
@@ -107,7 +107,7 @@ pub fn connect(name: &'static str) -> Result<Ui> {
     }
 
     TABLE.store(table.cast_mut(), Ordering::Release);
-    game::native::set_resolver(resolve);
+    types::native::set_resolver(resolve);
 
     Ok(Ui {
         table: table_ref,

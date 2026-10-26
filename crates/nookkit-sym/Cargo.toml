@@ -1,0 +1,11 @@
+[package]
+name = "nookkit-sym"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+skyline = ["dep:skyline"]
+
+[dependencies]
+skyline = { workspace = true, optional = true }
+thiserror = { workspace = true }

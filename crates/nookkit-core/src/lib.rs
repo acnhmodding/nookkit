@@ -6,8 +6,8 @@ mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use acnh_game::native::{NativeResult, SymbolKind};
-use acnh_ui_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
+use nookkit_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
+use nookkit_types::native::{NativeResult, SymbolKind};
 
 #[unsafe(no_mangle)]
 #[used]
@@ -15,9 +15,9 @@ pub static __sl_framework: u8 = 0;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-fn nav(direction: acnh_ui_sys::Direction) -> acnh_game::lp::ui::NavDirection {
-    use acnh_game::lp::ui::NavDirection;
-    use acnh_ui_sys::Direction;
+fn nav(direction: nookkit_sys::Direction) -> nookkit_types::lp::ui::NavDirection {
+    use nookkit_sys::Direction;
+    use nookkit_types::lp::ui::NavDirection;
 
     match direction {
         Direction::Up => NavDirection::Up,
@@ -33,21 +33,21 @@ fn report(context: &str, result: NativeResult) {
     }
 }
 
-fn start() -> Result<(), acnh_sym::SymError> {
-    let symbols = acnh_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
+fn start() -> Result<(), nookkit_sym::SymError> {
+    let symbols = nookkit_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
     println!(
         "[acnh-ui] {} symbols for {}",
         symbols.len(),
         symbols.game_version
     );
 
-    acnh_game::native::set_resolver(|name, kind| {
+    nookkit_types::native::set_resolver(|name, kind| {
         let kind = match kind {
-            SymbolKind::Fn => acnh_sym::Kind::Fn,
-            SymbolKind::Vtable => acnh_sym::Kind::Vtable,
+            SymbolKind::Fn => nookkit_sym::Kind::Fn,
+            SymbolKind::Vtable => nookkit_sym::Kind::Vtable,
         };
 
-        acnh_sym::address(kind, name).ok()
+        nookkit_sym::address(kind, name).ok()
     });
 
     pages::view_page_initialize::install()?;

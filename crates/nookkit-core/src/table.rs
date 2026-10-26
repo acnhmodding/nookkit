@@ -2,14 +2,14 @@ use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 use std::ffi::CString;
 
-use acnh_game::game::player_control_lock::{lock_menu, release_menu};
-use acnh_game::game::ui::ViewPage;
-use acnh_game::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
-use acnh_game::native::{Error, NativeResult, type_info_named};
-use acnh_sym::Kind;
-use acnh_ui_sys::{
+use nookkit_sym::Kind;
+use nookkit_sys::{
     AcnhUiV1, Callback, Direction, ListTarget, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
 };
+use nookkit_types::game::player_control_lock::{lock_menu, release_menu};
+use nookkit_types::game::ui::ViewPage;
+use nookkit_types::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
+use nookkit_types::native::{Error, NativeResult, type_info_named};
 
 use crate::keys::{self, KeyState};
 use crate::lists::{self, ListState};
@@ -85,7 +85,9 @@ unsafe extern "C" fn resolve(name: Str, kind: u32) -> usize {
     };
 
     match unsafe { name.as_str() } {
-        Some(name) if STARTED.load(Ordering::Acquire) => acnh_sym::address(kind, name).unwrap_or(0),
+        Some(name) if STARTED.load(Ordering::Acquire) => {
+            nookkit_sym::address(kind, name).unwrap_or(0)
+        }
         _ => 0,
     }
 }

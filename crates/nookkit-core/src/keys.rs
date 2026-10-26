@@ -5,11 +5,11 @@ use std::ffi::CString;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use acnh_game::game::ui::{KeyGuideEntry, KeyGuideSeq, ViewPage};
-use acnh_game::lp::ui::{ButtonId, Control, KeyEvent as GameKeyEvent, KeyHandler, PartsCtrl};
-use acnh_game::native::NativeResult;
-use acnh_game::sead::{Delegate, SafeString};
-use acnh_ui_sys::{Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KeyEvent, Status};
+use nookkit_sys::{Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KeyEvent, Status};
+use nookkit_types::game::ui::{KeyGuideEntry, KeyGuideSeq, ViewPage};
+use nookkit_types::lp::ui::{ButtonId, Control, KeyEvent as GameKeyEvent, KeyHandler, PartsCtrl};
+use nookkit_types::native::NativeResult;
+use nookkit_types::sead::{Delegate, SafeString};
 
 use crate::pages::{PAGES, call, snapshot, with_page};
 use crate::report;
@@ -275,7 +275,7 @@ fn report_value<T>(context: &str, result: NativeResult<T>) -> Option<T> {
     }
 }
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub key_guide_add = "game::UI::KeyGuideSeq::addGuide";
     fn(seq: *mut KeyGuideSeq, entry: *const KeyGuideEntry, flag: bool) {
         let Some(seq_ref) = (unsafe { seq.as_mut() }) else {
@@ -305,7 +305,7 @@ struct WideBuffer {
 }
 
 // Every message lookup goes through here, so a sentinel label is answered with its literal text
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub message_find = "Lp::UI::UIMgr::findMessage";
     fn(dst: *mut WideBuffer, file: *const SafeString<'static>, label: *const SafeString<'static>) -> bool {
         match unsafe { literal_text(dst, label) } {

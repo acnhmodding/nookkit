@@ -1,5 +1,5 @@
 [package]
-name = "acnh-ui"
+name = "nookkit-core"
 version = "0.1.0"
 edition = "2024"
 
@@ -11,6 +11,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 skyline = "0.6.0"
-acnh-ui-sys = { path = "../acnh-ui-sys" }
-acnh-sym = { path = "../acnh-sym", features = ["skyline"] }
-acnh-game = { path = "../acnh-game" }
+nookkit-sys = { workspace = true }
+nookkit-sym = { workspace = true, features = ["skyline"] }
+nookkit-types = { workspace = true }

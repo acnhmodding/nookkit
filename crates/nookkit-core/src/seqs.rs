@@ -1,15 +1,15 @@
 use core::ffi::c_void;
 
-use acnh_game::game::ui::{SequenceBase, ViewPage};
-use acnh_game::game::ui_sys::Sequence;
-use acnh_ui_sys::{
+use nookkit_sys::{
     Callback, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_EVENT_KINDS, SEQ_READY, SEQ_UPDATE, Status,
 };
+use nookkit_types::game::ui::{SequenceBase, ViewPage};
+use nookkit_types::game::ui_sys::Sequence;
 
 use crate::pages::{PAGES, call, snapshot, with_page};
 use crate::report;
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub sequence_create = "game::UISys::Sequence::create";
     fn(seq: *mut Sequence, arg: *mut c_void) {
         unsafe { original(seq, arg) };
@@ -18,7 +18,7 @@ acnh_sym::hook! {
 }
 
 // onActivated is a 12-byte thunk, too short for an inline hook
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub sequence_on_activate = "game::UI::SequenceBase::onActivate";
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
@@ -27,7 +27,7 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub sequence_on_deactivated = "game::UI::SequenceBase::onDeactivated";
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
@@ -42,7 +42,7 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub sequence_update = "game::UI::SequenceBase::update";
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };

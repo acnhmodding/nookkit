@@ -3,18 +3,18 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 use std::ffi::CString;
 
-use acnh_game::game::ui::{
-    AppUniteBtnCtrl, ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, VftListBtnGroup, ViewPage,
-};
-use acnh_game::game::ui_sys::{Content, Enable, LeaveDirection, LeaveEvent, ScrollBtnListCtrl};
-use acnh_game::lp::ui::{BtnPartsCtrl, Control};
-use acnh_game::native::NativeResult;
-use acnh_game::sead::Delegate;
-use acnh_ui_sys::{
+use nookkit_sys::{
     Callback, ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, ITEM_CLEAR, ITEM_MOVE,
     ITEM_RENDER, ItemUpdate, LIST_DECIDE, LIST_EVENT_KINDS, LIST_FOCUS, LIST_ITEM, LIST_LEAVE,
     LeaveQuery, ListTarget, NO_LINE, Status,
 };
+use nookkit_types::game::ui::{
+    AppUniteBtnCtrl, ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, VftListBtnGroup, ViewPage,
+};
+use nookkit_types::game::ui_sys::{Content, Enable, LeaveDirection, LeaveEvent, ScrollBtnListCtrl};
+use nookkit_types::lp::ui::{BtnPartsCtrl, Control};
+use nookkit_types::native::NativeResult;
+use nookkit_types::sead::Delegate;
 
 use crate::pages::{self, call, snapshot, with_page};
 use crate::report;

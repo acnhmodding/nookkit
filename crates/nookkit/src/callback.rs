@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use acnh_ui_sys::Callback;
+use nookkit_sys::Callback;
 
 use crate::{Result, Ui};
 

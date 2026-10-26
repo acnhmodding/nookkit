@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use acnh_ui_sys::{
+use nookkit_sys::{
     KEY_CANCEL, KEY_FLAG_CONSUME, KEY_HOLD, KEY_RELEASE, KEY_REPEAT, KEY_TRIGGER,
     KeyEvent as RawKeyEvent, Str,
 };

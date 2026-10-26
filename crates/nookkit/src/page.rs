@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use acnh_ui_sys::{
+use nookkit_sys::{
     ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_READY,
     SEQ_UPDATE, Str,
 };

@@ -2,12 +2,12 @@ use core::ffi::c_void;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use acnh_game::game::ui::{ControlEvent, LayoutBuiltEvent, ViewPage};
-use acnh_game::game::ui_sys::ScrollBtnListCtrl;
-use acnh_game::lp::ui::Control;
-use acnh_game::native::NativeResult;
-use acnh_game::sead::{Delegate, VftDelegate};
-use acnh_ui_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
+use nookkit_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
+use nookkit_types::game::ui::{ControlEvent, LayoutBuiltEvent, ViewPage};
+use nookkit_types::game::ui_sys::ScrollBtnListCtrl;
+use nookkit_types::lp::ui::Control;
+use nookkit_types::native::NativeResult;
+use nookkit_types::sead::{Delegate, VftDelegate};
 
 use crate::keys::KeyState;
 use crate::lists::ListState;
@@ -70,7 +70,7 @@ pub fn with_page<R>(page: *mut ViewPage, f: impl FnOnce(&mut PageState) -> R) ->
     Some(f(pages.entry(page as usize).or_default()))
 }
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub view_page_initialize = "game::UI::ViewPage::initialize";
     fn(page: *mut ViewPage, config: *mut c_void) {
         unsafe { original(page, config) };
@@ -78,7 +78,7 @@ acnh_sym::hook! {
     }
 }
 
-acnh_sym::hook! {
+nookkit_sym::hook! {
     pub view_page_layout_built = "game::UI::ViewPage::dispatchLayoutBuilt";
     fn(page: *mut ViewPage, event: *mut LayoutBuiltEvent) {
         unsafe { original(page, event) };
