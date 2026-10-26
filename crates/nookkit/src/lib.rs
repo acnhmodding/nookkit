@@ -169,6 +169,12 @@ impl Ui {
         check(unsafe { (self.table.release_player)(player) })
     }
 
+    /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivated` fires
+    /// when it closes
+    pub fn open_pocket_menu(&self, player: u8, close_enabled: bool) -> Result {
+        check(unsafe { (self.table.open_pocket_menu)(player, close_enabled) })
+    }
+
     fn report(&self, result: Result) {
         if let Err(e) = result {
             println!("[{}] {e}", self.name);

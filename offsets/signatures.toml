@@ -12,6 +12,7 @@
 "game::UI::FieldMenuRequestSeq::tryLockPlayer" = "i32, ptr -> i8"
 "game::UI::KeyGuideSeq::addGuide" = "ptr, ptr, i8 -> void"
 "game::UI::PageBase::getRuntimeTypeInfo" = "ptr -> ptr"
+"game::UI::PocketMenuSeq::requestOpen" = "ptr, ptr -> void"
 "game::UI::SequenceBase::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UI::ViewPage::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo" = "ptr -> ptr"

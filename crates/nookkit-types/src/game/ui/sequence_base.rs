@@ -70,6 +70,22 @@ crate::derive_base!(SequenceBase => Sequence);
 #[vtable_impl]
 unsafe impl VftSequenceBase for SequenceBase {}
 
+impl SequenceBase {
+    /// Queues `state` for the state machine's next step, `false` when a request is already queued
+    pub fn request_state(&mut self, state: i32) -> bool {
+        let Some(slot) = self.requests.get_mut(self.request_slot as usize) else {
+            return false;
+        };
+
+        if *slot != -1 {
+            return false;
+        }
+
+        *slot = state;
+        true
+    }
+}
+
 unsafe impl Class for SequenceBase {
     const RUNTIME_TYPE_INFO: Fn = sym::game::UI::SequenceBase::getRuntimeTypeInfo.erase();
 }

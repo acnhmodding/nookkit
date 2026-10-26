@@ -244,4 +244,15 @@ pub struct NookKitV1 {
 
     /// A pane in the page's layout shown while the binding is enabled, empty for none
     pub key_set_hint_pane: unsafe extern "C" fn(key: *mut c_void, path: Str) -> Status,
+
+    /// Drops the game's own key-guide entries for `key` while the page's seq is active. Dropped
+    /// when the page is built again
+    pub page_hide_guide: unsafe extern "C" fn(page: *mut c_void, key: i32, hide: bool) -> Status,
+
+    /// A disabled page's input root keeps its handlers' state but fires nothing, the game's own
+    /// handlers and bindings alike
+    pub page_set_input_enabled: unsafe extern "C" fn(page: *mut c_void, enable: bool) -> Status,
+
+    /// Opens the resident pocket menu for `player` over whatever is open
+    pub open_pocket_menu: unsafe extern "C" fn(player: u8, close_enabled: bool) -> Status,
 }

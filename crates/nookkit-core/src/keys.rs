@@ -266,6 +266,28 @@ fn active_guides() -> Vec<KeyGuideEntry> {
         .collect()
 }
 
+pub fn hide_guide(page: *mut ViewPage, key: i32, hide: bool) -> Status {
+    if ButtonId::from_raw(key).is_none() {
+        return Status::InvalidArg;
+    }
+
+    with_page(page, |state| {
+        state.hidden_guides.retain(|&k| k != key);
+        if hide {
+            state.hidden_guides.push(key);
+        }
+    })
+    .map_or(Status::InvalidArg, |()| Status::Ok)
+}
+
+fn guide_hidden(key: i32) -> bool {
+    PAGES.lock().is_ok_and(|pages| {
+        pages
+            .values()
+            .any(|state| state.active && state.hidden_guides.contains(&key))
+    })
+}
+
 fn report_value<T>(context: &str, result: NativeResult<T>) -> Option<T> {
     match result {
         Ok(value) => Some(value),
@@ -285,11 +307,14 @@ nookkit_sym::hook! {
         };
 
         let before = seq_ref.pending.len();
+        let hidden = unsafe { entry.as_ref() }.is_some_and(|e| guide_hidden(e.key));
 
-        unsafe { original(seq, entry, flag) };
+        if !hidden {
+            unsafe { original(seq, entry, flag) };
+        }
 
-        // A page starts each rebuild of the bar with its first entry
-        if before == 0 && seq_ref.pending.len() == 1 {
+        // A page starts each rebuild of the bar with its first entry, hidden or not
+        if before == 0 && (hidden || seq_ref.pending.len() == 1) {
             for mut guide in active_guides() {
                 guide.label.pin();
                 unsafe { original(seq, &guide, flag) };

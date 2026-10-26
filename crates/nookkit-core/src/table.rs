@@ -7,7 +7,7 @@ use nookkit_sys::{
     Callback, Direction, ListTarget, NookKitV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
 };
 use nookkit_types::game::player_control_lock::{lock_menu, release_menu};
-use nookkit_types::game::ui::ViewPage;
+use nookkit_types::game::ui::{ViewPage, open_pocket_menu as request_pocket_menu};
 use nookkit_types::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
 use nookkit_types::native::{Error, NativeResult, type_info_named};
 
@@ -42,6 +42,9 @@ pub static TABLE: NookKitV1 = NookKitV1 {
     key_set_enabled,
     key_set_guide,
     key_set_hint_pane,
+    page_hide_guide,
+    page_set_input_enabled,
+    open_pocket_menu,
 };
 
 unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
@@ -393,5 +396,43 @@ unsafe extern "C" fn key_set_hint_pane(key: *mut c_void, path: Str) -> Status {
         };
 
         keys::set_hint_pane(page, key_state, path)
+    })
+}
+
+unsafe extern "C" fn page_hide_guide(page: *mut c_void, key: i32, hide: bool) -> Status {
+    guarded("page_hide_guide", || {
+        if page.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
+        Ok(keys::hide_guide(page.cast(), key, hide))
+    })
+}
+
+unsafe extern "C" fn page_set_input_enabled(page: *mut c_void, enable: bool) -> Status {
+    guarded("page_set_input_enabled", || unsafe {
+        let Some(root) = page
+            .cast::<ViewPage>()
+            .as_mut()
+            .and_then(|p| p.input_root())
+        else {
+            return Ok(Status::InvalidArg);
+        };
+
+        root.disabled = !enable;
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn open_pocket_menu(player: u8, close_enabled: bool) -> Status {
+    guarded("open_pocket_menu", || unsafe {
+        if player >= 8 {
+            return Ok(Status::InvalidArg);
+        }
+
+        request_pocket_menu(player, close_enabled)?;
+
+        Ok(Status::Ok)
     })
 }

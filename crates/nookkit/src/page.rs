@@ -5,6 +5,8 @@ use nookkit_sys::{
     SEQ_UPDATE, Str,
 };
 
+use nookkit_types::game::ui::SequenceBase;
+
 use crate::{Key, KeyBuilder, List, ListRef, ListTarget, PaneRef, Result, Ui, callback, check};
 
 /// Valid while the game keeps the page built, which covers its callbacks
@@ -98,6 +100,18 @@ impl Page {
         self.on_seq(SEQ_UPDATE, move |_| f())
     }
 
+    /// Drops the game's own key-guide entries for `key` while this page is up, e.g. to replace them
+    /// with a binding's guide
+    pub fn hide_guide(&self, key: Key) -> Result {
+        check(unsafe { (self.ui.table.page_hide_guide)(self.raw, key.id(), true) })
+    }
+
+    /// A disabled page fires none of its input, the game's handlers and bindings alike, e.g. while
+    /// another menu is open over it
+    pub fn set_input_enabled(&self, enable: bool) -> Result {
+        check(unsafe { (self.ui.table.page_set_input_enabled)(self.raw, enable) })
+    }
+
     fn on_seq(&self, kind: u32, f: impl FnMut(*const c_void) -> Result + 'static) -> Result {
         let cb = callback::raw(self.ui, f);
 
@@ -124,6 +138,13 @@ impl Seq {
     /// For reading the seq's own struct
     pub fn raw(&self) -> *mut c_void {
         self.raw
+    }
+
+    /// Queues a state for the seq's state machine the way the game does, `false` when a request is
+    /// already queued
+    pub fn request_state(&self, state: i32) -> bool {
+        unsafe { self.raw.cast::<SequenceBase>().as_mut() }
+            .is_some_and(|seq| seq.request_state(state))
     }
 }
 

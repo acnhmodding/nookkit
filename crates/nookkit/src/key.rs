@@ -47,7 +47,7 @@ impl Key {
         Key::Minus,
     ];
 
-    fn id(self) -> i32 {
+    pub(crate) fn id(self) -> i32 {
         self as i32
     }
 

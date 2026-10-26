@@ -5,6 +5,7 @@ mod control_event;
 pub mod key_guide;
 pub mod list_btn_group;
 pub mod page_base;
+pub mod pocket_menu;
 pub mod sequence_base;
 pub mod view_page;
 
@@ -20,5 +21,6 @@ pub use list_btn_group::{
     VftListBtnGroupLayout,
 };
 pub use page_base::{PageBase, VftPageBase, VftPageBaseLayout};
+pub use pocket_menu::{PocketOpenOptions, open_pocket_menu};
 pub use sequence_base::{SequenceBase, VftSequenceBase, VftSequenceBaseLayout};
 pub use view_page::{EventTable, VftViewPage, VftViewPageLayout, ViewPage};

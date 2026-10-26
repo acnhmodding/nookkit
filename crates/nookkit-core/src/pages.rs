@@ -45,6 +45,9 @@ pub struct PageState {
 
     /// Its seq is active, so its key guides belong in the bar
     pub active: bool,
+
+    /// ButtonIds whose game-made guide entries are dropped while the page is active
+    pub hidden_guides: Vec<i32>,
 }
 
 pub static PAGES: Mutex<BTreeMap<usize, PageState>> = Mutex::new(BTreeMap::new());
