@@ -74,6 +74,16 @@ impl Page {
         Ok(List::new(*self, raw))
     }
 
+    /// The button the page's player has focused
+    pub fn focused(&self) -> Result<Option<Pane>> {
+        let player = self.seq()?.map_or(0, |seq| u32::from(seq.player()));
+        let mut raw = core::ptr::null_mut();
+
+        check(unsafe { (self.ui.table.page_focused)(self.raw, player, &mut raw) })?;
+
+        Ok((!raw.is_null()).then(|| Pane::new(*self, raw)))
+    }
+
     /// The seq that built this page, `None` before it is ready
     pub fn seq(&self) -> Result<Option<Seq>> {
         let mut raw = core::ptr::null_mut();
@@ -300,6 +310,31 @@ impl Pane {
         check(unsafe { (self.page.ui.table.set_visible)(self.raw, visible) })?;
 
         Ok(*self)
+    }
+
+    /// Presses the button as if decided: its Decide animation plays and the page's decide event
+    /// fires, so the game reacts as to A. `false` when it was already deciding
+    pub fn decide(&self) -> Result<bool> {
+        let mut decided = false;
+
+        check(unsafe { (self.page.ui.table.pane_decide)(self.raw, &mut decided) })?;
+
+        Ok(decided)
+    }
+
+    /// The button's valid look, the one the game greys out when an entry can't be used
+    pub fn set_valid(&self, valid: bool) -> Result<Pane> {
+        check(unsafe { (self.page.ui.table.pane_set_valid)(self.raw, valid) })?;
+
+        Ok(*self)
+    }
+
+    pub fn is_valid(&self) -> Result<bool> {
+        let mut valid = false;
+
+        check(unsafe { (self.page.ui.table.pane_is_valid)(self.raw, &mut valid) })?;
+
+        Ok(valid)
     }
 
     pub fn on_focus(&self, mut f: impl FnMut(Event) -> Result + 'static) -> Result<Pane> {

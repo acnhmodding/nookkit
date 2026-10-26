@@ -1,6 +1,7 @@
 use core::ffi::c_void;
 use core::mem::offset_of;
 
+use crate::lp::ui::FocusNode;
 use crate::sead::{Delegate, ListNode, OffsetList};
 
 #[repr(i32)]
@@ -201,7 +202,7 @@ pub struct InputRoot {
     pub pointer_handlers: OffsetList,
     pub key_handlers: OffsetList,
     pub analog_handlers: OffsetList,
-    pub focus_navigator: *mut c_void,
+    pub focus_navigator: *mut FocusNavigator,
 
     /// Players whose input this root takes in the main pass
     pub swallow_input_player_mask: u32,
@@ -226,3 +227,36 @@ const _: () = {
     assert!(offset_of!(InputRoot, pre_input_delegate) == 0x68);
     assert!(core::mem::size_of::<InputRoot>() == 0xa8);
 };
+
+/// One player's place in a focus navigator
+#[repr(C)]
+pub struct FocusCursor {
+    _unk_0: [u8; 0x10],
+    pub node: *mut FocusNode,
+}
+
+#[repr(C)]
+pub struct FocusNavigator {
+    _unk_0: [u8; 0x18],
+    pub cursor_count: u32,
+    _unk_1c: [u8; 0x4],
+    pub cursors: *mut *mut FocusCursor,
+}
+
+const _: () = {
+    assert!(offset_of!(FocusCursor, node) == 0x10);
+    assert!(offset_of!(FocusNavigator, cursor_count) == 0x18);
+    assert!(offset_of!(FocusNavigator, cursors) == 0x20);
+};
+
+impl FocusNavigator {
+    /// The node `player` has focused, null for none
+    pub unsafe fn focused(&self, player: u32) -> *mut FocusNode {
+        if player >= self.cursor_count || self.cursors.is_null() {
+            return core::ptr::null_mut();
+        }
+
+        unsafe { (*self.cursors.add(player as usize)).as_ref() }
+            .map_or(core::ptr::null_mut(), |cursor| cursor.node)
+    }
+}

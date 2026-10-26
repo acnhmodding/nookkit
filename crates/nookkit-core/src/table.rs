@@ -8,7 +8,9 @@ use nookkit_sys::{
 };
 use nookkit_types::game::player_control_lock::{lock_menu, release_menu};
 use nookkit_types::game::ui::{ViewPage, open_pocket_menu as request_pocket_menu};
-use nookkit_types::lp::ui::{BtnPartsCtrl, Control, PartsCtrl};
+use nookkit_types::lp::ui::{
+    BtnPartsCtrl, Control, FocusNode, PartsCtrl, UniteBtnCtrl, VftBtnPartsCtrl, VftUniteBtnCtrl,
+};
 use nookkit_types::native::{Error, NativeResult, type_info_named};
 
 use crate::keys::{self, KeyState};
@@ -48,6 +50,10 @@ pub static TABLE: NookKitV1 = NookKitV1 {
     find_page,
     page_seq,
     on_state,
+    page_focused,
+    pane_decide,
+    pane_set_valid,
+    pane_is_valid,
 };
 
 unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
@@ -483,5 +489,99 @@ unsafe extern "C" fn on_state(
             after,
             cb,
         ))
+    })
+}
+
+// The button whose focus node is `node`, anywhere under `control`
+unsafe fn owner_of(control: *mut Control, node: *mut FocusNode) -> NativeResult<*mut Control> {
+    unsafe {
+        let Some(control_ref) = control.as_mut() else {
+            return Ok(core::ptr::null_mut());
+        };
+
+        if let Some(button) = control_ref.cast::<BtnPartsCtrl>()?
+            && core::ptr::eq(button.focus_node, node)
+        {
+            return Ok(control);
+        }
+
+        for child in control_ref.children() {
+            let found = owner_of(child, node)?;
+            if !found.is_null() {
+                return Ok(found);
+            }
+        }
+
+        Ok(core::ptr::null_mut())
+    }
+}
+
+unsafe extern "C" fn page_focused(page: *mut c_void, player: u32, out: *mut *mut c_void) -> Status {
+    guarded("page_focused", || unsafe {
+        let (Some(page), false) = (page.cast::<ViewPage>().as_mut(), out.is_null()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        *out = core::ptr::null_mut();
+
+        let node = page
+            .input_root()
+            .and_then(|root| root.focus_navigator.as_ref())
+            .map_or(core::ptr::null_mut(), |nav| nav.focused(player));
+        if node.is_null() {
+            return Ok(Status::Ok);
+        }
+
+        for &root in page.roots() {
+            let found = owner_of(root, node)?;
+            if !found.is_null() {
+                *out = found.cast();
+                break;
+            }
+        }
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn pane_decide(pane: *mut c_void, out: *mut bool) -> Status {
+    guarded("pane_decide", || unsafe {
+        let Some(button) = Control::cast_ptr::<BtnPartsCtrl>(pane.cast())? else {
+            return Ok(Status::TypeMismatch);
+        };
+
+        let decided = button.force_decide();
+        if let Some(out) = out.as_mut() {
+            *out = decided;
+        }
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn pane_set_valid(pane: *mut c_void, valid: bool) -> Status {
+    guarded("pane_set_valid", || unsafe {
+        let Some(button) = Control::cast_ptr::<UniteBtnCtrl>(pane.cast())? else {
+            return Ok(Status::TypeMismatch);
+        };
+
+        button.set_disp_valid(valid, false);
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn pane_is_valid(pane: *mut c_void, out: *mut bool) -> Status {
+    guarded("pane_is_valid", || unsafe {
+        let (Some(button), Some(out)) = (
+            Control::cast_ptr::<UniteBtnCtrl>(pane.cast())?,
+            out.as_mut(),
+        ) else {
+            return Ok(Status::TypeMismatch);
+        };
+
+        *out = !button.is_disp_invalid();
+
+        Ok(Status::Ok)
     })
 }

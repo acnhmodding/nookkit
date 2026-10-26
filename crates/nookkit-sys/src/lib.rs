@@ -280,4 +280,16 @@ pub struct NookKitV1 {
         after: bool,
         cb: Callback,
     ) -> Status,
+
+    /// The button `player` has focused on the page, null for none
+    pub page_focused:
+        unsafe extern "C" fn(page: *mut c_void, player: u32, out: *mut *mut c_void) -> Status,
+
+    /// Presses a button as if decided: its Decide animation and the page's decide event, so the
+    /// game reacts as to A. `out` is `false` when it was already deciding
+    pub pane_decide: unsafe extern "C" fn(pane: *mut c_void, out: *mut bool) -> Status,
+
+    /// The button's valid look, the one the game greys out when an entry can't be used
+    pub pane_set_valid: unsafe extern "C" fn(pane: *mut c_void, valid: bool) -> Status,
+    pub pane_is_valid: unsafe extern "C" fn(pane: *mut c_void, out: *mut bool) -> Status,
 }

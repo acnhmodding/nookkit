@@ -15,7 +15,8 @@ pub use btn_parts_ctrl::{BtnPartsCtrl, VftBtnPartsCtrl, VftBtnPartsCtrlLayout};
 pub use control::{Control, VftControl, VftControlLayout};
 pub use focus_node::{FocusNode, NavDirection};
 pub use input::{
-    ButtonId, InputFrame, InputRoot, KeyEvent, KeyEventKind, KeyHandler, PlayerInputState,
+    ButtonId, FocusCursor, FocusNavigator, InputFrame, InputRoot, KeyEvent, KeyEventKind,
+    KeyHandler, PlayerInputState,
 };
 pub use job::Job;
 pub use name::Name;
