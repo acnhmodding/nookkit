@@ -101,9 +101,9 @@ impl Page {
     }
 
     /// Drops the game's own key-guide entries for `key` while this page is up, e.g. to replace them
-    /// with a binding's guide
-    pub fn hide_guide(&self, key: Key) -> Result {
-        check(unsafe { (self.ui.table.page_hide_guide)(self.raw, key.id(), true) })
+    /// with a binding's guide. Reset when the page is built again
+    pub fn set_guide_hidden(&self, key: Key, hidden: bool) -> Result {
+        check(unsafe { (self.ui.table.page_hide_guide)(self.raw, key.id(), hidden) })
     }
 
     /// A disabled page fires none of its input, the game's handlers and bindings alike, e.g. while
