@@ -63,6 +63,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "nookkit-layouts"
+version = "0.1.0"
+
+[[package]]
 name = "nookkit-sym"
 version = "0.1.0"
 dependencies = [

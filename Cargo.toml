@@ -2,6 +2,7 @@
 members = [
     "crates/nookkit",
     "crates/nookkit-core",
+    "crates/nookkit-layouts",
     "crates/nookkit-sym",
     "crates/nookkit-sys",
     "crates/nookkit-types",
@@ -22,6 +23,7 @@ thiserror = "2"
 
 nookkit = { path = "crates/nookkit" }
 nookkit-core = { path = "crates/nookkit-core" }
+nookkit-layouts = { path = "crates/nookkit-layouts" }
 nookkit-sym = { path = "crates/nookkit-sym" }
 nookkit-sys = { path = "crates/nookkit-sys" }
 nookkit-types = { path = "crates/nookkit-types" }
