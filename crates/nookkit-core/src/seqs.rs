@@ -24,6 +24,10 @@ nookkit_sym::hook! {
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
         unsafe { set_active(seq, true) };
+
+        if let Some(seq_ref) = unsafe { seq.as_ref() } {
+            crate::keys::follow_player(unsafe { page_of(seq) }, seq_ref.player);
+        }
         unsafe { fire(seq, SEQ_ACTIVATE) };
     }
 }

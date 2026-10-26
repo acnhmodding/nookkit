@@ -1,8 +1,8 @@
 use core::ffi::c_void;
 
 use nookkit_sys::{
-    KEY_CANCEL, KEY_FLAG_CONSUME, KEY_HOLD, KEY_RELEASE, KEY_REPEAT, KEY_TRIGGER,
-    KeyEvent as RawKeyEvent, Str,
+    KEY_CANCEL, KEY_FLAG_CONSUME, KEY_FLAG_SEQ_PLAYER, KEY_HOLD, KEY_RELEASE, KEY_REPEAT,
+    KEY_TRIGGER, KeyEvent as RawKeyEvent, Str,
 };
 
 use crate::{Page, PaneRef, Result, UiError, callback, check};
@@ -71,7 +71,7 @@ enum Guide {
 pub struct KeyBuilder {
     page: Page,
     key: Key,
-    player: u32,
+    player: Option<u32>,
     consume: bool,
     guide: Option<Guide>,
     hint_pane: Option<String>,
@@ -82,15 +82,20 @@ impl KeyBuilder {
         Self {
             page,
             key,
-            player: 0,
+            player: None,
             consume: false,
             guide: None,
             hint_pane: None,
         }
     }
 
+    /// Pins the binding to one player. Without it the binding follows the player the page's seq
+    /// is opened for, each time it activates
     pub fn player(self, player: u32) -> Self {
-        Self { player, ..self }
+        Self {
+            player: Some(player),
+            ..self
+        }
     }
 
     /// Takes the key from the page's own bindings, e.g. CharaMake's B and X. D-pad navigation and
@@ -129,11 +134,20 @@ impl KeyBuilder {
 
     pub fn build(self) -> Result<KeyBinding> {
         let ui = self.page.ui();
-        let flags = if self.consume { KEY_FLAG_CONSUME } else { 0 };
+        let mut flags = if self.consume { KEY_FLAG_CONSUME } else { 0 };
+        if self.player.is_none() {
+            flags |= KEY_FLAG_SEQ_PLAYER;
+        }
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {
-            (ui.table.key_bind)(self.page.raw(), self.player, self.key.id(), flags, &mut raw)
+            (ui.table.key_bind)(
+                self.page.raw(),
+                self.player.unwrap_or(0),
+                self.key.id(),
+                flags,
+                &mut raw,
+            )
         })?;
 
         let binding = KeyBinding {

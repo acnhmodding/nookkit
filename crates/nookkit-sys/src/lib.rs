@@ -133,6 +133,9 @@ pub const KEY_EVENT_KINDS: usize = 5;
 /// Takes the key from the page's own handlers
 pub const KEY_FLAG_CONSUME: u32 = 1 << 0;
 
+/// The binding takes its player from the page's seq each time the seq activates
+pub const KEY_FLAG_SEQ_PLAYER: u32 = 1 << 1;
+
 #[repr(C)]
 pub struct KeyEvent {
     pub kind: u32,

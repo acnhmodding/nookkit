@@ -6,7 +6,9 @@ use std::ffi::CString;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use nookkit_sys::{Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KeyEvent, Status};
+use nookkit_sys::{
+    Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KEY_FLAG_SEQ_PLAYER, KeyEvent, Status,
+};
 use nookkit_types::game::ui::{KeyGuideEntry, KeyGuideSeq, ViewPage};
 use nookkit_types::lp::ui::{ButtonId, Control, KeyEvent as GameKeyEvent, KeyHandler, PartsCtrl};
 use nookkit_types::native::NativeResult;
@@ -27,6 +29,7 @@ pub struct KeyState {
     cbs: [RefCell<Vec<Callback>>; KEY_EVENT_KINDS],
     guide: RefCell<Option<Guide>>,
     hint_pane: Cell<*mut PartsCtrl>,
+    seq_player: bool,
 }
 
 unsafe impl Send for KeyState {}
@@ -142,6 +145,7 @@ pub unsafe fn bind(
         cbs: Default::default(),
         guide: RefCell::new(None),
         hint_pane: Cell::new(core::ptr::null_mut()),
+        seq_player: flags & KEY_FLAG_SEQ_PLAYER != 0,
     });
 
     let handler = state.handler();
@@ -166,6 +170,20 @@ pub unsafe fn bind(
     with_page(page, |page_state| page_state.keys.push(state));
 
     Ok(Ok(ptr))
+}
+
+/// Points the page's seq-player bindings at `player` when its seq activates
+pub fn follow_player(page: *mut ViewPage, player: u8) {
+    let player = if player < 8 { u32::from(player) } else { 0 };
+
+    // Every seq activates through here, so only pages someone registered on are touched
+    if let Ok(pages) = PAGES.lock()
+        && let Some(state) = pages.get(&(page as usize))
+    {
+        for key in state.keys.iter().filter(|k| k.seq_player) {
+            key.handler().player = player;
+        }
+    }
 }
 
 pub fn on(key: &KeyState, kind: u32, cb: Callback) -> Status {
