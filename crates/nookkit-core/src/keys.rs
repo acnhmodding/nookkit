@@ -14,7 +14,7 @@ use nookkit_types::sead::{Delegate, SafeString};
 use crate::pages::{PAGES, call, snapshot, with_page};
 use crate::report;
 
-const SENTINEL: &str = "acnh-ui:";
+const SENTINEL: &str = "nookkit:";
 
 enum Guide {
     Text(u32),

@@ -102,7 +102,7 @@ unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> Nat
 
                 let name = list.name().and_then(|n| n.to_str().ok()).unwrap_or("?");
                 println!(
-                    "[acnh-ui] bound list {name} ({} buttons)",
+                    "[NookKit] bound list {name} ({} buttons)",
                     list.button_count()
                 );
             }

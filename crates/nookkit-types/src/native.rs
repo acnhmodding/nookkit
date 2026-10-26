@@ -25,7 +25,7 @@ pub type NativeResult<T = ()> = Result<T, Error>;
 
 static RESOLVER: AtomicUsize = AtomicUsize::new(0);
 
-/// Set once by whoever owns the symbol table, the framework core or `acnh_ui_api::connect`
+/// Set once by whoever owns the symbol table, the framework core or `nookkit::connect`
 pub fn set_resolver(resolver: Resolver) {
     RESOLVER.store(resolver as usize, Ordering::Release);
 }

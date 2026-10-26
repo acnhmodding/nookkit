@@ -4,7 +4,7 @@ use std::ffi::CString;
 
 use nookkit_sym::Kind;
 use nookkit_sys::{
-    AcnhUiV1, Callback, Direction, ListTarget, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
+    Callback, Direction, ListTarget, NookKitV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str,
 };
 use nookkit_types::game::player_control_lock::{lock_menu, release_menu};
 use nookkit_types::game::ui::ViewPage;
@@ -15,8 +15,8 @@ use crate::keys::{self, KeyState};
 use crate::lists::{self, ListState};
 use crate::{STARTED, pages, seqs};
 
-pub static TABLE: AcnhUiV1 = AcnhUiV1 {
-    size: core::mem::size_of::<AcnhUiV1>(),
+pub static TABLE: NookKitV1 = NookKitV1 {
+    size: core::mem::size_of::<NookKitV1>(),
     framework_version: 1,
     started,
     resolve,
@@ -56,7 +56,7 @@ fn status(context: &str, result: NativeResult<Status>) -> Status {
     match result {
         Ok(status) => status,
         Err(e) => {
-            println!("[acnh-ui] {context}: {e}");
+            println!("[NookKit] {context}: {e}");
 
             match e {
                 Error::Missing(_) | Error::Native(_) => Status::MissingSymbol,

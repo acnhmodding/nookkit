@@ -6,7 +6,7 @@ mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use nookkit_sys::{API_NAME, API_VERSION, AcnhUiV1, sl_api_publish};
+use nookkit_sys::{API_NAME, API_VERSION, NookKitV1, sl_api_publish};
 use nookkit_types::native::{NativeResult, SymbolKind};
 
 #[unsafe(no_mangle)]
@@ -29,14 +29,14 @@ fn nav(direction: nookkit_sys::Direction) -> nookkit_types::lp::ui::NavDirection
 
 fn report(context: &str, result: NativeResult) {
     if let Err(e) = result {
-        println!("[acnh-ui] {context}: {e}");
+        println!("[NookKit] {context}: {e}");
     }
 }
 
 fn start() -> Result<(), nookkit_sym::SymError> {
     let symbols = nookkit_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
     println!(
-        "[acnh-ui] {} symbols for {}",
+        "[NookKit] {} symbols for {}",
         symbols.len(),
         symbols.game_version
     );
@@ -60,11 +60,11 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     keys::message_find::install()
 }
 
-#[skyline::main(name = "acnh-ui")]
+#[skyline::main(name = "NookKit")]
 pub fn main() {
     match start() {
         Ok(()) => STARTED.store(true, Ordering::Release),
-        Err(e) => println!("[acnh-ui] not started: {e}"),
+        Err(e) => println!("[NookKit] not started: {e}"),
     }
 
     // Published even when not started, so clients get UnsupportedBuild instead of a missing framework
@@ -72,7 +72,7 @@ pub fn main() {
         sl_api_publish(
             API_NAME.as_ptr(),
             API_VERSION,
-            (&table::TABLE as *const AcnhUiV1).cast(),
+            (&table::TABLE as *const NookKitV1).cast(),
         )
     };
 }

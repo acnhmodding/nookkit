@@ -2,7 +2,7 @@
 
 use core::ffi::{c_char, c_void};
 
-pub const API_NAME: &core::ffi::CStr = c"acnh-ui";
+pub const API_NAME: &core::ffi::CStr = c"nookkit";
 pub const API_VERSION: u32 = 1;
 
 unsafe extern "C" {
@@ -166,7 +166,7 @@ pub struct ListTarget {
 }
 
 #[repr(C)]
-pub struct AcnhUiV1 {
+pub struct NookKitV1 {
     pub size: usize,
     pub framework_version: u32,
 

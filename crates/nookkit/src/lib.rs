@@ -14,7 +14,7 @@ mod page;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
 use nookkit_sys::{
-    API_NAME, API_VERSION, AcnhUiV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str, sl_api_get,
+    API_NAME, API_VERSION, NookKitV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str, sl_api_get,
 };
 use nookkit_types::native::SymbolKind;
 
@@ -27,24 +27,33 @@ pub use page::{Event, Page, Pane, PaneRef, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UiError {
-    #[error("acnh-ui is not loaded")]
+    #[error("NookKit is not loaded")]
     FrameworkMissing,
-    #[error("acnh-ui is older than this mod")]
+
+    #[error("NookKit is older than this mod")]
     ApiTooOld,
+
     #[error("invalid argument")]
     InvalidArg,
+
     #[error("pane not found")]
     PaneNotFound,
+
     #[error("pane is not of the expected class")]
     TypeMismatch,
+
     #[error("page has no control event table")]
     NoEventTable,
+
     #[error("page's control event table is full")]
     EventTableFull,
+
     #[error("player lock failed")]
     LockFailed,
+
     #[error("symbol missing from the symbol file")]
     MissingSymbol,
+
     #[error("unsupported game build")]
     UnsupportedBuild,
 }
@@ -72,11 +81,11 @@ pub enum PageFilter<'a> {
 
 #[derive(Clone, Copy)]
 pub struct Ui {
-    table: &'static AcnhUiV1,
+    table: &'static NookKitV1,
     name: &'static str,
 }
 
-static TABLE: AtomicPtr<AcnhUiV1> = AtomicPtr::new(core::ptr::null_mut());
+static TABLE: AtomicPtr<NookKitV1> = AtomicPtr::new(core::ptr::null_mut());
 
 fn resolve(name: &str, kind: SymbolKind) -> Option<usize> {
     let table = unsafe { TABLE.load(Ordering::Acquire).as_ref() }?;
@@ -93,12 +102,12 @@ fn resolve(name: &str, kind: SymbolKind) -> Option<usize> {
 /// Fails with [`UiError::UnsupportedBuild`] unless the game is the build this crate version supports.
 /// `name` prefixes the errors printed for failed callbacks
 pub fn connect(name: &'static str) -> Result<Ui> {
-    let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<AcnhUiV1>();
+    let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV1>();
     let Some(table_ref) = (unsafe { table.as_ref() }) else {
         return Err(UiError::FrameworkMissing);
     };
 
-    if table_ref.size < core::mem::size_of::<AcnhUiV1>() {
+    if table_ref.size < core::mem::size_of::<NookKitV1>() {
         return Err(UiError::ApiTooOld);
     }
 

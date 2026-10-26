@@ -72,7 +72,7 @@ pub fn vtable<T>(name: &str) -> Result<*const T, SymError> {
 pub use skyline::hooks::A64HookFunction as __hook_function;
 
 /// ```ignore
-/// acnh_sym::hook! {
+/// nookkit_sym::hook! {
 ///     pub view_page_initialize = "game::UI::ViewPage::initialize";
 ///     fn(page: *mut c_void) {
 ///         unsafe { original(page) };

@@ -11,7 +11,7 @@ pub fn module_base() -> usize {
 ///
 /// ```ignore
 /// mod offsets {
-///     acnh_ui_api::offsets! {
+///     nookkit::offsets! {
 ///         fill_mouth_list = 0x2b8fe60,
 ///     }
 /// }
@@ -39,7 +39,7 @@ macro_rules! offsets {
 /// An inline hook on a function the resolver finds
 ///
 /// ```ignore
-/// acnh_ui_api::hook! {
+/// nookkit::hook! {
 ///     resolve = crate::offsets::resolve;
 ///     pub fill = "fill_mouth_list";
 ///     fn(values: *mut c_void) {

@@ -137,7 +137,7 @@ pub struct Seq {
 }
 
 impl Seq {
-    /// For reading the seq's own struct, e.g. through acnh-game
+    /// For reading the seq's own struct
     pub fn raw(&self) -> *mut c_void {
         self.raw
     }
