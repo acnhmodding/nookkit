@@ -136,6 +136,11 @@ impl CommandSelect {
         self.native().choose(index)
     }
 
+    /// Closes without running a command
+    pub fn cancel(&self) {
+        self.native().cancel();
+    }
+
     /// Drops the built commands, so Appear builds them again from nothing
     pub fn clear(&self) {
         self.native().count = 0;

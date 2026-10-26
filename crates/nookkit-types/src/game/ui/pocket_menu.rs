@@ -162,4 +162,9 @@ impl CommandSelectSeq {
         self.selected_button = (count - 1 - index) as u8;
         true
     }
+
+    /// Selects no command, so the popup closes without running one
+    pub fn cancel(&mut self) {
+        self.selected_button = 0xff;
+    }
 }
