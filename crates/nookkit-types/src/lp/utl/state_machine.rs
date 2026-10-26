@@ -41,3 +41,35 @@ crate::native! {
             = sym::Lp::Utl::StateMachine::changeState;
     }
 }
+
+/// What the state machine calls on a state entry: enter on a change, exec every step, exit on
+/// leaving with the next state
+#[repr(C)]
+pub struct StateVtable {
+    pub enter: unsafe extern "C" fn(entry: *mut StateEntry),
+    pub exec: unsafe extern "C" fn(entry: *mut StateEntry),
+    pub exit: unsafe extern "C" fn(entry: *mut StateEntry, next: i32),
+}
+
+/// One state, its slots invoking member functions of `obj` (usually the seq)
+#[repr(C)]
+pub struct StateEntry {
+    pub vtable: *const StateVtable,
+    pub obj: *mut c_void,
+    pub enter: [usize; 2],
+    pub exec: [usize; 2],
+    pub exit: [usize; 2],
+}
+
+const _: () = assert!(core::mem::size_of::<StateEntry>() == 0x40);
+
+impl StateMachine {
+    /// Null for a state the machine doesn't have
+    pub fn entry(&self, state: i32) -> *mut StateEntry {
+        if state < 0 || state >= self.state_count || self.states.is_null() {
+            return core::ptr::null_mut();
+        }
+
+        unsafe { self.states.cast::<StateEntry>().add(state as usize) }
+    }
+}

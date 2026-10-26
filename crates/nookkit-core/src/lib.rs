@@ -2,6 +2,7 @@ mod keys;
 mod lists;
 mod pages;
 mod seqs;
+mod states;
 mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};

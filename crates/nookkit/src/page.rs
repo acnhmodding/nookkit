@@ -2,7 +2,7 @@ use core::ffi::c_void;
 
 use nookkit_sys::{
     ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_READY,
-    SEQ_UPDATE, Str,
+    SEQ_UPDATE, STATE_ENTER, STATE_EXEC, STATE_EXIT, Str,
 };
 
 use nookkit_types::game::ui::SequenceBase;
@@ -83,6 +83,11 @@ impl Page {
         Ok((!raw.is_null()).then(|| Seq::new(raw)))
     }
 
+    /// Callbacks around one state of the page's seq, see [`StateHooks`]
+    pub fn on_state(&self, state: i32) -> StateHooks {
+        StateHooks { page: *self, state }
+    }
+
     /// Binds `key` on this page, see [`KeyBuilder`]
     pub fn bind_key(&self, key: Key) -> KeyBuilder {
         KeyBuilder::new(*self, key)
@@ -126,6 +131,55 @@ impl Page {
 
     pub(crate) fn ui(&self) -> Ui {
         self.ui
+    }
+}
+
+/// Runs callbacks before or after the game's own code for one state of a page's seq. Exec runs
+/// every step the state is current, [`Seq::state_frame`] is 0 on its first. Kept until the page is
+/// built again
+#[derive(Clone, Copy)]
+pub struct StateHooks {
+    page: Page,
+    state: i32,
+}
+
+impl StateHooks {
+    pub fn before_enter(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_ENTER, false, f)
+    }
+
+    pub fn after_enter(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_ENTER, true, f)
+    }
+
+    pub fn before_exec(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_EXEC, false, f)
+    }
+
+    pub fn after_exec(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_EXEC, true, f)
+    }
+
+    pub fn before_exit(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_EXIT, false, f)
+    }
+
+    pub fn after_exit(self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Self> {
+        self.on(STATE_EXIT, true, f)
+    }
+
+    fn on(
+        self,
+        phase: u32,
+        after: bool,
+        mut f: impl FnMut(Seq) -> Result + 'static,
+    ) -> Result<Self> {
+        let ui = self.page.ui();
+        let cb = callback::raw(ui, move |arg| f(Seq::new(arg.cast_mut())));
+
+        check(unsafe { (ui.table.on_state)(self.page.raw(), self.state, phase, after, cb) })?;
+
+        Ok(self)
     }
 }
 

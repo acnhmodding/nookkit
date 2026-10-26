@@ -51,6 +51,13 @@ pub fn live_seq(page: *mut ViewPage) -> Option<usize> {
         .filter(|&seq| seq != 0)
 }
 
+/// Which build of `page` this is, to tell a rebuild over a live seq apart
+pub fn live_build(page: *mut ViewPage) -> Option<u64> {
+    let live = LIVE.lock().ok()?;
+
+    live.get(&(page as usize)).map(|l| l.built)
+}
+
 pub fn set_live_seq(page: *mut ViewPage, seq: usize) {
     if let Ok(mut live) = LIVE.lock()
         && let Some(l) = live.get_mut(&(page as usize))
@@ -85,6 +92,9 @@ pub struct PageState {
 
     /// ButtonIds whose game-made guide entries are dropped while the page is active
     pub hidden_guides: Vec<i32>,
+
+    /// State hooks waiting for the page's seq
+    pub states: Vec<crate::states::StateReg>,
 }
 
 pub static PAGES: Mutex<BTreeMap<usize, PageState>> = Mutex::new(BTreeMap::new());

@@ -101,6 +101,12 @@ pub const SEQ_DEACTIVATED: u32 = 2;
 pub const SEQ_UPDATE: u32 = 3;
 pub const SEQ_EVENT_KINDS: usize = 4;
 
+/// State hook phases, see `on_state`
+pub const STATE_ENTER: u32 = 0;
+pub const STATE_EXEC: u32 = 1;
+pub const STATE_EXIT: u32 = 2;
+pub const STATE_PHASES: usize = 3;
+
 pub const LIST_ITEM: u32 = 0;
 pub const LIST_FOCUS: u32 = 1;
 pub const LIST_DECIDE: u32 = 2;
@@ -264,4 +270,14 @@ pub struct NookKitV1 {
 
     /// The seq that built `page`, null before it is ready
     pub page_seq: unsafe extern "C" fn(page: *mut c_void, out: *mut *mut c_void) -> Status,
+
+    /// `cb` gets the seq pointer before or `after` the page's seq runs `phase` of `state`. Kept
+    /// until the page is built again
+    pub on_state: unsafe extern "C" fn(
+        page: *mut c_void,
+        state: i32,
+        phase: u32,
+        after: bool,
+        cb: Callback,
+    ) -> Status,
 }

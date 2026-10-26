@@ -25,7 +25,7 @@ pub use nookkit_sys::Direction;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
 pub use offsets::{__hook_function, module_base};
-pub use page::{Event, Page, Pane, Seq};
+pub use page::{Event, Page, Pane, Seq, StateHooks};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UiError {

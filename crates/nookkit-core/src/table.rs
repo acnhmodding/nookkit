@@ -47,6 +47,7 @@ pub static TABLE: NookKitV1 = NookKitV1 {
     open_pocket_menu,
     find_page,
     page_seq,
+    on_state,
 };
 
 unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
@@ -460,5 +461,27 @@ unsafe extern "C" fn page_seq(page: *mut c_void, out: *mut *mut c_void) -> Statu
         *out = pages::live_seq(page.cast()).map_or(core::ptr::null_mut(), |seq| seq as *mut c_void);
 
         Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn on_state(
+    page: *mut c_void,
+    state: i32,
+    phase: u32,
+    after: bool,
+    cb: Callback,
+) -> Status {
+    guarded("on_state", || {
+        if page.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
+        Ok(crate::states::on_state(
+            page.cast(),
+            state,
+            phase,
+            after,
+            cb,
+        ))
     })
 }

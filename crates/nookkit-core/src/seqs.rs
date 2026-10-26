@@ -80,7 +80,9 @@ unsafe fn lists_of(seq: *mut SequenceBase) -> Vec<&'static crate::lists::ListSta
 }
 
 unsafe fn ready(seq: *mut SequenceBase) {
-    crate::pages::set_live_seq(unsafe { page_of(seq) }, seq as usize);
+    let page = unsafe { page_of(seq) };
+    crate::pages::set_live_seq(page, seq as usize);
+    unsafe { crate::states::ready(page, seq) };
 
     for list in unsafe { lists_of(seq) } {
         report("list setup", unsafe { list.setup() });
