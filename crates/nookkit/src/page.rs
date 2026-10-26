@@ -6,6 +6,7 @@ use nookkit_sys::{
 };
 
 use nookkit_types::game::ui::SequenceBase;
+use nookkit_types::game::ui_sys::VftSequence;
 
 use crate::{Key, KeyBuilder, List, ListRef, ListTarget, PaneRef, Result, Ui, callback, check};
 
@@ -79,25 +80,21 @@ impl Page {
     }
 
     /// After the page's seq has set up its controls
-    pub fn on_ready(&self, mut f: impl FnMut(Seq) -> Result + 'static) -> Result {
-        self.on_seq(SEQ_READY, move |arg| {
-            f(Seq {
-                raw: arg.cast_mut(),
-            })
-        })
+    pub fn on_ready(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        self.on_seq(SEQ_READY, f)
     }
 
-    pub fn on_activate(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
-        self.on_seq(SEQ_ACTIVATE, move |_| f())
+    pub fn on_activate(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        self.on_seq(SEQ_ACTIVATE, f)
     }
 
-    pub fn on_deactivated(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
-        self.on_seq(SEQ_DEACTIVATED, move |_| f())
+    pub fn on_deactivated(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        self.on_seq(SEQ_DEACTIVATED, f)
     }
 
     /// Every frame the page's seq updates
-    pub fn on_update(&self, mut f: impl FnMut() -> Result + 'static) -> Result {
-        self.on_seq(SEQ_UPDATE, move |_| f())
+    pub fn on_update(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        self.on_seq(SEQ_UPDATE, f)
     }
 
     /// Drops the game's own key-guide entries for `key` while this page is up, e.g. to replace them
@@ -112,8 +109,8 @@ impl Page {
         check(unsafe { (self.ui.table.page_set_input_enabled)(self.raw, enable) })
     }
 
-    fn on_seq(&self, kind: u32, f: impl FnMut(*const c_void) -> Result + 'static) -> Result {
-        let cb = callback::raw(self.ui, f);
+    fn on_seq(&self, kind: u32, mut f: impl FnMut(Seq) -> Result + 'static) -> Result {
+        let cb = callback::raw(self.ui, move |arg| f(Seq::new(arg.cast_mut())));
 
         check(unsafe { (self.ui.table.on_seq_event)(self.raw, kind, cb) })
     }
@@ -135,9 +132,50 @@ pub struct Seq {
 }
 
 impl Seq {
+    pub(crate) fn new(raw: *mut c_void) -> Self {
+        Self { raw }
+    }
+
+    fn base(&self) -> Option<&SequenceBase> {
+        unsafe { self.raw.cast::<SequenceBase>().as_ref() }
+    }
+
     /// For reading the seq's own struct
     pub fn raw(&self) -> *mut c_void {
         self.raw
+    }
+
+    /// The state machine's current state, -1 before the first
+    pub fn state(&self) -> i32 {
+        self.base()
+            .map_or(-1, |seq| seq.state_machine.current_state)
+    }
+
+    /// How many times the current state has run, 0 on its first exec
+    pub fn state_frame(&self) -> i32 {
+        self.base().map_or(0, |seq| seq.state_machine.frame)
+    }
+
+    /// The local player the seq is open for
+    pub fn player(&self) -> u8 {
+        self.base().map_or(0, |seq| seq.player)
+    }
+
+    pub fn parent(&self) -> Option<Seq> {
+        let parent = self.base()?.base.parent;
+        (!parent.is_null()).then(|| Seq::new(parent.cast()))
+    }
+
+    /// A state request is queued for the state machine's next step
+    pub fn has_request(&self) -> bool {
+        self.base().is_some_and(|seq| seq.has_request())
+    }
+
+    /// Settled with nothing pending: no open request, no queued state, and the seq's own idle
+    /// check, e.g. the pocket menu once it has closed
+    pub fn is_idle(&self) -> bool {
+        self.base()
+            .is_some_and(|seq| !seq.base.pending_focus_restore && unsafe { seq.base.is_idle() })
     }
 
     /// Queues a state for the seq's state machine the way the game does, `false` when a request is

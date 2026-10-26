@@ -6,13 +6,18 @@ use core::mem::offset_of;
 pub struct StateMachine {
     pub vtable: *const c_void,
     pub current_state: i32,
+
+    /// Execs of the current state so far, reset to 0 on every change
+    pub frame: i32,
+
     pub prev_state: i32,
-    pub unk_10: i32,
-    pub unk_14: i32,
+    pub prev_frame: i32,
     pub next_state: i32,
     pub unk_1c: i32,
     pub has_next: bool,
-    pub unk_21: u8,
+
+    /// Set by every change
+    pub changed: bool,
     _unk_22: [u8; 0x6],
     pub state_count: i32,
     _unk_2c: [u8; 0x4],
@@ -22,6 +27,10 @@ pub struct StateMachine {
 
 const _: () = {
     assert!(offset_of!(StateMachine, current_state) == 0x8);
+    assert!(offset_of!(StateMachine, frame) == 0xc);
+    assert!(offset_of!(StateMachine, prev_state) == 0x10);
+    assert!(offset_of!(StateMachine, next_state) == 0x18);
+    assert!(offset_of!(StateMachine, has_next) == 0x20);
     assert!(offset_of!(StateMachine, states) == 0x30);
     assert!(core::mem::size_of::<StateMachine>() == 0x48);
 };

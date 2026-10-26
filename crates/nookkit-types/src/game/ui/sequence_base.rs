@@ -71,6 +71,10 @@ crate::derive_base!(SequenceBase => Sequence);
 unsafe impl VftSequenceBase for SequenceBase {}
 
 impl SequenceBase {
+    pub fn has_request(&self) -> bool {
+        self.requests.iter().any(|&r| r != -1)
+    }
+
     /// Queues `state` for the state machine's next step, `false` when a request is already queued
     pub fn request_state(&mut self, state: i32) -> bool {
         let Some(slot) = self.requests.get_mut(self.request_slot as usize) else {
