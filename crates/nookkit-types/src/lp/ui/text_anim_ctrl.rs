@@ -1,7 +1,6 @@
+use crate::native::sym;
 use core::ffi::c_void;
 use core::mem::offset_of;
-
-use native_vtable::native;
 
 use crate::nn::ui2d::TextBox;
 
@@ -30,9 +29,10 @@ const _: () = {
     assert!(offset_of!(TextAnimCtrl, layout_flags) == 0x58);
 };
 
-#[native(resolve = crate::native::resolve)]
-impl TextAnimCtrl {
-    /// Re-applies the layout flags after the text changed
-    #[native(symbol = "Lp::UI::TextAnimCtrl::refreshLayout")]
-    pub unsafe fn refresh_layout(&mut self);
+crate::native! {
+    impl TextAnimCtrl {
+        /// Re-applies the layout flags after the text changed
+        pub unsafe fn refresh_layout(&mut self)
+            = sym::Lp::UI::TextAnimCtrl::refreshLayout;
+    }
 }

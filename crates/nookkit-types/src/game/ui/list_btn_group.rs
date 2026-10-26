@@ -1,9 +1,9 @@
 use core::ffi::c_void;
 
-use native_vtable::{native, vtable, vtable_impl};
+use native_vtable::{vtable, vtable_impl};
 
 use crate::game::ui_sys::ScrollBtnListCtrl;
-use crate::native::{NativeResult, vtable};
+use crate::native::{NativeResult, sym, vtable};
 use crate::sead::Delegate;
 
 #[vtable(path = game::ui::list_btn_group::VftListBtnGroup)]
@@ -56,7 +56,7 @@ impl ListBtnGroup {
 
     pub fn new() -> NativeResult<Self> {
         Ok(Self {
-            vtable: vtable("game::UI::ListBtnGroup::vtable")?,
+            vtable: vtable(&sym::game::UI::ListBtnGroup::vtable)?,
             enabled: true,
             toggle: true,
             ..Self::empty()
@@ -64,10 +64,11 @@ impl ListBtnGroup {
     }
 }
 
-#[native(resolve = crate::native::resolve)]
-impl ListBtnGroup {
-    #[native(symbol = "game::UI::ListBtnGroup::refresh")]
-    pub unsafe fn refresh(&mut self, list: *mut ScrollBtnListCtrl);
+crate::native! {
+    impl ListBtnGroup {
+        pub unsafe fn refresh(&mut self, list: *mut ScrollBtnListCtrl)
+            = sym::game::UI::ListBtnGroup::refresh;
+    }
 }
 
 #[repr(C)]
@@ -134,12 +135,13 @@ impl ItemUpdater {
     }
 
     pub unsafe fn update(&mut self, scroll_event: *mut c_void) -> NativeResult {
-        unsafe { self.update_native(&scroll_event) }.map_err(Into::into)
+        unsafe { self.update_native(&scroll_event) }
     }
 }
 
-#[native(resolve = crate::native::resolve)]
-impl ItemUpdater {
-    #[native(symbol = "game::UI::ListItemUpdater::update")]
-    unsafe fn update_native(&mut self, event: *const *mut c_void);
+crate::native! {
+    impl ItemUpdater {
+        unsafe fn update_native(&mut self, event: *const *mut c_void)
+            = sym::game::UI::ListItemUpdater::update;
+    }
 }

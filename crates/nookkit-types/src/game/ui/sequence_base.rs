@@ -6,7 +6,7 @@ use native_vtable::{VTableLayout, vtable, vtable_impl};
 use crate::game::ui::ViewPage;
 use crate::game::ui_sys::{Sequence, VftSequence};
 use crate::lp::utl::StateMachine;
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 
 #[vtable(path = game::ui::sequence_base::VftSequenceBase)]
 pub unsafe trait VftSequenceBase: VftSequence {
@@ -71,5 +71,5 @@ crate::derive_base!(SequenceBase => Sequence);
 unsafe impl VftSequenceBase for SequenceBase {}
 
 unsafe impl Class for SequenceBase {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::SequenceBase::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::SequenceBase::getRuntimeTypeInfo.erase();
 }

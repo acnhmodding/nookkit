@@ -1,10 +1,10 @@
 use core::mem::offset_of;
 
-use native_vtable::{native, vtable_impl};
+use native_vtable::vtable_impl;
 
 use crate::game::ui::{AppLocatorCtrl, PageBase, SequenceBase, VftSequenceBase};
 use crate::lp::ui::ButtonId;
-use crate::native::{Class, NativeResult};
+use crate::native::{Class, Fn, NativeResult, sym};
 use crate::sead::{FixedSafeString, PtrArray};
 
 pub const KEY_GUIDE_PARTS: usize = 5;
@@ -123,13 +123,14 @@ crate::derive_base!(KeyGuideSeq => SequenceBase);
 unsafe impl VftSequenceBase for KeyGuideSeq {}
 
 unsafe impl Class for KeyGuideSeq {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::KeyGuideSeq::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::KeyGuideSeq::getRuntimeTypeInfo.erase();
 }
 
-#[native(resolve = crate::native::resolve)]
-impl KeyGuideSeq {
-    #[native(symbol = "game::UI::KeyGuideSeq::addGuide")]
-    unsafe fn add_guide_native(&mut self, entry: *const KeyGuideEntry, flag: bool);
+crate::native! {
+    impl KeyGuideSeq {
+        unsafe fn add_guide_native(&mut self, entry: *const KeyGuideEntry, flag: bool)
+            = sym::game::UI::KeyGuideSeq::addGuide;
+    }
 }
 
 impl KeyGuideSeq {
@@ -137,7 +138,7 @@ impl KeyGuideSeq {
     pub unsafe fn add_guide(&mut self, entry: &mut KeyGuideEntry) -> NativeResult {
         entry.label.pin();
 
-        unsafe { self.add_guide_native(entry, true) }.map_err(Into::into)
+        unsafe { self.add_guide_native(entry, true) }
     }
 
     /// The part showing display entry `index`

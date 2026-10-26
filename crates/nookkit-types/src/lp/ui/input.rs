@@ -25,6 +25,10 @@ pub enum ButtonId {
     Minus = 15,
 }
 
+unsafe impl crate::native::Abi for ButtonId {
+    type Abi = nookkit_sym::abi::I32;
+}
+
 impl ButtonId {
     pub fn from_raw(raw: i32) -> Option<Self> {
         Some(match raw {

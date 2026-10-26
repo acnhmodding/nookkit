@@ -1,7 +1,8 @@
+use crate::native::sym;
 use core::ffi::c_void;
 use core::mem::offset_of;
 
-use native_vtable::{native, vtable, vtable_impl};
+use native_vtable::{vtable, vtable_impl};
 
 use crate::sead::{Heap, VftHeap};
 
@@ -30,10 +31,8 @@ const _: () = assert!(core::mem::size_of::<Delegate>() == 0x20);
 #[vtable_impl]
 unsafe impl VftDelegate for Delegate {}
 
-#[native(resolve = crate::native::resolve)]
-unsafe extern "C" {
-    #[native(symbol = "operator_new")]
-    fn operator_new(size: usize) -> *mut c_void;
+crate::native! {
+    unsafe fn operator_new(size: usize) -> *mut c_void = sym::operator_new;
 }
 
 #[repr(C)]

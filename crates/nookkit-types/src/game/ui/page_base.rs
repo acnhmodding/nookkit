@@ -4,7 +4,7 @@ use core::mem::offset_of;
 use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::game::ui::{VftViewPage, ViewPage};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 
 #[vtable(path = game::ui::page_base::VftPageBase)]
 pub unsafe trait VftPageBase: VftViewPage {
@@ -36,5 +36,5 @@ crate::derive_base!(PageBase => ViewPage);
 unsafe impl VftPageBase for PageBase {}
 
 unsafe impl Class for PageBase {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::PageBase::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::PageBase::getRuntimeTypeInfo.erase();
 }

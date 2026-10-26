@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 skyline = { workspace = true }
 native-vtable = { workspace = true }
+nookkit-sym = { workspace = true }
 thiserror = { workspace = true }

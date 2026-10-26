@@ -5,7 +5,7 @@ use native_vtable::vtable_impl;
 
 use crate::game::ui::ListBtnGroup;
 use crate::lp::ui::{UniteBtnCtrl, VftUniteBtnCtrl};
-use crate::native::{Class, NativeResult, fun_addr, vtable};
+use crate::native::{Class, Fn, NativeResult, fun_addr, sym, vtable};
 use crate::sead::Delegate;
 
 #[repr(C)]
@@ -77,15 +77,15 @@ crate::derive_base!(AppUniteBtnCtrl => UniteBtnCtrl);
 unsafe impl VftUniteBtnCtrl for AppUniteBtnCtrl {}
 
 unsafe impl Class for AppUniteBtnCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo.erase();
 }
 
 impl AppUniteBtnCtrl {
     pub fn bind_to_group(&mut self, group: *mut ListBtnGroup) -> NativeResult {
         self.group_delegate = Delegate::new(
-            vtable("game::UI::ListBtnGroup::SelectableDelegate::vtable")?,
+            vtable(&sym::game::UI::ListBtnGroup::SelectableDelegate::vtable)?,
             group,
-            fun_addr("game::UI::ListBtnGroup::isSelectable")?,
+            fun_addr(&sym::game::UI::ListBtnGroup::isSelectable)?,
         );
 
         Ok(())

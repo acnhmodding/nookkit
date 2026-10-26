@@ -1,6 +1,7 @@
+use crate::native::sym;
 use core::mem::offset_of;
 
-use native_vtable::{VTableLayout, native, vtable, vtable_impl};
+use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::lp::ui::{ButtonId, Control, InputRoot, Job, KeyHandler, PageBase, VftPageBase};
 use crate::sead::{Delegate, OffsetList};
@@ -42,11 +43,12 @@ crate::derive_base!(Page => PageBase);
 #[vtable_impl]
 unsafe impl VftPage for Page {}
 
-#[native(resolve = crate::native::resolve)]
-impl Page {
-    /// Creates the input root if needed and appends `handler` to its key handlers
-    #[native(symbol = "Lp::UI::Page::addKeyHandler")]
-    pub unsafe fn add_key_handler(&mut self, player: u32, key: ButtonId, handler: *mut KeyHandler);
+crate::native! {
+    impl Page {
+        /// Creates the input root if needed and appends `handler` to its key handlers
+        pub unsafe fn add_key_handler(&mut self, player: u32, key: ButtonId, handler: *mut KeyHandler)
+            = sym::Lp::UI::Page::addKeyHandler;
+    }
 }
 
 impl Page {

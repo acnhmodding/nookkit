@@ -1,4 +1,5 @@
 use core::ffi::c_void;
+use nookkit_sym::sym;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -71,7 +72,7 @@ pub fn with_page<R>(page: *mut ViewPage, f: impl FnOnce(&mut PageState) -> R) ->
 }
 
 nookkit_sym::hook! {
-    pub view_page_initialize = "game::UI::ViewPage::initialize";
+    pub view_page_initialize = sym::game::UI::ViewPage::initialize;
     fn(page: *mut ViewPage, config: *mut c_void) {
         unsafe { original(page, config) };
         unsafe { built(page) };
@@ -79,7 +80,7 @@ nookkit_sym::hook! {
 }
 
 nookkit_sym::hook! {
-    pub view_page_layout_built = "game::UI::ViewPage::dispatchLayoutBuilt";
+    pub view_page_layout_built = sym::game::UI::ViewPage::dispatchLayoutBuilt;
     fn(page: *mut ViewPage, event: *mut LayoutBuiltEvent) {
         unsafe { original(page, event) };
 

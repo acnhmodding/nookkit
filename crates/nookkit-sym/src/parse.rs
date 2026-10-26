@@ -51,6 +51,12 @@ impl SymbolFile {
         self.entries.get(&(kind, name.to_owned())).copied()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (Kind, &str, u64)> {
+        self.entries
+            .iter()
+            .map(|((kind, name), &offset)| (*kind, name.as_str(), offset))
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }

@@ -60,12 +60,12 @@ pub fn resolve(name: &'static str) -> Option<usize> {
     address(Kind::Fn, name).ok()
 }
 
-pub fn fun_addr(name: &str) -> Result<usize, SymError> {
-    address(Kind::Fn, name)
+pub fn fun_addr<S>(symbol: &crate::Fn<S>) -> Result<usize, SymError> {
+    address(Kind::Fn, symbol.name)
 }
 
-pub fn vtable<T>(name: &str) -> Result<*const T, SymError> {
-    Ok(address(Kind::Vtable, name)? as *const T)
+pub fn vtable<T>(symbol: &crate::Vtable) -> Result<*const T, SymError> {
+    Ok(address(Kind::Vtable, symbol.name)? as *const T)
 }
 
 #[doc(hidden)]
@@ -73,7 +73,7 @@ pub use skyline::hooks::A64HookFunction as __hook_function;
 
 /// ```ignore
 /// nookkit_sym::hook! {
-///     pub view_page_initialize = "game::UI::ViewPage::initialize";
+///     pub view_page_initialize = nookkit_sym::sym::game::UI::ViewPage::initialize;
 ///     fn(page: *mut c_void) {
 ///         unsafe { original(page) };
 ///     }
@@ -83,12 +83,14 @@ pub use skyline::hooks::A64HookFunction as __hook_function;
 #[macro_export]
 macro_rules! hook {
     (
-        $vis:vis $name:ident = $symbol:literal;
+        $vis:vis $name:ident = $symbol:path;
         fn($($arg:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? $body:block
     ) => {
         $vis mod $name {
             #[allow(unused_imports)]
             use super::*;
+
+            const _: () = $crate::check::<_, ($($ty,)*), $crate::__ret_or_unit!($($ret)?)>(&$symbol);
 
             static ORIGINAL: ::core::sync::atomic::AtomicUsize = ::core::sync::atomic::AtomicUsize::new(0);
 
@@ -107,7 +109,7 @@ macro_rules! hook {
                     return Ok(());
                 }
 
-                let target = $crate::fun_addr($symbol)?;
+                let target = $crate::fun_addr(&$symbol)?;
                 let mut original = ::core::ptr::null_mut();
 
                 unsafe {

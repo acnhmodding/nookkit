@@ -4,7 +4,7 @@ use core::mem::offset_of;
 use native_vtable::vtable_impl;
 
 use crate::lp::ui::{PartsCtrl, TextAnimCtrl, VftPartsCtrl};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 use crate::sead::PtrArray;
 
 #[repr(C)]
@@ -39,5 +39,5 @@ crate::derive_base!(AppLocatorCtrl => PartsCtrl);
 unsafe impl VftPartsCtrl for AppLocatorCtrl {}
 
 unsafe impl Class for AppLocatorCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::AppLocatorCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::AppLocatorCtrl::getRuntimeTypeInfo.erase();
 }

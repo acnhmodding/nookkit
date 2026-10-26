@@ -5,7 +5,7 @@ use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::game::ui::ViewPage;
 use crate::lp::ui::{Name, PageHolder};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 use crate::sead::runtime_type_info::Interface;
 use crate::sead::{CriticalSection, ListNode, OffsetList};
 
@@ -112,7 +112,7 @@ const _: () = {
 unsafe impl VftSequence for Sequence {}
 
 unsafe impl Class for Sequence {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UISys::Sequence::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UISys::Sequence::getRuntimeTypeInfo.erase();
 }
 
 impl Sequence {

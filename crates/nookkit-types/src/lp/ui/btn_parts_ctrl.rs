@@ -4,7 +4,7 @@ use core::mem::offset_of;
 use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::lp::ui::{FocusNode, NavDirection, PartsCtrl, VftPartsCtrl};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 
 #[vtable(path = lp::ui::btn_parts_ctrl::VftBtnPartsCtrl)]
 pub unsafe trait VftBtnPartsCtrl: VftPartsCtrl {
@@ -56,7 +56,7 @@ crate::derive_base!(BtnPartsCtrl => PartsCtrl);
 unsafe impl VftBtnPartsCtrl for BtnPartsCtrl {}
 
 unsafe impl Class for BtnPartsCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "Lp::UI::BtnPartsCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::Lp::UI::BtnPartsCtrl::getRuntimeTypeInfo.erase();
 }
 
 impl BtnPartsCtrl {

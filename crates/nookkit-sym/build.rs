@@ -1,0 +1,192 @@
+// One typed constant per symbol, so a name missing from the symbol file fails to compile
+
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write;
+use std::{env, fs, path::PathBuf};
+
+#[allow(dead_code)]
+#[path = "src/parse.rs"]
+mod parse;
+
+use parse::Kind;
+
+const SYMBOLS: &str = "../../offsets/3.0.3.toml";
+const SIGNATURES: &str = "../../offsets/signatures.toml";
+
+const KEYWORDS: &[&str] = &[
+    "as", "async", "await", "box", "break", "const", "continue", "dyn", "else", "enum", "extern",
+    "false", "final", "fn", "for", "gen", "if", "impl", "in", "let", "loop", "macro", "match",
+    "mod", "move", "mut", "override", "priv", "pub", "ref", "return", "static", "struct", "trait",
+    "true", "try", "type", "typeof", "unsafe", "unsized", "use", "virtual", "where", "while",
+    "yield",
+];
+
+#[derive(Default)]
+struct Module {
+    modules: BTreeMap<String, Module>,
+    items: BTreeMap<String, String>,
+}
+
+fn ident(segment: &str) -> String {
+    let mut out: String = segment
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    while out.ends_with('_') && out.len() > 1 {
+        out.pop();
+    }
+    if out.starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+
+    match out.as_str() {
+        "self" | "Self" | "super" | "crate" => out + "_",
+        kw if KEYWORDS.contains(&kw) => format!("r#{kw}"),
+        _ => out,
+    }
+}
+
+/// Keeps `<...>` template arguments in one segment
+fn segments(name: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    let bytes = name.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => depth += 1,
+            b'>' => depth = depth.saturating_sub(1),
+            b':' if depth == 0 && bytes.get(i + 1) == Some(&b':') => {
+                out.push(&name[start..i]);
+                start = i + 2;
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    out.push(&name[start..]);
+    out
+}
+
+fn abi_type(token: &str) -> Option<&'static str> {
+    Some(match token {
+        "ptr" => "crate::abi::Ptr",
+        "i8" => "crate::abi::I8",
+        "i16" => "crate::abi::I16",
+        "i32" => "crate::abi::I32",
+        "i64" => "crate::abi::I64",
+        "f32" => "crate::abi::F32",
+        "f64" => "crate::abi::F64",
+        "void" => "crate::abi::Void",
+        _ => return None,
+    })
+}
+
+/// `"ptr, i32 -> i8"` to `crate::Sig<(Ptr, I32,), I8>`
+fn signature(text: &str) -> Result<String, String> {
+    let (args, ret) = text.split_once("->").ok_or("missing `->`")?;
+    let args: Vec<_> = args
+        .split(',')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .map(|a| abi_type(a).ok_or(format!("unknown ABI type `{a}`")))
+        .collect::<Result<_, _>>()?;
+    let ret = abi_type(ret.trim()).ok_or(format!("unknown ABI type `{}`", ret.trim()))?;
+
+    let args: String = args.iter().map(|a| format!("{a}, ")).collect();
+    Ok(format!("crate::Sig<({args}), {ret}>"))
+}
+
+fn signatures(text: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+
+    for (index, raw) in text.lines().enumerate() {
+        let line = raw.split_once('#').map_or(raw, |(code, _)| code).trim();
+        if line.is_empty() || line.starts_with('[') {
+            continue;
+        }
+
+        let (name, sig) = line
+            .split_once('=')
+            .and_then(|(k, v)| Some((k.trim().strip_prefix('"')?.strip_suffix('"')?, v.trim())))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{SIGNATURES}:{}: expected \"name\" = \"signature\"",
+                    index + 1
+                )
+            });
+        let sig = sig.trim_matches('"');
+        let ty = signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
+
+        out.insert(name.to_owned(), ty);
+    }
+
+    out
+}
+
+fn emit(module: &Module, out: &mut String, depth: usize) {
+    let pad = "    ".repeat(depth);
+
+    for (name, item) in &module.items {
+        writeln!(out, "{pad}pub const {name}: {item};").unwrap();
+    }
+    for (name, child) in &module.modules {
+        writeln!(out, "{pad}pub mod {name} {{").unwrap();
+        emit(child, out, depth + 1);
+        writeln!(out, "{pad}}}").unwrap();
+    }
+}
+
+fn main() {
+    println!("cargo::rerun-if-changed={SYMBOLS}");
+    println!("cargo::rerun-if-changed={SIGNATURES}");
+
+    let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let file = parse::parse(&fs::read_to_string(dir.join(SYMBOLS)).expect("read the symbol file"))
+        .unwrap_or_else(|e| panic!("{SYMBOLS}: {e}"));
+    let sigs = fs::read_to_string(dir.join(SIGNATURES))
+        .map(|t| signatures(&t))
+        .unwrap_or_default();
+
+    let mut root = Module::default();
+    let mut seen = HashMap::new();
+    let mut entries: Vec<_> = file.iter().collect();
+    entries.sort_by_key(|&(_, name, _)| name);
+
+    for (kind, name, _) in entries {
+        let parts: Vec<String> = segments(name).into_iter().map(ident).collect();
+        let (last, path) = parts.split_last().expect("symbol names are never empty");
+
+        if let Some(other) = seen.insert(parts.join("::"), name) {
+            panic!("\"{name}\" and \"{other}\" map to the same constant");
+        }
+
+        let module = path
+            .iter()
+            .fold(&mut root, |m, p| m.modules.entry(p.clone()).or_default());
+        let item = match kind {
+            Kind::Fn => match sigs.get(name) {
+                Some(sig) => format!("crate::Fn<{sig}> = crate::Fn::new({name:?})"),
+                None => format!("crate::Fn = crate::Fn::new({name:?})"),
+            },
+            Kind::Vtable => format!("crate::Vtable = crate::Vtable::new({name:?})"),
+        };
+        module.items.insert(last.clone(), item);
+    }
+
+    let mut out = String::new();
+    emit(&root, &mut out, 0);
+
+    let path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("sym.rs");
+    fs::write(path, out).expect("write sym.rs");
+}

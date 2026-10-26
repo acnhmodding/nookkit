@@ -1,5 +1,6 @@
 use core::cell::{Cell, RefCell, UnsafeCell};
 use core::ffi::c_void;
+use nookkit_sym::sym;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::sync::Mutex;
@@ -276,7 +277,7 @@ fn report_value<T>(context: &str, result: NativeResult<T>) -> Option<T> {
 }
 
 nookkit_sym::hook! {
-    pub key_guide_add = "game::UI::KeyGuideSeq::addGuide";
+    pub key_guide_add = sym::game::UI::KeyGuideSeq::addGuide;
     fn(seq: *mut KeyGuideSeq, entry: *const KeyGuideEntry, flag: bool) {
         let Some(seq_ref) = (unsafe { seq.as_mut() }) else {
             unsafe { original(seq, entry, flag) };
@@ -306,7 +307,7 @@ struct WideBuffer {
 
 // Every message lookup goes through here, so a sentinel label is answered with its literal text
 nookkit_sym::hook! {
-    pub message_find = "Lp::UI::UIMgr::findMessage";
+    pub message_find = sym::Lp::UI::UIMgr::findMessage;
     fn(dst: *mut WideBuffer, file: *const SafeString<'static>, label: *const SafeString<'static>) -> bool {
         match unsafe { literal_text(dst, label) } {
             Some(found) => found,

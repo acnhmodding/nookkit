@@ -1,10 +1,10 @@
 use core::ffi::{CStr, c_void};
 use core::mem::offset_of;
 
-use native_vtable::{VTableLayout, native, vtable, vtable_impl};
+use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::lp::ui::Name;
-use crate::native::{Class, NativeResult, type_info};
+use crate::native::{Class, Fn, NativeResult, sym, type_info};
 use crate::sead::runtime_type_info::Interface;
 use crate::sead::{ListNode, OffsetList, SafeString};
 
@@ -68,16 +68,17 @@ const _: () = {
 unsafe impl VftControl for Control {}
 
 unsafe impl Class for Control {
-    const RUNTIME_TYPE_INFO: &'static str = "Lp::UI::Control::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::Lp::UI::Control::getRuntimeTypeInfo.erase();
 }
 
-#[native(resolve = crate::native::resolve)]
-impl Control {
-    #[native(symbol = "Lp::UI::Control::findByPath")]
-    unsafe fn find_by_path_native(&mut self, path: *const SafeString<'_>) -> *mut Control;
+crate::native! {
+    impl Control {
+        unsafe fn find_by_path_native(&mut self, path: *const SafeString<'_>) -> *mut Control
+            = sym::Lp::UI::Control::findByPath;
 
-    #[native(symbol = "Lp::UI::Control::setFocusable")]
-    pub unsafe fn set_focusable(&mut self, player: u32, enable: bool);
+        pub unsafe fn set_focusable(&mut self, player: u32, enable: bool)
+            = sym::Lp::UI::Control::setFocusable;
+    }
 }
 
 impl Control {

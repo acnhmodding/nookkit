@@ -1,7 +1,7 @@
 use native_vtable::vtable_impl;
 
 use crate::game::ui_sys::{ScrollBtnListCtrl, VftScrollBtnListCtrl};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 
 #[repr(C)]
 pub struct AppScrollBtnListCtrl {
@@ -17,5 +17,5 @@ crate::derive_base!(AppScrollBtnListCtrl => ScrollBtnListCtrl);
 unsafe impl VftScrollBtnListCtrl for AppScrollBtnListCtrl {}
 
 unsafe impl Class for AppScrollBtnListCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo.erase();
 }

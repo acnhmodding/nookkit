@@ -2,12 +2,12 @@ use core::ffi::c_void;
 use core::mem::offset_of;
 use core::ptr::null_mut;
 
-use native_vtable::{VTableLayout, native, vtable, vtable_impl};
+use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::game::ui::AppUniteBtnCtrl;
 use crate::lp::ui::{Control, PartsCtrl, VftPartsCtrl};
 use crate::lp::utl::StateMachine;
-use crate::native::{Class, NativeResult, type_info_named, vtable};
+use crate::native::{Class, Fn, NativeResult, sym, type_info_of, vtable};
 use crate::sead::Delegate;
 
 pub const STATE_PLAY: i32 = 2;
@@ -121,7 +121,7 @@ crate::derive_base!(ScrollBtnListCtrl => PartsCtrl);
 unsafe impl VftScrollBtnListCtrl for ScrollBtnListCtrl {}
 
 unsafe impl Class for ScrollBtnListCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo.erase();
 }
 
 #[derive(Clone, Copy)]
@@ -208,25 +208,26 @@ impl LeaveEvent {
     }
 }
 
-#[native(resolve = crate::native::resolve)]
-impl ScrollBtnListCtrl {
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::bindButtons")]
-    pub unsafe fn bind_buttons(&mut self, builder: *mut c_void);
+crate::native! {
+    impl ScrollBtnListCtrl {
+        pub unsafe fn bind_buttons(&mut self, builder: *mut c_void)
+            = sym::game::UISys::ScrollBtnListCtrl::bindButtons;
 
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::attach")]
-    unsafe fn attach_native(&mut self, params: *const AttachParams);
+        unsafe fn attach_native(&mut self, params: *const AttachParams)
+            = sym::game::UISys::ScrollBtnListCtrl::attach;
 
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::setContent")]
-    unsafe fn set_content_native(&mut self, params: *const SetContentParams);
+        unsafe fn set_content_native(&mut self, params: *const SetContentParams)
+            = sym::game::UISys::ScrollBtnListCtrl::setContent;
 
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::enable")]
-    unsafe fn enable_native(&mut self, params: *const EnableParams);
+        unsafe fn enable_native(&mut self, params: *const EnableParams)
+            = sym::game::UISys::ScrollBtnListCtrl::enable;
 
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::disable")]
-    pub unsafe fn disable(&mut self, mode: u32);
+        pub unsafe fn disable(&mut self, mode: u32)
+            = sym::game::UISys::ScrollBtnListCtrl::disable;
 
-    #[native(symbol = "game::UISys::ScrollBtnListCtrl::itemIndexOf")]
-    pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32;
+        pub unsafe fn item_index_of(&mut self, control: *mut Control) -> i32
+            = sym::game::UISys::ScrollBtnListCtrl::itemIndexOf;
+    }
 }
 
 impl ScrollBtnListCtrl {
@@ -236,7 +237,7 @@ impl ScrollBtnListCtrl {
         root: *mut Control,
         player: u32,
     ) -> NativeResult {
-        let root_type = type_info_named("game::UI::AppBodyCtrl")?;
+        let root_type = type_info_of(&sym::game::UI::AppBodyCtrl::getRuntimeTypeInfo)?;
         let is_root = unsafe { root.as_ref().is_some_and(|root| root.is_derived(root_type)) };
         let params = AttachParams {
             page,
@@ -247,12 +248,12 @@ impl ScrollBtnListCtrl {
             key_1c: -1,
         };
 
-        unsafe { self.attach_native(&params) }.map_err(Into::into)
+        unsafe { self.attach_native(&params) }
     }
 
     pub unsafe fn set_content(&mut self, content: &Content, player: u8) -> NativeResult {
         let params = SetContentParams {
-            vtable: vtable("game::UISys::ScrollBtnListCtrl::SetContentParams::vtable")?,
+            vtable: vtable(&sym::game::UISys::ScrollBtnListCtrl::SetContentParams::vtable)?,
             item_count: content.item_count,
             scroll_item: content.scroll_item,
             focus_item: content.focus_item,
@@ -264,12 +265,12 @@ impl ScrollBtnListCtrl {
             _pad_2d: [0; 3],
         };
 
-        unsafe { self.set_content_native(&params) }.map_err(Into::into)
+        unsafe { self.set_content_native(&params) }
     }
 
     pub unsafe fn enable(&mut self, enable: &Enable) -> NativeResult {
         let params = EnableParams {
-            vtable: vtable("game::UISys::ScrollBtnListCtrl::EnableParams::vtable")?,
+            vtable: vtable(&sym::game::UISys::ScrollBtnListCtrl::EnableParams::vtable)?,
             update_cursor_button: enable.update_cursor_button,
             cursor_button_arg0: enable.cursor_button_arg0,
             cursor_button_arg1: enable.cursor_button_arg1,
@@ -277,11 +278,11 @@ impl ScrollBtnListCtrl {
             cursor_item: enable.cursor_item,
         };
 
-        unsafe { self.enable_native(&params) }.map_err(Into::into)
+        unsafe { self.enable_native(&params) }
     }
 
     pub unsafe fn play(&mut self) -> NativeResult {
-        unsafe { self.state_machine.change_state(STATE_PLAY) }.map_err(Into::into)
+        unsafe { self.state_machine.change_state(STATE_PLAY) }
     }
 
     pub unsafe fn is_ready_to_play(&self) -> bool {

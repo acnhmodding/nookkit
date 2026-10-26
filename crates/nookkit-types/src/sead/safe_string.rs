@@ -1,7 +1,7 @@
 use core::ffi::{CStr, c_char, c_void};
 use core::marker::PhantomData;
 
-use crate::native::{NativeResult, vtable};
+use crate::native::{NativeResult, Vtable, sym, vtable};
 
 #[repr(C)]
 pub struct SafeString<'a> {
@@ -15,7 +15,7 @@ const _: () = assert!(core::mem::size_of::<SafeString>() == 0x10);
 impl<'a> SafeString<'a> {
     pub fn new(string: &'a CStr) -> NativeResult<Self> {
         Ok(Self {
-            vtable: vtable("sead::SafeStringBase<char>::vtable")?,
+            vtable: vtable(&sym::sead::SafeStringBase_char::vtable)?,
             string_top: string.as_ptr(),
             _string: PhantomData,
         })
@@ -38,11 +38,23 @@ pub struct FixedSafeString<const N: usize> {
     pub buffer: [u8; N],
 }
 
+/// Sizes whose vtable is in the symbol file
+pub trait FixedSafeStringSize {
+    const VTABLE: Vtable;
+}
+
+impl FixedSafeStringSize for FixedSafeString<64> {
+    const VTABLE: Vtable = sym::sead::FixedSafeString_64::vtable;
+}
+
 impl<const N: usize> FixedSafeString<N> {
     /// Truncates to `N - 1` bytes
-    pub fn new(string: &str) -> NativeResult<Self> {
+    pub fn new(string: &str) -> NativeResult<Self>
+    where
+        Self: FixedSafeStringSize,
+    {
         let mut fixed = Self {
-            vtable: vtable(&format!("sead::FixedSafeString<{N}>::vtable"))?,
+            vtable: vtable(&Self::VTABLE)?,
             string_top: core::ptr::null(),
             buffer_size: N as i32,
             buffer: [0; N],

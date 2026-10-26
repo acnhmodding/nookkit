@@ -270,7 +270,7 @@ extern "C" fn on_scroll(user: *mut c_void, event: *mut c_void) {
     let result: NativeResult = unsafe {
         (*state.updater.get())
             .update(event)
-            .and_then(|()| Ok((*state.group.get()).refresh(state.list)?))
+            .and_then(|()| (*state.group.get()).refresh(state.list))
     };
 
     report("list scroll", result);

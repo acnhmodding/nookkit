@@ -1,7 +1,6 @@
+use crate::native::sym;
 use core::ffi::c_void;
 use core::mem::offset_of;
-
-use native_vtable::native;
 
 #[repr(C)]
 pub struct StateMachine {
@@ -27,8 +26,9 @@ const _: () = {
     assert!(core::mem::size_of::<StateMachine>() == 0x48);
 };
 
-#[native(resolve = crate::native::resolve)]
-impl StateMachine {
-    #[native(symbol = "Lp::Utl::StateMachine::changeState")]
-    pub unsafe fn change_state(&mut self, state: i32);
+crate::native! {
+    impl StateMachine {
+        pub unsafe fn change_state(&mut self, state: i32)
+            = sym::Lp::Utl::StateMachine::changeState;
+    }
 }

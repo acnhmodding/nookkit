@@ -1,4 +1,5 @@
 use core::ffi::c_void;
+use nookkit_sym::sym;
 
 use nookkit_sys::{
     Callback, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_EVENT_KINDS, SEQ_READY, SEQ_UPDATE, Status,
@@ -10,7 +11,7 @@ use crate::pages::{PAGES, call, snapshot, with_page};
 use crate::report;
 
 nookkit_sym::hook! {
-    pub sequence_create = "game::UISys::Sequence::create";
+    pub sequence_create = sym::game::UISys::Sequence::create;
     fn(seq: *mut Sequence, arg: *mut c_void) {
         unsafe { original(seq, arg) };
         unsafe { ready(seq.cast()) };
@@ -19,7 +20,7 @@ nookkit_sym::hook! {
 
 // onActivated is a 12-byte thunk, too short for an inline hook
 nookkit_sym::hook! {
-    pub sequence_on_activate = "game::UI::SequenceBase::onActivate";
+    pub sequence_on_activate = sym::game::UI::SequenceBase::onActivate;
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
         unsafe { set_active(seq, true) };
@@ -28,7 +29,7 @@ nookkit_sym::hook! {
 }
 
 nookkit_sym::hook! {
-    pub sequence_on_deactivated = "game::UI::SequenceBase::onDeactivated";
+    pub sequence_on_deactivated = sym::game::UI::SequenceBase::onDeactivated;
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
 
@@ -43,7 +44,7 @@ nookkit_sym::hook! {
 }
 
 nookkit_sym::hook! {
-    pub sequence_update = "game::UI::SequenceBase::update";
+    pub sequence_update = sym::game::UI::SequenceBase::update;
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
         unsafe { fire(seq, SEQ_UPDATE) };

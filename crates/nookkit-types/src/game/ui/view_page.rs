@@ -5,7 +5,7 @@ use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::game::ui::{ControlEvent, LayoutBuiltEvent};
 use crate::lp::ui::{Control, PriorityPage, VftPage, VftPageBase as _};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 use crate::sead::{Delegate, OffsetList};
 
 #[vtable(path = game::ui::view_page::VftViewPage)]
@@ -151,7 +151,7 @@ crate::derive_base!(ViewPage => PriorityPage);
 unsafe impl VftViewPage for ViewPage {}
 
 unsafe impl Class for ViewPage {
-    const RUNTIME_TYPE_INFO: &'static str = "game::UI::ViewPage::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::game::UI::ViewPage::getRuntimeTypeInfo.erase();
 }
 
 impl ViewPage {

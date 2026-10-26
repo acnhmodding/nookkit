@@ -79,6 +79,7 @@ name = "nookkit-types"
 version = "0.1.0"
 dependencies = [
  "native-vtable",
+ "nookkit-sym",
  "skyline",
  "thiserror",
 ]

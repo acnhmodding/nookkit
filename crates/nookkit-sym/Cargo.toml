@@ -9,3 +9,6 @@ skyline = ["dep:skyline"]
 [dependencies]
 skyline = { workspace = true, optional = true }
 thiserror = { workspace = true }
+
+[build-dependencies]
+thiserror = { workspace = true }

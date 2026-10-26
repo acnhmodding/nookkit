@@ -1,9 +1,27 @@
 mod parse;
+mod typed;
 
 #[cfg(feature = "skyline")]
 mod runtime;
 
 pub use parse::{Kind, ParseError, SymbolFile, parse};
+pub use typed::{Abi, AbiArgs, Fn, Matches, Sig, Unchecked, Vtable, abi, check};
+
+#[allow(non_snake_case, non_upper_case_globals)]
+pub mod sym {
+    include!(concat!(env!("OUT_DIR"), "/sym.rs"));
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __ret_or_unit {
+    () => {
+        ()
+    };
+    ($ret:ty) => {
+        $ret
+    };
+}
 
 #[cfg(feature = "skyline")]
 pub use runtime::*;

@@ -4,7 +4,7 @@ use core::mem::offset_of;
 use native_vtable::{VTableLayout, vtable, vtable_impl};
 
 use crate::lp::ui::{Control, VftControl};
-use crate::native::Class;
+use crate::native::{Class, Fn, sym};
 use crate::nn::ui2d::Pane;
 use crate::sead::OffsetList;
 
@@ -57,7 +57,7 @@ crate::derive_base!(PartsCtrl => Control);
 unsafe impl VftPartsCtrl for PartsCtrl {}
 
 unsafe impl Class for PartsCtrl {
-    const RUNTIME_TYPE_INFO: &'static str = "Lp::UI::PartsCtrl::getRuntimeTypeInfo";
+    const RUNTIME_TYPE_INFO: Fn = sym::Lp::UI::PartsCtrl::getRuntimeTypeInfo.erase();
 }
 
 impl PartsCtrl {
