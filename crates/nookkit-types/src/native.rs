@@ -19,6 +19,9 @@ pub type Resolver = fn(name: &str, kind: SymbolKind) -> Option<usize>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// From a mod's own `#[native]` functions
+    #[error(transparent)]
+    Native(#[from] native_vtable::Unresolved),
     #[error("symbol \"{0}\" is missing")]
     Missing(String),
 }

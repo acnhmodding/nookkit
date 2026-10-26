@@ -59,7 +59,7 @@ fn status(context: &str, result: NativeResult<Status>) -> Status {
             println!("[NookKit] {context}: {e}");
 
             match e {
-                Error::Missing(_) => Status::MissingSymbol,
+                Error::Missing(_) | Error::Native(_) => Status::MissingSymbol,
             }
         }
     }
