@@ -10,11 +10,11 @@ use crate::native::{Class, Fn, sym};
 
 #[vtable(path = game::ui::sequence_base::VftSequenceBase)]
 pub unsafe trait VftSequenceBase: VftSequence {
-    unsafe fn vf_118(&mut self);
-    unsafe fn vf_120(&mut self);
-    unsafe fn vf_128(&mut self);
-    unsafe fn vf_130(&mut self);
-    unsafe fn vf_138(&mut self);
+    unsafe fn prepare_layout_build(&mut self, params: *mut c_void);
+    unsafe fn on_page_layout_built(&mut self, page: *mut ViewPage, layout: *mut c_void);
+    unsafe fn on_layout_built(&mut self, layout: *mut c_void);
+    unsafe fn on_control_built(&mut self, info: *mut c_void);
+    unsafe fn on_parts_built(&mut self, parent: *mut c_void, builder: *mut c_void);
     unsafe fn on_page_created(&mut self, page: *mut ViewPage);
     unsafe fn get_registered_object(&mut self) -> *mut c_void;
     unsafe fn on_initialized(&mut self);
@@ -23,13 +23,13 @@ pub unsafe trait VftSequenceBase: VftSequence {
     unsafe fn on_activated_hook(&mut self);
     unsafe fn on_deactivate_hook(&mut self);
     unsafe fn on_deactivated_hook(&mut self);
-    unsafe fn vf_070_hook(&mut self);
-    unsafe fn vf_078_hook(&mut self);
+    unsafe fn on_start_hook(&mut self);
+    unsafe fn on_started_hook(&mut self);
     unsafe fn on_finalize_hook(&mut self);
     unsafe fn on_finalized_hook(&mut self);
     unsafe fn on_update(&mut self);
-    unsafe fn vf_098_hook(&mut self);
-    unsafe fn vf_0a0_hook(&mut self);
+    unsafe fn on_refer_scene_hook(&mut self);
+    unsafe fn on_refer_layout_hook(&mut self);
     unsafe fn request_appear(&mut self);
     unsafe fn request_disappear(&mut self);
     unsafe fn reset(&mut self);
@@ -37,9 +37,9 @@ pub unsafe trait VftSequenceBase: VftSequence {
     unsafe fn has_key_guide(&self, slot: i32) -> bool;
     unsafe fn init_state_machine(&mut self, machine: *mut StateMachine);
     unsafe fn clear_request(&mut self);
-    unsafe fn vf_1f0_ret1(&mut self) -> u64;
-    unsafe fn vf_1f8_ret0(&mut self) -> u64;
-    unsafe fn vf_200_retm1(&mut self) -> i32;
+    unsafe fn is_silent_focus_on_restore(&mut self) -> u64;
+    unsafe fn is_silent_focus_forced(&mut self) -> u64;
+    unsafe fn get_ui3d_display_id(&mut self) -> i32;
 }
 
 #[repr(C)]

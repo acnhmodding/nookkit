@@ -23,7 +23,7 @@ pub unsafe trait VftScrollBtnListCtrl: VftPartsCtrl {
     unsafe fn on_slot_focus(&mut self, slot: *mut u32);
     unsafe fn unfocus_slot(&mut self, slot: u32);
     unsafe fn on_scroll(&mut self, from: i32, to: i32);
-    unsafe fn vf_128(&mut self);
+    unsafe fn on_scroll_stop(&mut self);
     unsafe fn vf_130(&mut self);
     unsafe fn vf_138(&mut self);
 }

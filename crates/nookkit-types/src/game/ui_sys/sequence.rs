@@ -30,13 +30,13 @@ pub unsafe trait VftSequence {
     unsafe fn on_activated(&mut self);
     unsafe fn on_deactivate(&mut self);
     unsafe fn on_deactivated(&mut self);
-    unsafe fn vf_070(&mut self);
-    unsafe fn vf_078(&mut self);
+    unsafe fn on_start(&mut self);
+    unsafe fn on_started(&mut self);
     unsafe fn on_finalize(&mut self);
     unsafe fn on_finalized(&mut self);
     unsafe fn update(&mut self);
-    unsafe fn vf_098(&mut self);
-    unsafe fn vf_0a0(&mut self);
+    unsafe fn on_refer_scene(&mut self);
+    unsafe fn on_refer_layout(&mut self);
     unsafe fn restore_focus(&mut self);
     unsafe fn request_close_and_return_focus(&mut self);
     unsafe fn force_close(&mut self);

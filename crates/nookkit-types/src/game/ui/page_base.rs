@@ -11,7 +11,7 @@ pub unsafe trait VftPageBase: VftViewPage {
     unsafe fn play_layout_in_with(&mut self, index: u32, mode: i32);
     unsafe fn play_layout_out_with(&mut self, index: u32, mode: i32);
     unsafe fn vf_260_retnull(&mut self) -> *mut c_void;
-    unsafe fn vf_268(&mut self);
+    unsafe fn on_page_control_created(&mut self, control: *mut c_void);
     unsafe fn vf_270_retnull(&mut self) -> *mut c_void;
 }
 
