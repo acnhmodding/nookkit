@@ -31,25 +31,27 @@ jobs:
           toolchain: ${{ env.HOST_NIGHTLY }}
           components: clippy
 
+      # Its own root, away from ~/.cargo/bin which the Rust cache prunes
       - name: Cache cargo-skyline and the skyline toolchain
-        id: skyline-cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/cargo-skyline
+            ~/.cargo-skyline
             ~/.cargo/skyline
-          key: skyline-${{ runner.os }}-${{ env.CARGO_SKYLINE_VERSION }}
+          key: skyline-${{ runner.os }}-${{ env.CARGO_SKYLINE_VERSION }}-v2
 
       # Outside the repo, since rust-toolchain.toml asks for skyline-v3 before it exists
       - name: Install cargo-skyline
-        if: steps.skyline-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
-        run: cargo install cargo-skyline --locked --version "$CARGO_SKYLINE_VERSION"
+        run: |
+          echo "$HOME/.cargo-skyline/bin" >> "$GITHUB_PATH"
+          [ -x ~/.cargo-skyline/bin/cargo-skyline ] ||
+            cargo install cargo-skyline --locked --version "$CARGO_SKYLINE_VERSION" --root ~/.cargo-skyline
 
       - name: Install the skyline toolchain
-        if: steps.skyline-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
-        run: cargo skyline update-std
+        run: |
+          [ -x ~/.cargo/skyline/toolchain/skyline/bin/rustc ] || cargo skyline update-std
 
       - name: Link the skyline toolchain
         run: rustup toolchain list | grep -q skyline-v3 || rustup toolchain link skyline-v3 ~/.cargo/skyline/toolchain/skyline
