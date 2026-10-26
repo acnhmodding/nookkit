@@ -51,6 +51,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     });
 
     pages::view_page_initialize::install()?;
+    pages::view_page_destroy::install()?;
     pages::view_page_layout_built::install()?;
     seqs::sequence_create::install()?;
     seqs::sequence_on_activate::install()?;

@@ -2,6 +2,7 @@ use core::ffi::c_void;
 use nookkit_sym::sym;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use nookkit_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
 use nookkit_types::game::ui::{ControlEvent, LayoutBuiltEvent, ViewPage};
@@ -21,6 +22,42 @@ struct PageListener {
 }
 
 static PAGE_LISTENERS: Mutex<Vec<PageListener>> = Mutex::new(Vec::new());
+
+// Every page the game has built and not destroyed, whether or not a mod registered on it
+struct Live {
+    class: String,
+    seq: usize,
+    built: u64,
+}
+
+static LIVE: Mutex<BTreeMap<usize, Live>> = Mutex::new(BTreeMap::new());
+static BUILT: AtomicU64 = AtomicU64::new(0);
+
+/// The most recently built live page of `class`
+pub fn find_live(class: &str) -> Option<usize> {
+    let live = LIVE.lock().ok()?;
+
+    live.iter()
+        .filter(|(_, l)| l.class == class)
+        .max_by_key(|(_, l)| l.built)
+        .map(|(&page, _)| page)
+}
+
+pub fn live_seq(page: *mut ViewPage) -> Option<usize> {
+    let live = LIVE.lock().ok()?;
+
+    live.get(&(page as usize))
+        .map(|l| l.seq)
+        .filter(|&seq| seq != 0)
+}
+
+pub fn set_live_seq(page: *mut ViewPage, seq: usize) {
+    if let Ok(mut live) = LIVE.lock()
+        && let Some(l) = live.get_mut(&(page as usize))
+    {
+        l.seq = seq;
+    }
+}
 
 struct EventSlot {
     page: *mut ViewPage,
@@ -79,6 +116,18 @@ nookkit_sym::hook! {
     fn(page: *mut ViewPage, config: *mut c_void) {
         unsafe { original(page, config) };
         unsafe { built(page) };
+    }
+}
+
+// Every page's destructor ends in this one
+nookkit_sym::hook! {
+    pub view_page_destroy = sym::game::UI::ViewPage::_ViewPage;
+    fn(page: *mut c_void) {
+        if let Ok(mut live) = LIVE.lock() {
+            live.remove(&(page as usize));
+        }
+
+        unsafe { original(page) };
     }
 }
 
@@ -145,6 +194,18 @@ unsafe fn built(page: *mut ViewPage) {
     let class = unsafe { page_ref.class() }
         .and_then(|s| s.to_str().ok())
         .unwrap_or("");
+
+    if let Ok(mut live) = LIVE.lock() {
+        let built = BUILT.fetch_add(1, Ordering::Relaxed);
+        live.insert(
+            page as usize,
+            Live {
+                class: class.to_owned(),
+                seq: 0,
+                built,
+            },
+        );
+    }
 
     let matching: Snapshot = match PAGE_LISTENERS.lock() {
         Ok(listeners) => listeners

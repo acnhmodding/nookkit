@@ -169,6 +169,15 @@ impl Ui {
         check(unsafe { (self.table.release_player)(player) })
     }
 
+    /// The most recently built `P` page the game hasn't destroyed, e.g. the resident pocket menu
+    pub fn find_page<P: PageClass>(&self) -> Result<Option<Page>> {
+        let mut raw = core::ptr::null_mut();
+
+        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &mut raw) })?;
+
+        Ok((!raw.is_null()).then(|| Page::new(*self, raw)))
+    }
+
     /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivated` fires
     /// when it closes
     pub fn open_pocket_menu(&self, player: u8, close_enabled: bool) -> Result {

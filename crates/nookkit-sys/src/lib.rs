@@ -258,4 +258,10 @@ pub struct NookKitV1 {
 
     /// Opens the resident pocket menu for `player` over whatever is open
     pub open_pocket_menu: unsafe extern "C" fn(player: u8, close_enabled: bool) -> Status,
+
+    /// The most recently built page of `class` the game hasn't destroyed, null for none
+    pub find_page: unsafe extern "C" fn(class: Str, out: *mut *mut c_void) -> Status,
+
+    /// The seq that built `page`, null before it is ready
+    pub page_seq: unsafe extern "C" fn(page: *mut c_void, out: *mut *mut c_void) -> Status,
 }

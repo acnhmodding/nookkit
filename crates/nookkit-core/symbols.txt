@@ -7,3 +7,4 @@ fn	game::UI::SequenceBase::onActivate
 fn	game::UI::SequenceBase::onDeactivated
 fn	game::UI::SequenceBase::update
 fn	Lp::UI::UIMgr::findMessage
+fn	game::UI::ViewPage::~ViewPage

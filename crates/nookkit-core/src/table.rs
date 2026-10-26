@@ -45,6 +45,8 @@ pub static TABLE: NookKitV1 = NookKitV1 {
     page_hide_guide,
     page_set_input_enabled,
     open_pocket_menu,
+    find_page,
+    page_seq,
 };
 
 unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
@@ -432,6 +434,30 @@ unsafe extern "C" fn open_pocket_menu(player: u8, close_enabled: bool) -> Status
         }
 
         request_pocket_menu(player, close_enabled)?;
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn find_page(class: Str, out: *mut *mut c_void) -> Status {
+    guarded("find_page", || unsafe {
+        let (Some(class), false) = (class.as_str(), out.is_null()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        *out = pages::find_live(class).map_or(core::ptr::null_mut(), |page| page as *mut c_void);
+
+        Ok(Status::Ok)
+    })
+}
+
+unsafe extern "C" fn page_seq(page: *mut c_void, out: *mut *mut c_void) -> Status {
+    guarded("page_seq", || unsafe {
+        if page.is_null() || out.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
+        *out = pages::live_seq(page.cast()).map_or(core::ptr::null_mut(), |seq| seq as *mut c_void);
 
         Ok(Status::Ok)
     })

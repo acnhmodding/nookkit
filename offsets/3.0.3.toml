@@ -33,6 +33,7 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::ViewPage::dispatchLayoutBuilt" = 0x375b544
 "game::UI::ViewPage::getRuntimeTypeInfo" = 0x375b6f0
 "game::UI::ViewPage::initialize" = 0x3759dd0
+"game::UI::ViewPage::~ViewPage" = 0x37596b8
 "game::UISys::ScrollBtnListCtrl::attach" = 0x3763fe0
 "game::UISys::ScrollBtnListCtrl::bindButtons" = 0x2ab1110
 "game::UISys::ScrollBtnListCtrl::disable" = 0x335b550

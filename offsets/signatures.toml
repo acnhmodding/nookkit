@@ -15,5 +15,6 @@
 "game::UI::PocketMenuSeq::requestOpen" = "ptr, ptr -> void"
 "game::UI::SequenceBase::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UI::ViewPage::getRuntimeTypeInfo" = "ptr -> ptr"
+"game::UI::ViewPage::~ViewPage" = "ptr -> void"
 "game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UISys::Sequence::getRuntimeTypeInfo" = "ptr -> ptr"

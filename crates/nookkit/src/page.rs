@@ -74,6 +74,15 @@ impl Page {
         Ok(List::new(*self, raw))
     }
 
+    /// The seq that built this page, `None` before it is ready
+    pub fn seq(&self) -> Result<Option<Seq>> {
+        let mut raw = core::ptr::null_mut();
+
+        check(unsafe { (self.ui.table.page_seq)(self.raw, &mut raw) })?;
+
+        Ok((!raw.is_null()).then(|| Seq::new(raw)))
+    }
+
     /// Binds `key` on this page, see [`KeyBuilder`]
     pub fn bind_key(&self, key: Key) -> KeyBuilder {
         KeyBuilder::new(*self, key)
