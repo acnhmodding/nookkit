@@ -1,0 +1,19 @@
+[package]
+name = "nookkit-msbt"
+version = "0.2.0"
+edition = "2024"
+
+[features]
+cli = ["dep:ruzstd"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ruzstd = { version = "0.8", optional = true }
+
+[dev-dependencies]
+ruzstd = "0.8"
+
+[[bin]]
+name = "nookkit-msbt"
+required-features = ["cli"]
