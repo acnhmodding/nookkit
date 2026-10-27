@@ -135,8 +135,23 @@ pub struct Loan {
     pub report: String,
 }
 
-// Only ExpHeaps lend: their free returns the block, unlike frame heaps
+// The heap list only goes in the report when no heap could lend
 fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)> {
+    let mut heaps = String::new();
+    let borrowed = try_borrow(need, &mut heaps, report);
+    if borrowed.is_none() {
+        report.push_str("sead heaps:\n");
+        report.push_str(&heaps);
+    }
+    borrowed
+}
+
+// Only ExpHeaps lend: their free returns the block, unlike frame heaps
+fn try_borrow(
+    need: usize,
+    heaps_report: &mut String,
+    report: &mut String,
+) -> Option<(*mut Heap, usize, usize)> {
     let exp_heap = nookkit_sym::vtable::<u8>(&sym::sead::ExpHeap::vtable).ok()? as usize;
     let mut lender: Option<(*mut Heap, usize)> = None;
     for heap in unsafe { heaps() } {
@@ -147,7 +162,7 @@ fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)>
             0
         };
         let _ = writeln!(
-            report,
+            heaps_report,
             "  {} ({} MiB, {} MiB free{})",
             unsafe { heap_name(heap) },
             unsafe { (*heap).size } >> 20,
@@ -167,9 +182,10 @@ fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)>
     let base = unsafe { (*heap).try_alloc(size, -LOAN_ALIGNMENT) } as usize;
     let _ = writeln!(
         report,
-        "Borrowing {} MiB from {}: {}",
+        "Borrowing {} MiB from {} ({} MiB free): {}",
         size >> 20,
         unsafe { heap_name(heap) },
+        free >> 20,
         if base == 0 { "refused" } else { "done" }
     );
     (base != 0).then_some((heap, base, size))
@@ -179,7 +195,7 @@ fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)>
 // returning its result and the most it used. `f` must free everything it allocates, its result can't
 // own heap memory
 pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) -> (T, usize) {
-    let mut report = String::from("sead heaps:\n");
+    let mut report = String::new();
     let Some((heap, base, size)) = borrow(need, &mut report) else {
         return (
             f(&Loan {

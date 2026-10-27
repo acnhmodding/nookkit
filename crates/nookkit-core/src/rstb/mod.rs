@@ -205,6 +205,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
     let cache = Cache::load(CACHE, epoch.clone());
     let mut resources = Vec::new();
     let (mut need, mut largest, mut models) = (TABLE_MEMORY, 0, false);
+    let mut skipped = vec![0; folders.len()];
     for (relative, copies) in &files {
         // Each mod's table is parsed for hints
         if relative == TABLE {
@@ -213,7 +214,12 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
         let Some(name) = table_name(relative) else {
             continue;
         };
-        let Some(path) = source(log, relative) else {
+        let Some(path) = source(relative) else {
+            for (copy, _) in copies {
+                if let Some(folder) = folders.iter().position(|f| copy.starts_with(&f.root)) {
+                    skipped[folder] += 1;
+                }
+            }
             continue;
         };
         let length = mods::length(copies);
@@ -234,6 +240,14 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
             stamp,
             cached,
         });
+    }
+    for (folder, count) in folders.iter().zip(skipped) {
+        if count > 0 {
+            log.line(format!(
+                "{}: {count} files aren't in the game's romfs, so the emulator doesn't load this mod",
+                folder.root
+            ));
+        }
     }
     need += match models {
         true => SHADER_PEAK_MEMORY.max(SHADER_RESIDENT_MEMORY + largest),
@@ -325,16 +339,11 @@ fn parse_table(bytes: &[u8]) -> Result<Table, String> {
         .map_err(|error| error.0)
 }
 
-// The game's romfs holds the copy the game loads when several folders replace a file
-fn source(log: &mut Log, relative: &str) -> Option<String> {
+// The game's romfs holds the copy the game loads when several folders replace a file. A file missing
+// there belongs to a mod the emulator doesn't load
+fn source(relative: &str) -> Option<String> {
     let path = platform::rom_path(relative);
-    if platform::file_exists(&path) {
-        return Some(path);
-    }
-    log.line(format!(
-        "{relative}: not in the game's romfs, so its mod is not loaded, skipped"
-    ));
-    None
+    platform::file_exists(&path).then_some(path)
 }
 
 fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), String> {
