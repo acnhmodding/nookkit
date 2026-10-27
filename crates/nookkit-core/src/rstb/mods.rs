@@ -11,7 +11,6 @@ const ATMOSPHERE: &str = "sd:/atmosphere/contents";
 const MOD_LOAD: &str = "sd:/load";
 
 pub struct Folder {
-    pub name: String,
     pub root: String,
 }
 
@@ -23,14 +22,11 @@ fn title_dir(parent: &str) -> Result<Option<String>, String> {
     Ok(name.map(|name| format!("{parent}/{name}")))
 }
 
-fn mod_folders(title: &str, prefix: &str, folders: &mut Vec<Folder>) -> Result<(), String> {
+fn mod_folders(title: &str, folders: &mut Vec<Folder>) -> Result<(), String> {
     for name in platform::dirs(title)? {
         let root = format!("{title}/{name}/romfs");
         if !["romfs", "exefs"].contains(&name.as_str()) && platform::dir_exists(&root) {
-            folders.push(Folder {
-                name: format!("{prefix}{name}"),
-                root,
-            });
+            folders.push(Folder { root });
         }
     }
     Ok(())
@@ -40,13 +36,12 @@ pub fn folders() -> Result<Vec<Folder>, String> {
     let mut folders = Vec::new();
     if let Some(title) = title_dir(ATMOSPHERE)? {
         folders.push(Folder {
-            name: "romfs".to_string(),
             root: format!("{title}/romfs"),
         });
-        mod_folders(&title, "atmosphere-", &mut folders)?;
+        mod_folders(&title, &mut folders)?;
     }
     if let Some(title) = title_dir(MOD_LOAD)? {
-        mod_folders(&title, "mod-", &mut folders)?;
+        mod_folders(&title, &mut folders)?;
     }
     Ok(folders)
 }

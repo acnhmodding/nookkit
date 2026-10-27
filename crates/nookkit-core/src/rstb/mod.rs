@@ -19,7 +19,6 @@ use mods::Folder;
 const CONFIG: &str = "sd:/config/nookkit/rstb";
 // The table the game reads instead of its own
 const MODDED_TABLE: &str = "sd:/config/nookkit/rstb/ResourceSizeTable.srsizetable";
-// Read while no table in a romfs folder hides the game's own
 const VANILLA_TABLE: &str = "sd:/config/nookkit/rstb/vanilla.srsizetable";
 const CACHE: &str = "sd:/config/nookkit/rstb/cache.tsv";
 const LOG: &str = "sd:/config/nookkit/rstb/log.txt";
@@ -52,12 +51,6 @@ impl Log {
     }
 }
 
-enum Outcome {
-    Ready,
-    // The game would read a file that is gone this launch, so it must start again
-    Restart(&'static str),
-}
-
 pub fn install() -> Result<(), SymError> {
     table_load::install()?;
 
@@ -87,9 +80,7 @@ fn update_once(redirect: bool) {
     if UPDATED.swap(true, Ordering::AcqRel) {
         return;
     }
-    if arena::with_borrowed_memory(update) {
-        skyline::nn::oe::exit_application();
-    }
+    arena::with_borrowed_memory(update);
     // A table from an earlier launch still beats the game's own when this update failed
     if redirect && platform::file_exists(MODDED_TABLE) {
         redirect::install(TABLE, MODDED_TABLE);
@@ -104,8 +95,7 @@ nookkit_sym::hook! {
     }
 }
 
-// Whether the game must close
-fn update(loan: &arena::Loan) -> bool {
+fn update(loan: &arena::Loan) {
     let mut log = Log::default();
     log.line(loan.report.trim_end());
     let outcome = match loan.size {
@@ -113,89 +103,63 @@ fn update(loan: &arena::Loan) -> bool {
         0 => Err("No game heap could lend enough memory to size files".to_string()),
         _ => run(&mut log),
     };
-    match outcome {
-        Ok(Outcome::Ready) => {
-            log.save();
-            false
-        }
-        Ok(Outcome::Restart(reason)) => {
-            log.line(reason);
-            log.save();
-            skyline::error::show_error(ERROR_CODE, "NookKit: please start the game again.", reason);
-            true
-        }
-        Err(error) => {
-            log.line(format!("Failed: {error}"));
-            log.save();
-            skyline::error::show_error(
-                ERROR_CODE,
-                "NookKit could not update the resource size table.",
-                &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
-            );
-            false
-        }
+    if let Err(error) = outcome {
+        log.line(format!("Failed: {error}"));
+        skyline::error::show_error(
+            ERROR_CODE,
+            "NookKit could not update the resource size table.",
+            &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
+        );
     }
+    log.save();
 }
 
-fn run(log: &mut Log) -> Result<Outcome, String> {
+fn run(log: &mut Log) -> Result<(), String> {
     platform::create_dirs(CONFIG)?;
     let folders = mods::folders()?;
-    let Some(vanilla) = vanilla_table(log, &folders)? else {
-        return Ok(Outcome::Restart(
-            "A resource size table in a romfs folder hid the game's own, so it was moved to the config folder. The game's table can be read from the next launch.",
-        ));
-    };
-
-    let mut table = vanilla;
+    let mut table = base_table(log, &folders)?;
     size_files(log, &mut table, &folders)?;
 
     if platform::read_optional(MODDED_TABLE)?
         .is_some_and(|bytes| parse_table(&bytes).is_ok_and(|current| current == table))
     {
         log.line("The table is up to date");
-        return Ok(Outcome::Ready);
+        return Ok(());
     }
     let bytes = yaz0::compress(&table.serialize());
     platform::replace(MODDED_TABLE, TEMPORARY, &bytes)?;
     log.line(format!("Wrote the table ({} bytes)", bytes.len()));
-    Ok(Outcome::Ready)
+    Ok(())
 }
 
-// The saved copy, else the romfs table, which is the game's own only while no romfs folder has one.
-// Tables found there are moved away and `None` returned, as the romfs keeps showing them this launch
-fn vanilla_table(log: &mut Log, folders: &[Folder]) -> Result<Option<Table>, String> {
-    let modded: Vec<_> = folders
-        .iter()
-        .map(|folder| (folder, format!("{}/{TABLE}", folder.root)))
-        .filter(|(_, path)| platform::file_exists(path))
-        .collect();
+// The saved copy of the game's own table, else the romfs table. That one is the game's own only while
+// no romfs folder has a table, and a mod's table, vanilla plus its own entries, still serves as the base
+// since every modded file is sized again on top
+fn base_table(log: &mut Log, folders: &[Folder]) -> Result<Table, String> {
     if let Some(bytes) = platform::read_optional(VANILLA_TABLE)? {
         match parse_table(&bytes) {
-            Ok(table) => {
-                for (_, path) in &modded {
-                    log.line(format!(
-                        "{path} is ignored, the game reads {MODDED_TABLE}, built from its own table"
-                    ));
-                }
-                return Ok(Some(table));
-            }
+            Ok(table) => return Ok(table),
             Err(error) => log.line(format!(
                 "The saved copy of the game's table is invalid ({error}), so it is read again"
             )),
         }
     }
-    if !modded.is_empty() {
-        for (folder, path) in &modded {
-            let moved = format!("{CONFIG}/moved-from-{}.srsizetable", folder.name);
-            platform::rename(path, &moved)?;
-            log.line(format!("Moved {path} to {moved}"));
-        }
-        return Ok(None);
-    }
+    let modded: Vec<_> = folders
+        .iter()
+        .map(|folder| format!("{}/{TABLE}", folder.root))
+        .filter(|path| platform::file_exists(path))
+        .collect();
     let bytes = platform::read(&platform::rom_path(TABLE))?;
     let table = parse_table(&bytes)?;
-    platform::write(VANILLA_TABLE, &bytes)?;
-    Ok(Some(table))
+    if modded.is_empty() {
+        platform::write(VANILLA_TABLE, &bytes)?;
+    } else {
+        log.line(format!(
+            "The base is a mod's table ({}), the game's own is saved on a launch without one",
+            modded.join(", ")
+        ));
+    }
+    Ok(table)
 }
 
 fn parse_table(bytes: &[u8]) -> Result<Table, String> {

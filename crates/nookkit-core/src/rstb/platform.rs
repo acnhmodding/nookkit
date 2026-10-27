@@ -57,7 +57,7 @@ pub fn replace(path: &str, temporary: &str, data: &[u8]) -> Result<(), String> {
     rename(temporary, path)
 }
 
-pub fn rename(from: &str, to: &str) -> Result<(), String> {
+fn rename(from: &str, to: &str) -> Result<(), String> {
     remove(to)?;
     fs::rename(from, to).map_err(|e| format!("Moving {from} to {to} failed: {e}"))
 }
