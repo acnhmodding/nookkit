@@ -10,6 +10,8 @@ pub mod table;
 pub mod yaz0;
 mod zstd;
 
+pub use zstd::declared_length;
+
 pub use reader::{Error, Result};
 
 /// Changes whenever calculated sizes may change, so cached sizes are recalculated

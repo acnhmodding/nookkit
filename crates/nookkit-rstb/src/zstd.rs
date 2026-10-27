@@ -19,6 +19,51 @@ struct Frame {
     content_size: Option<u64>,
 }
 
+// The end of the frame header at `at`, the frame's window and its declared size
+fn header(d: Reader, at: i64) -> Result<(i64, u64, Option<u64>)> {
+    let descriptor = d.byte(at + 4)?;
+    let mut at = at + 5;
+    let single_segment = descriptor & 0x20 != 0;
+    if descriptor & 0x08 != 0 {
+        return fail("Reserved Zstandard frame bit is set.");
+    }
+    let mut window = 0;
+    if !single_segment {
+        let byte = d.byte(at)? as u64;
+        at += 1;
+        let base = 1u64 << (10 + (byte >> 3));
+        window = base + base / 8 * (byte & 7);
+    }
+    if descriptor & 3 != 0 {
+        return fail("Zstandard dictionaries are not supported.");
+    }
+    let content_size = match (descriptor >> 6, single_segment) {
+        (0, false) => None,
+        (0, true) => Some(d.byte(at)? as u64),
+        (1, _) => Some(d.u16(at)? as u64 + 256),
+        (2, _) => Some(d.u32(at)? as u64),
+        _ => Some(d.u64(at)?),
+    };
+    at += match descriptor >> 6 {
+        0 => single_segment as i64,
+        1 => 2,
+        2 => 4,
+        _ => 8,
+    };
+    if single_segment {
+        window = content_size.unwrap_or(0);
+    }
+    Ok((at, window, content_size))
+}
+
+/// The size the first frame declares, from at most the first 18 bytes. ACNH's files are one frame
+pub fn declared_length(prefix: &[u8]) -> Option<u64> {
+    if !is_zstd(prefix) {
+        return None;
+    }
+    header(Reader::new(prefix), 0).ok()?.2
+}
+
 fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     let d = Reader::new(data);
     let mut frames = Vec::new();
@@ -33,38 +78,8 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             return fail("Expected a Zstandard frame.");
         }
         let start = at;
-        let descriptor = d.byte(at + 4)?;
-        at += 5;
-        let single_segment = descriptor & 0x20 != 0;
-        if descriptor & 0x08 != 0 {
-            return fail("Reserved Zstandard frame bit is set.");
-        }
-        let mut window = 0;
-        if !single_segment {
-            let byte = d.byte(at)? as u64;
-            at += 1;
-            let base = 1u64 << (10 + (byte >> 3));
-            window = base + base / 8 * (byte & 7);
-        }
-        if descriptor & 3 != 0 {
-            return fail("Zstandard dictionaries are not supported.");
-        }
-        let content_size = match (descriptor >> 6, single_segment) {
-            (0, false) => None,
-            (0, true) => Some(d.byte(at)? as u64),
-            (1, _) => Some(d.u16(at)? as u64 + 256),
-            (2, _) => Some(d.u32(at)? as u64),
-            _ => Some(d.u64(at)?),
-        };
-        at += match descriptor >> 6 {
-            0 => single_segment as i64,
-            1 => 2,
-            2 => 4,
-            _ => 8,
-        };
-        if single_segment {
-            window = content_size.unwrap_or(0);
-        }
+        let (header_end, window, content_size) = header(d, at)?;
+        at = header_end;
         loop {
             let header = d.range(at, 3)?;
             let header = u32::from_le_bytes([header[0], header[1], header[2], 0]);
@@ -77,7 +92,7 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
                 break;
             }
         }
-        if descriptor & 0x04 != 0 {
+        if d.byte(start + 4)? & 0x04 != 0 {
             at += 4;
         }
         if at > d.len() {

@@ -20,6 +20,28 @@ const ZSTD_LOAD_FOLDERS: [&str; 4] = ["Layout/", "Font/", "Message/", "Model/Lay
 // A resource heap (0x71037C6D48) starts with its 0x108-byte ExpHeap object, the first free block follows it
 const RESOURCE_HEAP_FREE_BLOCK: i64 = 0x108;
 
+// Peaks measured by examples/check.rs over 3.0.3's romfs: the table phase (4.3 MiB), the shader
+// archive load (55 MiB, 41 MiB of it kept), and per file at most 3.96 bytes per input byte for model
+// archives and 0.42 for the rest, plus a constant that covers small inputs
+pub const TABLE_MEMORY: usize = 6 << 20;
+pub const SHADER_PEAK_MEMORY: usize = 56 << 20;
+pub const SHADER_RESIDENT_MEMORY: usize = 42 << 20;
+
+/// The heap memory sizing `name` needs, from its on-disk and decompressed lengths
+pub fn sizing_memory(name: &str, length: u64, decompressed: u64) -> usize {
+    let input = (length + decompressed) as usize;
+    if is_model_archive(name) {
+        4 * input + (4 << 20)
+    } else {
+        input + (1 << 20)
+    }
+}
+
+/// Model archives may need the shader archive loaded, see [`SHADER_PEAK_MEMORY`]
+pub fn is_model_archive(name: &str) -> bool {
+    name.starts_with("Model/") && !name.starts_with("Model/Layout_") && name.ends_with(".Nin_NX_NVN")
+}
+
 /// `None` for files that aren't table resources: plugins, NookKit's own data, the table itself and BYML
 /// files other than the one the game loads as a resource
 pub fn table_name(relative: &str) -> Option<&str> {
@@ -50,10 +72,7 @@ impl Sizer {
     /// Zstd-compressed with ".zs"), named `name` in the table. Returns [`GAME_SIZED`] or
     /// [`UNSUPPORTED`] when there is no traced size
     pub fn file_size(&mut self, path: &str, name: &str) -> Result<i64> {
-        let size = if name.starts_with("Model/")
-            && !name.starts_with("Model/Layout_")
-            && name.ends_with(".Nin_NX_NVN")
-        {
+        let size = if is_model_archive(name) {
             self.model_archive_size(path)?
         } else if path.ends_with(".zs")
             && !ZSTD_LOAD_FOLDERS
@@ -114,6 +133,11 @@ impl Sizer {
                 .map_err(|e| e.to_string())
         });
         loaded.as_mut().ok()
+    }
+
+    /// Loads the shader archive now instead of on the first geometry model
+    pub fn load_shader(&mut self) {
+        self.geometry();
     }
 
     /// Why the shader archive could not be used, once a geometry model needed it
