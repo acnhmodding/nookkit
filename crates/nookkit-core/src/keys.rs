@@ -30,6 +30,9 @@ pub struct KeyState {
     guide: RefCell<Option<Guide>>,
     hint_pane: Cell<*mut PartsCtrl>,
     seq_player: bool,
+
+    /// As bound, since a seq-player binding's handler is rewritten on activation
+    player: u32,
 }
 
 unsafe impl Send for KeyState {}
@@ -101,7 +104,10 @@ extern "C" fn dispatch(user: *mut c_void, kind: u32, event: *const GameKeyEvent)
         return;
     };
 
-    let handler = unsafe { &*event.handler };
+    let Some(handler) = (unsafe { event.handler.as_ref() }) else {
+        return;
+    };
+
     let event = KeyEvent {
         kind,
         player: handler.player,
@@ -131,7 +137,7 @@ pub unsafe fn bind(
         state
             .keys
             .iter()
-            .find(|k| k.handler().player == player && k.handler().key == key)
+            .find(|k| k.player == player && k.handler().key == key)
             .map(|k| &**k as *const KeyState as *mut KeyState)
     })
     .flatten();
@@ -146,6 +152,7 @@ pub unsafe fn bind(
         guide: RefCell::new(None),
         hint_pane: Cell::new(core::ptr::null_mut()),
         seq_player: flags & KEY_FLAG_SEQ_PLAYER != 0,
+        player,
     });
 
     let handler = state.handler();

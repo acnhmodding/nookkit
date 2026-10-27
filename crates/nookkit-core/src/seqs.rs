@@ -14,7 +14,13 @@ nookkit_sym::hook! {
     pub sequence_create = sym::game::UISys::Sequence::create;
     fn(seq: *mut Sequence, arg: *mut c_void) {
         unsafe { original(seq, arg) };
-        unsafe { ready(seq.cast()) };
+
+        // Only a SequenceBase has the state machine and player the rest relies on
+        match unsafe { seq.as_mut().map(|seq| seq.cast::<SequenceBase>()) } {
+            Some(Ok(Some(base))) => unsafe { ready(base) },
+            Some(Err(e)) => report("sequence create", Err(e)),
+            _ => {}
+        }
     }
 }
 

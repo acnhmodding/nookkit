@@ -60,8 +60,9 @@ unsafe fn key_ref<'a>(key: *mut c_void) -> Option<&'a KeyState> {
     unsafe { key.cast::<KeyState>().as_ref() }
 }
 
+// Retired lists stay allocated but their control may be gone with the page
 unsafe fn list_ref<'a>(list: *mut c_void) -> Option<&'a ListState> {
-    unsafe { list.cast::<ListState>().as_ref() }
+    unsafe { list.cast::<ListState>().as_ref() }.filter(|list| list.is_alive())
 }
 
 fn status(context: &str, result: NativeResult<Status>) -> Status {
@@ -143,8 +144,14 @@ unsafe extern "C" fn find_pane(
             return Ok(Status::PaneNotFound);
         };
 
-        if !class.is_empty() && !pane.is_derived(type_info_named(class)?) {
-            return Ok(Status::TypeMismatch);
+        if !class.is_empty() {
+            let Ok(type_info) = type_info_named(class) else {
+                return Ok(Status::InvalidArg);
+            };
+
+            if !pane.is_derived(type_info) {
+                return Ok(Status::TypeMismatch);
+            }
         }
 
         *out = (pane as *const Control).cast_mut().cast();
@@ -161,6 +168,10 @@ unsafe extern "C" fn on_control_event(page: *mut c_void, kind: u32, cb: Callback
 
 unsafe extern "C" fn link(from: *mut c_void, direction: Direction, to: *mut c_void) -> Status {
     guarded("link", || unsafe {
+        if from.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
         let Some(from) = Control::cast_ptr::<BtnPartsCtrl>(from.cast())? else {
             return Ok(Status::TypeMismatch);
         };
@@ -174,7 +185,8 @@ unsafe extern "C" fn link(from: *mut c_void, direction: Direction, to: *mut c_vo
             }
         };
 
-        if from.focus_node.is_null() {
+        // A target without a focus node would silently unlink
+        if from.focus_node.is_null() || target.is_some_and(|to| to.focus_node.is_null()) {
             return Ok(Status::InvalidArg);
         }
 
@@ -186,6 +198,10 @@ unsafe extern "C" fn link(from: *mut c_void, direction: Direction, to: *mut c_vo
 
 unsafe extern "C" fn set_focusable(pane: *mut c_void, player: u32, enable: bool) -> Status {
     guarded("set_focusable", || unsafe {
+        if player >= 8 {
+            return Ok(Status::InvalidArg);
+        }
+
         let Some(pane) = pane.cast::<Control>().as_mut() else {
             return Ok(Status::InvalidArg);
         };
@@ -198,6 +214,10 @@ unsafe extern "C" fn set_focusable(pane: *mut c_void, player: u32, enable: bool)
 
 unsafe extern "C" fn lock_player(player: u8) -> Status {
     guarded("lock_player", || unsafe {
+        if player >= 8 {
+            return Ok(Status::InvalidArg);
+        }
+
         Ok(if lock_menu(player)? {
             Status::Ok
         } else {
@@ -208,6 +228,10 @@ unsafe extern "C" fn lock_player(player: u8) -> Status {
 
 unsafe extern "C" fn release_player(player: u8) -> Status {
     guarded("release_player", || unsafe {
+        if player >= 8 {
+            return Ok(Status::InvalidArg);
+        }
+
         Ok(if release_menu(player)? {
             Status::Ok
         } else {
@@ -218,6 +242,10 @@ unsafe extern "C" fn release_player(player: u8) -> Status {
 
 unsafe extern "C" fn set_visible(pane: *mut c_void, visible: bool) -> Status {
     guarded("set_visible", || unsafe {
+        if pane.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
         let Some(parts) = Control::cast_ptr::<PartsCtrl>(pane.cast())? else {
             return Ok(Status::TypeMismatch);
         };
@@ -546,6 +574,10 @@ unsafe extern "C" fn page_focused(page: *mut c_void, player: u32, out: *mut *mut
 
 unsafe extern "C" fn pane_decide(pane: *mut c_void, out: *mut bool) -> Status {
     guarded("pane_decide", || unsafe {
+        if pane.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
         let Some(button) = Control::cast_ptr::<BtnPartsCtrl>(pane.cast())? else {
             return Ok(Status::TypeMismatch);
         };
@@ -561,6 +593,10 @@ unsafe extern "C" fn pane_decide(pane: *mut c_void, out: *mut bool) -> Status {
 
 unsafe extern "C" fn pane_set_valid(pane: *mut c_void, valid: bool) -> Status {
     guarded("pane_set_valid", || unsafe {
+        if pane.is_null() {
+            return Ok(Status::InvalidArg);
+        }
+
         let Some(button) = Control::cast_ptr::<UniteBtnCtrl>(pane.cast())? else {
             return Ok(Status::TypeMismatch);
         };
@@ -573,10 +609,11 @@ unsafe extern "C" fn pane_set_valid(pane: *mut c_void, valid: bool) -> Status {
 
 unsafe extern "C" fn pane_is_valid(pane: *mut c_void, out: *mut bool) -> Status {
     guarded("pane_is_valid", || unsafe {
-        let (Some(button), Some(out)) = (
-            Control::cast_ptr::<UniteBtnCtrl>(pane.cast())?,
-            out.as_mut(),
-        ) else {
+        let (false, Some(out)) = (pane.is_null(), out.as_mut()) else {
+            return Ok(Status::InvalidArg);
+        };
+
+        let Some(button) = Control::cast_ptr::<UniteBtnCtrl>(pane.cast())? else {
             return Ok(Status::TypeMismatch);
         };
 

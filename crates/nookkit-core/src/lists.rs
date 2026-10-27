@@ -75,9 +75,17 @@ impl ListState {
         self.alive.set(false);
         self.links.borrow_mut().clear();
 
-        for cbs in &self.cbs {
-            cbs.borrow_mut().clear();
-        }
+        let cbs: Vec<Vec<Callback>> = self
+            .cbs
+            .iter()
+            .map(|cbs| core::mem::take(&mut *cbs.borrow_mut()))
+            .collect();
+
+        pages::bury(cbs);
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.alive.get()
     }
 
     pub fn set_active(&self, active: bool) {
@@ -400,8 +408,7 @@ pub unsafe fn get(
         cbs: Default::default(),
     }));
 
-    with_page(page, |page_state| page_state.lists.push(state));
-
+    // Published only once both events are in, so a failed get isn't found half registered later
     for (kind, func) in [
         (EVENT_FOCUS, page_focus as _),
         (EVENT_DECIDE, page_decide as _),
@@ -412,11 +419,25 @@ pub unsafe fn get(
             drop: None,
         };
 
-        let status = unsafe { pages::on_control_event(page, kind, cb)? };
+        let status = match unsafe { pages::on_control_event(page, kind, cb) } {
+            Ok(status) => status,
+            Err(e) => {
+                state.retire();
+                return Err(e);
+            }
+        };
 
         if status != Status::Ok {
+            state.retire();
             return Ok(Err(status));
         }
+    }
+
+    with_page(page, |page_state| page_state.lists.push(state));
+
+    // Lists are set up when the seq is ready, so one asked for later is set up now
+    if pages::live_seq(page).is_some() {
+        report("list setup", unsafe { state.setup() });
     }
 
     Ok(Ok(state))
