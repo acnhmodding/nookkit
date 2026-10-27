@@ -6,9 +6,7 @@ use std::ffi::CString;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use nookkit_sys::{
-    Callback, KEY_EVENT_KINDS, KEY_FLAG_CONSUME, KEY_FLAG_SEQ_PLAYER, KeyEvent, Status,
-};
+use nookkit_sys::{Callback, KeyEvent, KeyEventKind, KeyFlags, Player, Status};
 use nookkit_types::game::ui::{KeyGuideEntry, KeyGuideSeq, ViewPage};
 use nookkit_types::lp::ui::{ButtonId, Control, KeyEvent as GameKeyEvent, KeyHandler, PartsCtrl};
 use nookkit_types::native::NativeResult;
@@ -26,10 +24,13 @@ enum Guide {
 
 pub struct KeyState {
     handler: UnsafeCell<KeyHandler>,
-    cbs: [RefCell<Vec<Callback>>; KEY_EVENT_KINDS],
+    cbs: [RefCell<Vec<Callback>>; KeyEventKind::COUNT],
     guide: RefCell<Option<Guide>>,
     hint_pane: Cell<*mut PartsCtrl>,
     seq_player: bool,
+
+    /// As bound, since a seq-player binding's handler is rewritten on activation
+    player: Player,
 }
 
 unsafe impl Send for KeyState {}
@@ -101,10 +102,13 @@ extern "C" fn dispatch(user: *mut c_void, kind: u32, event: *const GameKeyEvent)
         return;
     };
 
-    let handler = unsafe { &*event.handler };
+    let Some(handler) = (unsafe { event.handler.as_ref() }) else {
+        return;
+    };
+
     let event = KeyEvent {
-        kind,
-        player: handler.player,
+        kind: KeyEventKind(kind),
+        player: Player(handler.player as u8),
         key: handler.key as i32,
     };
 
@@ -115,23 +119,23 @@ extern "C" fn dispatch(user: *mut c_void, kind: u32, event: *const GameKeyEvent)
 
 pub unsafe fn bind(
     page: *mut ViewPage,
-    player: u32,
+    player: Player,
     key: i32,
-    flags: u32,
+    flags: KeyFlags,
 ) -> NativeResult<Result<*mut KeyState, Status>> {
     let (Some(page_ref), Some(key)) = (unsafe { page.as_mut() }, ButtonId::from_raw(key)) else {
-        return Ok(Err(Status::InvalidArg));
+        return Ok(Err(Status::INVALID_ARG));
     };
 
-    if key == ButtonId::Invalid {
-        return Ok(Err(Status::InvalidArg));
+    if key == ButtonId::Invalid || !player.is_valid() {
+        return Ok(Err(Status::INVALID_ARG));
     }
 
     let existing = with_page(page, |state| {
         state
             .keys
             .iter()
-            .find(|k| k.handler().player == player && k.handler().key == key)
+            .find(|k| k.player == player && k.handler().key == key)
             .map(|k| &**k as *const KeyState as *mut KeyState)
     })
     .flatten();
@@ -141,11 +145,12 @@ pub unsafe fn bind(
     }
 
     let state = Box::new(KeyState {
-        handler: UnsafeCell::new(KeyHandler::new(player, key)),
+        handler: UnsafeCell::new(KeyHandler::new(u32::from(player.0), key)),
         cbs: Default::default(),
         guide: RefCell::new(None),
         hint_pane: Cell::new(core::ptr::null_mut()),
-        seq_player: flags & KEY_FLAG_SEQ_PLAYER != 0,
+        seq_player: flags.contains(KeyFlags::SEQ_PLAYER),
+        player,
     });
 
     let handler = state.handler();
@@ -154,9 +159,9 @@ pub unsafe fn bind(
         *delegate = Delegate::bind(state.as_user(), dispatch as *const () as usize);
     }
 
-    handler.consume_key = flags & KEY_FLAG_CONSUME != 0;
+    handler.consume_key = flags.contains(KeyFlags::CONSUME);
 
-    unsafe { page_ref.add_key_handler(player, key, handler)? };
+    unsafe { page_ref.add_key_handler(u32::from(player.0), key, handler)? };
 
     // The page's own handlers come first in the list, so only a handler ahead of them can take the key
     if handler.consume_key
@@ -186,13 +191,13 @@ pub fn follow_player(page: *mut ViewPage, player: u8) {
     }
 }
 
-pub fn on(key: &KeyState, kind: u32, cb: Callback) -> Status {
-    match key.cbs.get(kind as usize) {
+pub fn on(key: &KeyState, kind: KeyEventKind, cb: Callback) -> Status {
+    match key.cbs.get(kind.0 as usize) {
         Some(cbs) => {
             cbs.borrow_mut().push(cb);
-            Status::Ok
+            Status::OK
         }
-        None => Status::InvalidArg,
+        None => Status::INVALID_ARG,
     }
 }
 
@@ -213,7 +218,7 @@ pub fn set_guide(key: &KeyState, text: &str, label: &str) -> Status {
         key.set_guide(Some(Guide::Text(id)));
     } else if !label.is_empty() {
         if label.len() >= 64 {
-            return Status::InvalidArg;
+            return Status::INVALID_ARG;
         }
 
         key.set_guide(Some(Guide::Label(label.to_owned())));
@@ -221,7 +226,7 @@ pub fn set_guide(key: &KeyState, text: &str, label: &str) -> Status {
         key.set_guide(None);
     }
 
-    Status::Ok
+    Status::OK
 }
 
 pub unsafe fn set_hint_pane(
@@ -231,31 +236,31 @@ pub unsafe fn set_hint_pane(
 ) -> NativeResult<Status> {
     if path.is_empty() {
         key.hint_pane.set(core::ptr::null_mut());
-        return Ok(Status::Ok);
+        return Ok(Status::OK);
     }
 
     let (Some(page), Ok(path)) = (unsafe { page.as_ref() }, CString::new(path)) else {
-        return Ok(Status::InvalidArg);
+        return Ok(Status::INVALID_ARG);
     };
 
     let Some(root) = (unsafe { page.root().as_mut() }) else {
-        return Ok(Status::PaneNotFound);
+        return Ok(Status::PANE_NOT_FOUND);
     };
 
     let control = unsafe { root.find_by_path(&path)? };
 
     if control.is_null() {
-        return Ok(Status::PaneNotFound);
+        return Ok(Status::PANE_NOT_FOUND);
     }
 
     let Some(parts) = (unsafe { Control::cast_ptr::<PartsCtrl>(control)? }) else {
-        return Ok(Status::TypeMismatch);
+        return Ok(Status::TYPE_MISMATCH);
     };
 
     key.hint_pane.set(parts);
     key.sync_hint_pane();
 
-    Ok(Status::Ok)
+    Ok(Status::OK)
 }
 
 pub fn page_of(key: *const KeyState) -> Option<*mut ViewPage> {
@@ -286,7 +291,7 @@ fn active_guides() -> Vec<KeyGuideEntry> {
 
 pub fn hide_guide(page: *mut ViewPage, key: i32, hide: bool) -> Status {
     if ButtonId::from_raw(key).is_none() {
-        return Status::InvalidArg;
+        return Status::INVALID_ARG;
     }
 
     with_page(page, |state| {
@@ -295,7 +300,7 @@ pub fn hide_guide(page: *mut ViewPage, key: i32, hide: bool) -> Status {
             state.hidden_guides.push(key);
         }
     })
-    .map_or(Status::InvalidArg, |()| Status::Ok)
+    .map_or(Status::INVALID_ARG, |()| Status::OK)
 }
 
 fn guide_hidden(key: i32) -> bool {

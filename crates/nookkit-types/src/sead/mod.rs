@@ -7,7 +7,7 @@ pub mod runtime_type_info;
 mod safe_string;
 mod thread;
 
-pub use container::{Buffer, ListNode, ObjArray, OffsetList, PtrArray};
+pub use container::{Buffer, FreeList, ListNode, ObjArray, OffsetList, PtrArray};
 pub use delegate::{Delegate, VftDelegate, VftDelegateLayout};
 pub use disposer::{IDisposer, VftIDisposer, VftIDisposerLayout};
 pub use heap::{Heap, VftHeap, VftHeapLayout};

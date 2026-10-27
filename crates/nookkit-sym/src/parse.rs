@@ -66,6 +66,21 @@ impl SymbolFile {
     }
 }
 
+/// The line without its `#` comment, which can't start inside a quoted name like `{lambda()#1}`
+pub fn strip_comment(line: &str) -> &str {
+    let mut quoted = false;
+
+    for (i, c) in line.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '#' if !quoted => return &line[..i],
+            _ => {}
+        }
+    }
+
+    line
+}
+
 fn parse_hex(value: &str) -> Option<u64> {
     u64::from_str_radix(value.strip_prefix("0x")?, 16).ok()
 }
@@ -82,7 +97,7 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
 
     for (index, raw) in text.lines().enumerate() {
         let line = index + 1;
-        let content = raw.split_once('#').map_or(raw, |(code, _)| code).trim();
+        let content = strip_comment(raw).trim();
 
         if content.is_empty() {
             continue;
@@ -131,10 +146,12 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
             continue;
         };
 
-        let name = parse_quoted(key).ok_or(ParseError::Syntax {
-            line,
-            reason: "symbol names must be quoted",
-        })?;
+        let name = parse_quoted(key)
+            .filter(|name| !name.is_empty())
+            .ok_or(ParseError::Syntax {
+                line,
+                reason: "symbol names must be quoted and not empty",
+            })?;
         let offset = parse_hex(value).ok_or(ParseError::Syntax {
             line,
             reason: "offsets must be 0x hex",
@@ -185,6 +202,16 @@ rodata_hash = 0x1234abcd
         );
         assert_eq!(f.get(Kind::Fn, "Lp::UI::UniteBtnCtrl::vtable"), None);
         assert_eq!(f.len(), 2);
+    }
+
+    #[test]
+    fn keeps_hashes_inside_names() {
+        let text = "game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"A::{lambda()#1}\" = 0x10 # c\n";
+        assert_eq!(parse(text).unwrap().get(Kind::Fn, "A::{lambda()#1}"), Some(0x10));
+        assert!(matches!(
+            parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"\" = 0x1\n"),
+            Err(ParseError::Syntax { .. })
+        ));
     }
 
     #[test]

@@ -61,6 +61,7 @@ macro_rules! hook {
             use super::*;
 
             static ORIGINAL: ::core::sync::atomic::AtomicUsize = ::core::sync::atomic::AtomicUsize::new(0);
+            static INSTALLED: ::core::sync::atomic::AtomicBool = ::core::sync::atomic::AtomicBool::new(false);
 
             #[allow(dead_code)]
             pub unsafe fn original($($arg: $ty),*) $(-> $ret)? {
@@ -73,18 +74,29 @@ macro_rules! hook {
             extern "C" fn replacement($($arg: $ty),*) $(-> $ret)? $body
 
             pub fn install() -> $crate::Result {
-                if ORIGINAL.load(::core::sync::atomic::Ordering::Acquire) != 0 {
+                // Hooking twice would make original() call the replacement
+                if INSTALLED.swap(true, ::core::sync::atomic::Ordering::AcqRel) {
                     return Ok(());
                 }
 
-                let target = $resolve($symbol).ok_or($crate::UiError::MissingSymbol)?;
-                let mut original = ::core::ptr::null_mut();
+                let Some(target) = $resolve($symbol) else {
+                    INSTALLED.store(false, ::core::sync::atomic::Ordering::Release);
+                    return Err($crate::UiError::MissingSymbol);
+                };
 
+                // Written straight into ORIGINAL, so a call racing the patch never sees 0
                 unsafe {
-                    $crate::__hook_function(target as *const _, replacement as *const _, &mut original);
+                    $crate::__hook_function(
+                        target as *const _,
+                        replacement as *const _,
+                        ORIGINAL.as_ptr().cast(),
+                    );
                 }
 
-                ORIGINAL.store(original as usize, ::core::sync::atomic::Ordering::Release);
+                if ORIGINAL.load(::core::sync::atomic::Ordering::Acquire) == 0 {
+                    return Err($crate::UiError::HookFailed);
+                }
+
                 Ok(())
             }
         }

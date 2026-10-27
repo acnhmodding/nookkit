@@ -1,12 +1,13 @@
 use core::ffi::c_void;
 
 use nookkit_sys::{
-    Direction, ITEM_CLEAR, ITEM_MOVE, ITEM_RENDER, ItemUpdate as RawItemUpdate, LIST_DECIDE,
-    LIST_FOCUS, LIST_ITEM, LIST_LEAVE, LeaveQuery, ListTarget as RawListTarget, NO_LINE,
+    ItemOp, ItemUpdate as RawItemUpdate, LeaveQuery, ListEvent, ListTarget as RawListTarget,
+    NO_LINE, Player,
 };
 
-use crate::{Page, Pane, Result, callback, check};
+use crate::{Direction, Page, Pane, Result, UiError, callback, check};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemUpdate {
     Render {
         slot: usize,
@@ -31,13 +32,13 @@ impl ItemUpdate {
         );
 
         match raw.op {
-            ITEM_CLEAR => Some(Self::Clear { slot }),
-            ITEM_MOVE => Some(Self::Move {
+            ItemOp::CLEAR => Some(Self::Clear { slot }),
+            ItemOp::MOVE => Some(Self::Move {
                 slot,
                 from,
                 item: item.ok()?,
             }),
-            ITEM_RENDER => Some(Self::Render {
+            ItemOp::RENDER => Some(Self::Render {
                 slot,
                 item: item.ok()?,
             }),
@@ -47,7 +48,7 @@ impl ItemUpdate {
 }
 
 /// A line of the list's visible window
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListTarget {
     line: usize,
     last: bool,
@@ -73,13 +74,13 @@ impl ListTarget {
 impl From<ListTarget> for RawListTarget {
     fn from(target: ListTarget) -> Self {
         Self {
-            line: target.line as u32,
+            line: u32::try_from(target.line).unwrap_or(u32::MAX),
             last: target.last,
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct List {
     page: Page,
     raw: *mut c_void,
@@ -95,7 +96,7 @@ impl List {
     }
 
     pub fn on_item(&self, mut f: impl FnMut(ItemUpdate) -> Result + 'static) -> Result<List> {
-        self.on(LIST_ITEM, move |arg| {
+        self.on(ListEvent::ITEM, move |arg| {
             match unsafe { arg.cast::<RawItemUpdate>().as_ref() }.and_then(ItemUpdate::from_raw) {
                 Some(update) => f(update),
                 None => Ok(()),
@@ -104,7 +105,7 @@ impl List {
     }
 
     pub fn on_focus(&self, mut f: impl FnMut(usize) -> Result + 'static) -> Result<List> {
-        self.on(LIST_FOCUS, move |arg| {
+        self.on(ListEvent::FOCUS, move |arg| {
             match unsafe { arg.cast::<u32>().as_ref() } {
                 Some(&item) => f(item as usize),
                 None => Ok(()),
@@ -114,7 +115,7 @@ impl List {
 
     /// After the list's selection group accepted the press
     pub fn on_decide(&self, mut f: impl FnMut(usize) -> Result + 'static) -> Result<List> {
-        self.on(LIST_DECIDE, move |arg| {
+        self.on(ListEvent::DECIDE, move |arg| {
             match unsafe { arg.cast::<u32>().as_ref() } {
                 Some(&item) => f(item as usize),
                 None => Ok(()),
@@ -127,14 +128,15 @@ impl List {
         &self,
         mut f: impl FnMut(Direction, Option<usize>) -> Result<Option<Pane>> + 'static,
     ) -> Result<List> {
-        self.on(LIST_LEAVE, move |arg| {
+        self.on(ListEvent::LEAVE, move |arg| {
             let Some(query) = (unsafe { arg.cast::<LeaveQuery>().as_ref() }) else {
                 return Ok(());
             };
 
+            let direction = Direction::try_from(query.direction)?;
             let line = (query.line != NO_LINE).then_some(query.line as usize);
 
-            if let (Some(target), false) = (f(query.direction, line)?, query.target.is_null()) {
+            if let (Some(target), false) = (f(direction, line)?, query.target.is_null()) {
                 unsafe { *query.target = target.raw() };
             }
 
@@ -142,7 +144,11 @@ impl List {
         })
     }
 
-    fn on(&self, kind: u32, f: impl FnMut(*const c_void) -> Result + 'static) -> Result<List> {
+    fn on(
+        &self,
+        kind: ListEvent,
+        f: impl FnMut(*const c_void) -> Result + 'static,
+    ) -> Result<List> {
         let cb = callback::raw(self.page.ui(), f);
 
         check(unsafe { (self.page.ui().table.list_on)(self.raw, kind, cb) })?;
@@ -150,10 +156,11 @@ impl List {
         Ok(*self)
     }
 
-    pub fn set_items(&self, count: usize, selected: usize, player: u8) -> Result {
-        check(unsafe {
-            (self.page.ui().table.list_set_items)(self.raw, count as u32, selected as u32, player)
-        })
+    pub fn set_items(&self, count: usize, selected: usize, player: Player) -> Result {
+        let count = u32::try_from(count).map_err(|_| UiError::InvalidArg)?;
+        let selected = u32::try_from(selected).map_err(|_| UiError::InvalidArg)?;
+
+        check(unsafe { (self.page.ui().table.list_set_items)(self.raw, count, selected, player) })
     }
 
     pub fn set_enabled(&self, enable: bool, mode: u32) -> Result {
@@ -176,7 +183,9 @@ impl List {
     pub fn button(&self, slot: usize) -> Result<Pane> {
         let mut raw = core::ptr::null_mut();
 
-        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot as u32, &mut raw) })?;
+        let slot = u32::try_from(slot).map_err(|_| UiError::InvalidArg)?;
+
+        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot, &mut raw) })?;
 
         Ok(Pane::new(self.page, raw))
     }

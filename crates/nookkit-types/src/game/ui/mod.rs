@@ -18,7 +18,7 @@ pub use control_event::{
 };
 pub use key_guide::{KeyGuideEntry, KeyGuidePage, KeyGuideSeq};
 pub use list_btn_group::{
-    ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, ScrollInfo, VftListBtnGroup,
+    ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, ScrollEvent, VftListBtnGroup,
     VftListBtnGroupLayout,
 };
 pub use page_base::{PageBase, VftPageBase, VftPageBaseLayout};

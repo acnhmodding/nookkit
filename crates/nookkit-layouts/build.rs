@@ -12,6 +12,9 @@ use ident::ident;
 const PAGES: &str = "../../data/pages-3.0.3.tsv";
 const LAYOUTS: &str = "../../data/layouts-3.0.3.toml";
 
+// Pages whose layout has no file in romfs
+const NO_LAYOUT_FILE: &[&str] = &["SwkbdDummy"];
+
 #[derive(Default)]
 struct Layout {
     control: String,
@@ -63,12 +66,16 @@ fn layouts(text: &str) -> BTreeMap<String, Layout> {
 
 fn pages(text: &str) -> Vec<(String, String)> {
     text.lines()
-        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
-        .map(|l| {
-            let mut cols = l.split('\t');
-            let class = cols.next().unwrap_or_default().to_owned();
-            let layout = cols.next().unwrap_or_default().to_owned();
-            (class, layout)
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+        .map(|(index, l)| {
+            let mut cols = l.split('\t').map(str::trim);
+            match (cols.next(), cols.next()) {
+                (Some(class), Some(layout)) if !class.is_empty() && !layout.is_empty() => {
+                    (class.to_owned(), layout.to_owned())
+                }
+                _ => panic!("{PAGES}:{}: expected class<TAB>layout", index + 1),
+            }
         })
         .collect()
 }
@@ -101,7 +108,14 @@ fn kind(control: &str) -> &'static str {
         "UISysScrollBtnList" => "crate::kind::List",
         "LpUniteButton" | "FixedButton" | "AppDragButton" | "ButtonNormal" | "ButtonCheck"
         | "ButtonRepeat" => "crate::kind::Button",
-        _ => "crate::kind::Parts",
+        _ => {
+            // A new button or list control would silently lose its typing as plain parts
+            if ["Button", "Btn", "List"].iter().any(|k| control.contains(k)) {
+                println!("cargo::warning=control `{control}` is typed as plain parts");
+            }
+
+            "crate::kind::Parts"
+        }
     }
 }
 
@@ -145,10 +159,14 @@ fn main() {
     println!("cargo::rerun-if-changed={PAGES}");
     println!("cargo::rerun-if-changed={LAYOUTS}");
 
-    let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let all = layouts(&fs::read_to_string(dir.join(LAYOUTS)).expect("read the layout data"));
-    let pages = pages(&fs::read_to_string(dir.join(PAGES)).expect("read the page export"));
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set"));
+    let read = |path: &str| {
+        let path = dir.join(path);
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    };
+    let all = layouts(&read(LAYOUTS));
+    let pages = pages(&read(PAGES));
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set"));
 
     let mut out = String::new();
     let mut seen = HashMap::new();
@@ -188,6 +206,10 @@ fn main() {
             "impl crate::PageClass for {ty} {{\n    const CLASS: &'static str = {class:?};\n    const LAYOUT: &'static str = {layout:?};\n}}"
         )
         .unwrap();
+        if !all.contains_key(layout) && !NO_LAYOUT_FILE.contains(&layout.as_str()) {
+            println!("cargo::warning=page `{class}` has layout `{layout}` missing from {LAYOUTS}");
+        }
+
         if let Some(root) = all.get(layout).filter(|l| !l.parts.is_empty()) {
             writeln!(out, "impl {ty} {{").unwrap();
             consts(root, &all, true, class, &mut out);

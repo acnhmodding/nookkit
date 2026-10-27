@@ -1,65 +1,63 @@
 use core::ffi::c_void;
 
-use nookkit_sys::{
-    KEY_CANCEL, KEY_FLAG_CONSUME, KEY_FLAG_SEQ_PLAYER, KEY_HOLD, KEY_RELEASE, KEY_REPEAT,
-    KEY_TRIGGER, KeyEvent as RawKeyEvent, Str,
-};
+use nookkit_sys::{KeyEvent as RawKeyEvent, KeyEventKind, KeyFlags, Player, Str};
 
 use crate::{Page, PaneRef, Result, UiError, callback, check};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Discriminants are the game's ButtonId
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Key {
-    Up,
-    Down,
-    Left,
-    Right,
-    A,
-    B,
-    X,
-    Y,
-    L,
-    R,
-    Zl,
-    Zr,
-    LeftStick,
-    RightStick,
-    Plus,
-    Minus,
+    Up = 0,
+    Down = 1,
+    Left = 2,
+    Right = 3,
+    A = 4,
+    B = 5,
+    X = 6,
+    Y = 7,
+    L = 8,
+    R = 9,
+    Zl = 10,
+    Zr = 11,
+    LeftStick = 12,
+    RightStick = 13,
+    Plus = 14,
+    Minus = 15,
 }
 
 impl Key {
-    const ALL: [Key; 16] = [
-        Key::Up,
-        Key::Down,
-        Key::Left,
-        Key::Right,
-        Key::A,
-        Key::B,
-        Key::X,
-        Key::Y,
-        Key::L,
-        Key::R,
-        Key::Zl,
-        Key::Zr,
-        Key::LeftStick,
-        Key::RightStick,
-        Key::Plus,
-        Key::Minus,
-    ];
-
     pub(crate) fn id(self) -> i32 {
         self as i32
     }
 
     fn from_id(id: i32) -> Option<Self> {
-        Self::ALL.get(usize::try_from(id).ok()?).copied()
+        Some(match id {
+            0 => Key::Up,
+            1 => Key::Down,
+            2 => Key::Left,
+            3 => Key::Right,
+            4 => Key::A,
+            5 => Key::B,
+            6 => Key::X,
+            7 => Key::Y,
+            8 => Key::L,
+            9 => Key::R,
+            10 => Key::Zl,
+            11 => Key::Zr,
+            12 => Key::LeftStick,
+            13 => Key::RightStick,
+            14 => Key::Plus,
+            15 => Key::Minus,
+            _ => return None,
+        })
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KeyEvent {
     pub key: Key,
-    pub player: u32,
+    pub player: Player,
 }
 
 enum Guide {
@@ -71,7 +69,7 @@ enum Guide {
 pub struct KeyBuilder {
     page: Page,
     key: Key,
-    player: Option<u32>,
+    player: Option<Player>,
     consume: bool,
     guide: Option<Guide>,
     hint_pane: Option<String>,
@@ -91,7 +89,7 @@ impl KeyBuilder {
 
     /// Pins the binding to one player. Without it the binding follows the player the page's seq
     /// is opened for, each time it activates
-    pub fn player(self, player: u32) -> Self {
+    pub fn player(self, player: Player) -> Self {
         Self {
             player: Some(player),
             ..self
@@ -134,16 +132,20 @@ impl KeyBuilder {
 
     pub fn build(self) -> Result<KeyBinding> {
         let ui = self.page.ui();
-        let mut flags = if self.consume { KEY_FLAG_CONSUME } else { 0 };
+        let mut flags = if self.consume {
+            KeyFlags::CONSUME
+        } else {
+            KeyFlags::NONE
+        };
         if self.player.is_none() {
-            flags |= KEY_FLAG_SEQ_PLAYER;
+            flags = flags | KeyFlags::SEQ_PLAYER;
         }
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {
             (ui.table.key_bind)(
-                self.page.raw(),
-                self.player.unwrap_or(0),
+                self.page.handle(),
+                self.player.unwrap_or_default(),
                 self.key.id(),
                 flags,
                 &mut raw,
@@ -155,14 +157,20 @@ impl KeyBuilder {
             raw,
         };
 
-        match &self.guide {
-            Some(Guide::Text(text)) => binding.set_guide(text)?,
-            Some(Guide::Label(label)) => binding.set_guide_label(label)?,
-            None => {}
+        let configured = match &self.guide {
+            Some(Guide::Text(text)) => binding.set_guide(text),
+            Some(Guide::Label(label)) => binding.set_guide_label(label),
+            None => Ok(()),
         }
+        .and_then(|()| match &self.hint_pane {
+            Some(path) => check(unsafe { (ui.table.key_set_hint_pane)(raw, Str::new(path)) }),
+            None => Ok(()),
+        });
 
-        if let Some(path) = &self.hint_pane {
-            check(unsafe { (ui.table.key_set_hint_pane)(raw, Str::new(path)) })?;
+        // Bound but half configured, so it stays off rather than firing without its guide
+        if let Err(e) = configured {
+            binding.set_enabled(false)?;
+            return Err(e);
         }
 
         Ok(binding)
@@ -170,7 +178,7 @@ impl KeyBuilder {
 }
 
 /// Lives as long as its page
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyBinding {
     page: Page,
     raw: *mut c_void,
@@ -178,29 +186,33 @@ pub struct KeyBinding {
 
 impl KeyBinding {
     pub fn on_trigger(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_TRIGGER, f)
+        self.on(KeyEventKind::TRIGGER, f)
     }
 
     pub fn on_release(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_RELEASE, f)
+        self.on(KeyEventKind::RELEASE, f)
     }
 
     /// Taken by an earlier handler, or the binding was disabled, while held
     pub fn on_cancel(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_CANCEL, f)
+        self.on(KeyEventKind::CANCEL, f)
     }
 
     /// At press, after 30 frames, then every 5
     pub fn on_repeat(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_REPEAT, f)
+        self.on(KeyEventKind::REPEAT, f)
     }
 
     /// Every held frame
     pub fn on_hold(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_HOLD, f)
+        self.on(KeyEventKind::HOLD, f)
     }
 
-    fn on(&self, kind: u32, mut f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
+    fn on(
+        &self,
+        kind: KeyEventKind,
+        mut f: impl FnMut(KeyEvent) -> Result + 'static,
+    ) -> Result<KeyBinding> {
         let ui = self.page.ui();
         let cb = callback::raw(ui, move |arg| {
             let Some(event) = (unsafe { arg.cast::<RawKeyEvent>().as_ref() }) else {

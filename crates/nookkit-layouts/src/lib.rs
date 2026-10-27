@@ -19,9 +19,15 @@ pub trait PaneRef {
     fn path(&self) -> &str;
 }
 
-impl PaneRef for &str {
+impl PaneRef for str {
     fn path(&self) -> &str {
         self
+    }
+}
+
+impl<T: PaneRef + ?Sized> PaneRef for &T {
+    fn path(&self) -> &str {
+        T::path(self)
     }
 }
 
@@ -47,14 +53,15 @@ impl<K> PaneRef for PanePath<K> {
 /// list("/L_BtnListMouth_00");
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn list(_: impl nookkit_layouts::ListRef) {}
 ///
 /// list(nookkit_layouts::pages::CharaMake::L_BTN_OK_00);
 /// ```
 pub trait ListRef: PaneRef {}
 
-impl ListRef for &str {}
+impl ListRef for str {}
+impl<T: ListRef + ?Sized> ListRef for &T {}
 impl ListRef for String {}
 impl ListRef for PanePath<kind::List> {}
 
@@ -104,7 +111,7 @@ impl<K> PanePath<K> {
 /// A parts pane inside a part layout, only usable through [`PanePath::then`] since the same part layout
 /// appears at many places
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn pane(_: impl nookkit_layouts::PaneRef) {}
 ///
 /// pane(nookkit_layouts::layouts::CharaMake::L_BTN_OK_00);

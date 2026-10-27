@@ -12,6 +12,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Generated pane paths, their compile_fail doctests and the symbol file manifests, on the host
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Host tests
+        run: cargo +stable test -p nookkit-layouts -p nookkit-sym
+
   build:
     runs-on: ubuntu-latest
     # HewDraw Remix's builder: cargo-skyline 3.5.0 with skyline-v3, pinned so image updates can't change builds

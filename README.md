@@ -6,4 +6,4 @@
 - `nookkit-types` is a Rust recreation of the game's classes & datatypes.
 - `nookkit-sym` is for mapping symbol names to addresses.
 
-`nookkit` v0.1.0 targets ACNH v3.0.3
+`nookkit` v0.2.0 targets ACNH v3.0.3

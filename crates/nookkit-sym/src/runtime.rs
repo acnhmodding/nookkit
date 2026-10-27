@@ -10,13 +10,16 @@ pub fn module_base() -> usize {
     unsafe { getRegionAddress(Region::Text) as usize }
 }
 
+// 0 when the window runs past the module's mapped image, as on a smaller executable
 fn running_fingerprint() -> u64 {
-    let window = unsafe {
-        core::slice::from_raw_parts(
-            (module_base() + FINGERPRINT_OFFSET) as *const u8,
-            FINGERPRINT_LEN,
-        )
-    };
+    let start = module_base() + FINGERPRINT_OFFSET;
+    let end = unsafe { getRegionAddress(Region::Bss) as usize };
+
+    if start + FINGERPRINT_LEN > end {
+        return 0;
+    }
+
+    let window = unsafe { core::slice::from_raw_parts(start as *const u8, FINGERPRINT_LEN) };
     fingerprint(window)
 }
 
@@ -93,6 +96,7 @@ macro_rules! hook {
             const _: () = $crate::check::<_, ($($ty,)*), $crate::__ret_or_unit!($($ret)?)>(&$symbol);
 
             static ORIGINAL: ::core::sync::atomic::AtomicUsize = ::core::sync::atomic::AtomicUsize::new(0);
+            static INSTALLED: ::core::sync::atomic::AtomicBool = ::core::sync::atomic::AtomicBool::new(false);
 
             #[allow(dead_code)]
             pub unsafe fn original($($arg: $ty),*) $(-> $ret)? {
@@ -105,18 +109,32 @@ macro_rules! hook {
             extern "C" fn replacement($($arg: $ty),*) $(-> $ret)? $body
 
             pub fn install() -> ::core::result::Result<(), $crate::SymError> {
-                if ORIGINAL.load(::core::sync::atomic::Ordering::Acquire) != 0 {
+                // Hooking twice would make original() call the replacement
+                if INSTALLED.swap(true, ::core::sync::atomic::Ordering::AcqRel) {
                     return Ok(());
                 }
 
-                let target = $crate::fun_addr(&$symbol)?;
-                let mut original = ::core::ptr::null_mut();
+                let target = match $crate::fun_addr(&$symbol) {
+                    Ok(target) => target,
+                    Err(e) => {
+                        INSTALLED.store(false, ::core::sync::atomic::Ordering::Release);
+                        return Err(e);
+                    }
+                };
 
+                // Written straight into ORIGINAL, so a call racing the patch never sees 0
                 unsafe {
-                    $crate::__hook_function(target as *const _, replacement as *const _, &mut original);
+                    $crate::__hook_function(
+                        target as *const _,
+                        replacement as *const _,
+                        ORIGINAL.as_ptr().cast(),
+                    );
                 }
 
-                ORIGINAL.store(original as usize, ::core::sync::atomic::Ordering::Release);
+                if ORIGINAL.load(::core::sync::atomic::Ordering::Acquire) == 0 {
+                    return Err($crate::SymError::HookFailed(target));
+                }
+
                 Ok(())
             }
         }

@@ -3,7 +3,7 @@ use core::mem::offset_of;
 
 use native_vtable::{VTableLayout, vtable, vtable_impl};
 
-use crate::lp::ui::{FocusNode, NavDirection, PartsCtrl, VftPartsCtrl};
+use crate::lp::ui::{FocusNode, KeyHandler, NavDirection, PartsCtrl, VftPartsCtrl};
 use crate::native::{Class, Fn, sym};
 
 #[vtable(path = lp::ui::btn_parts_ctrl::VftBtnPartsCtrl)]
@@ -23,18 +23,20 @@ pub unsafe trait VftBtnPartsCtrl: VftPartsCtrl {
 #[repr(C)]
 pub struct BtnPartsCtrl {
     pub base: PartsCtrl,
-    pub unk_1fc: u32,
-    pub unk_200: u32,
+    pub pointer_handler_count: u32,
+    pub key_handler_count: u32,
     _unk_204: [u8; 0x4],
     pub ptr_208: *mut c_void,
     pub ptr_210: *mut c_void,
     pub focus_node: *mut FocusNode,
-    pub unk_220: u32,
+
+    /// Pointer handlers have their player at +0x20 and enable flag at +0x3a
+    pub pointer_handler_capacity: u32,
     _unk_224: [u8; 0x4],
-    pub ptr_228: *mut c_void,
-    pub unk_230: u32,
+    pub pointer_handlers: *mut *mut c_void,
+    pub key_handler_capacity: u32,
     _unk_234: [u8; 0x4],
-    pub ptr_238: *mut c_void,
+    pub key_handlers: *mut *mut KeyHandler,
     pub ptr_240: *mut c_void,
     pub ptr_248: *mut c_void,
     pub handler_250: *mut c_void,
@@ -43,7 +45,9 @@ pub struct BtnPartsCtrl {
 }
 
 const _: () = {
-    assert!(offset_of!(BtnPartsCtrl, unk_1fc) == 0x1fc);
+    assert!(offset_of!(BtnPartsCtrl, pointer_handler_count) == 0x1fc);
+    assert!(offset_of!(BtnPartsCtrl, pointer_handlers) == 0x228);
+    assert!(offset_of!(BtnPartsCtrl, key_handlers) == 0x238);
     assert!(offset_of!(BtnPartsCtrl, focus_node) == 0x218);
     assert!(offset_of!(BtnPartsCtrl, ptrs_260) == 0x260);
     assert!(core::mem::size_of::<BtnPartsCtrl>() == 0x280);

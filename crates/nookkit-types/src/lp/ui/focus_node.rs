@@ -26,12 +26,19 @@ pub struct FocusNode {
     pub links_extra: [*mut FocusNode; 4],
     pub saved_14a0: i32,
     pub saved_14a4: i32,
+    _unk_14a8: [u8; 0x8],
+
+    /// Bit per player it is focusable for, see `Control::setFocusable`
+    pub focusable_players: u32,
+    _unk_14b4: [u8; 0x4],
 }
 
+// Only reached through pointers and its allocation wasn't found, so the size is the known extent
 const _: () = {
     assert!(offset_of!(FocusNode, focus_delegate) == 0x40);
     assert!(offset_of!(FocusNode, links) == 0x1460);
-    assert!(core::mem::size_of::<FocusNode>() == 0x14a8);
+    assert!(offset_of!(FocusNode, focusable_players) == 0x14b0);
+    assert!(core::mem::size_of::<FocusNode>() == 0x14b8);
 };
 
 impl FocusNode {
