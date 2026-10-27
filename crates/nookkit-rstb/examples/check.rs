@@ -1,14 +1,10 @@
-//! Checks the crate against an unpacked romfs and its own table:
-//! `cargo run --release --example check -- <romfs>`.
-//! Prints how every calculated size compares with the table's entry, and the time spent per file type.
-
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use rstb::sizing::{table_name, Sizer, GAME_SIZED, SHADER_ARCHIVE, UNSUPPORTED};
-use rstb::table::{self, Table};
-use rstb::yaz0;
+use nookkit_rstb::sizing::{GAME_SIZED, SHADER_ARCHIVE, Sizer, UNSUPPORTED, table_name};
+use nookkit_rstb::table::{self, Table};
+use nookkit_rstb::yaz0;
 
 fn files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for entry in std::fs::read_dir(dir).unwrap() {
@@ -16,7 +12,12 @@ fn files(root: &Path, dir: &Path, out: &mut Vec<String>) {
         if path.is_dir() {
             files(root, &path, out);
         } else {
-            out.push(path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"));
+            out.push(
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
         }
     }
 }
@@ -39,7 +40,11 @@ fn main() {
         start.elapsed(),
         file.len()
     );
-    assert_eq!(yaz0::decompress(&compressed).unwrap(), data, "Yaz0 round-trip");
+    assert_eq!(
+        yaz0::decompress(&compressed).unwrap(),
+        data,
+        "Yaz0 round-trip"
+    );
 
     let mut all = Vec::new();
     files(root, root, &mut all);
@@ -50,7 +55,9 @@ fn main() {
     let mut slowest = (String::new(), Duration::ZERO);
     let start = Instant::now();
     for relative in &all {
-        let Some(name) = table_name(relative) else { continue };
+        let Some(name) = table_name(relative) else {
+            continue;
+        };
         let path = root.join(relative).to_string_lossy().into_owned();
         let started = Instant::now();
         let size = sizer.file_size(&path, name);

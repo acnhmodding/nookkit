@@ -1,7 +1,4 @@
-//! Yaz0 compression: a 16-byte header ("Yaz0", big-endian decompressed size, 8 zero bytes),
-//! then groups of a flag byte and eight literal bytes or back-references.
-
-use crate::reader::{fail, Error, Result};
+use crate::reader::{Error, Result, fail};
 
 const HEADER_BYTES: usize = 16;
 const WINDOW: usize = 0x1000;
@@ -12,16 +9,20 @@ pub fn is_yaz0(data: &[u8]) -> bool {
     data.starts_with(b"Yaz0")
 }
 
-/// Decompresses a whole Yaz0 file.
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     if data.len() < HEADER_BYTES || !is_yaz0(data) {
         return fail("Expected Yaz0 data.");
     }
     let size = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
     let mut out = Vec::new();
-    out.try_reserve_exact(size).map_err(|_| Error("Out of memory for Yaz0 data.".into()))?;
+    out.try_reserve_exact(size)
+        .map_err(|_| Error("Out of memory for Yaz0 data.".into()))?;
     let mut input = data[HEADER_BYTES..].iter().copied();
-    let mut next = || input.next().ok_or_else(|| Error("Yaz0 data is truncated.".into()));
+    let mut next = || {
+        input
+            .next()
+            .ok_or_else(|| Error("Yaz0 data is truncated.".into()))
+    };
     let (mut flags, mut flag_bits) = (0u8, 0);
     while out.len() < size {
         if flag_bits == 0 {
@@ -52,7 +53,6 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Compresses data with greedy longest matches.
 pub fn compress(data: &[u8]) -> Vec<u8> {
     let mut encoder = Encoder::new(data.len());
     encoder.encode(data);
@@ -70,7 +70,11 @@ impl Encoder {
         let mut out = Vec::with_capacity(capacity + HEADER_BYTES);
         out.resize(HEADER_BYTES, 0);
         out[..4].copy_from_slice(b"Yaz0");
-        Encoder { out, flag_at: 0, flag_bits: 8 }
+        Encoder {
+            out,
+            flag_at: 0,
+            flag_bits: 8,
+        }
     }
 
     fn chunk(&mut self, literal: bool) {
@@ -94,9 +98,11 @@ impl Encoder {
         self.chunk(false);
         let back = distance - 1;
         if length >= 0x12 {
-            self.out.extend_from_slice(&[(back >> 8) as u8, back as u8, (length - 0x12) as u8]);
+            self.out
+                .extend_from_slice(&[(back >> 8) as u8, back as u8, (length - 0x12) as u8]);
         } else {
-            self.out.extend_from_slice(&[((length - 2) << 4 | back >> 8) as u8, back as u8]);
+            self.out
+                .extend_from_slice(&[((length - 2) << 4 | back >> 8) as u8, back as u8]);
         }
     }
 
@@ -104,7 +110,9 @@ impl Encoder {
         const HASH_BITS: u32 = 15;
         const MAX_CHAIN: usize = 128;
         let hash = |at: usize| {
-            ((u32::from_le_bytes([data[at], data[at + 1], data[at + 2], 0]).wrapping_mul(2654435761)) >> (32 - HASH_BITS)) as usize
+            ((u32::from_le_bytes([data[at], data[at + 1], data[at + 2], 0])
+                .wrapping_mul(2654435761))
+                >> (32 - HASH_BITS)) as usize
         };
         let mut head = vec![usize::MAX; 1 << HASH_BITS];
         let mut previous = vec![usize::MAX; WINDOW];
@@ -123,7 +131,11 @@ impl Encoder {
                 let mut candidate = head[hash(at)];
                 let mut chain = 0;
                 while candidate != usize::MAX && at - candidate <= WINDOW && chain < MAX_CHAIN {
-                    let length = data[candidate..].iter().zip(&data[at..at + limit]).take_while(|(a, b)| a == b).count();
+                    let length = data[candidate..]
+                        .iter()
+                        .zip(&data[at..at + limit])
+                        .take_while(|(a, b)| a == b)
+                        .count();
                     if length > best_length {
                         (best_length, best_distance) = (length, at - candidate);
                         if length == limit {
@@ -162,7 +174,6 @@ impl Encoder {
 mod tests {
     use super::*;
 
-    /// Literals, short repeats and a run longer than the longest back-reference.
     fn sample() -> Vec<u8> {
         let mut data: Vec<u8> = (0..=255).collect();
         data.extend(b"abc".repeat(40));

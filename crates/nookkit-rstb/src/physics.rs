@@ -1,13 +1,9 @@
-//! Resource ExpHeap requests ACNH 3.0.3 makes for a model archive's "output.phive"
-//! (0x710070FD2C, 0x71007104E4), in allocation order. Havok's own tagfile memory comes
-//! from the phive system heap and is not charged to the resource.
-
-use crate::heap::{high_water_mark, request, Request};
-use crate::reader::{fail, to_int, Reader, Result};
+use crate::heap::{Request, high_water_mark, request};
+use crate::reader::{Reader, Result, fail, to_int};
 use crate::{crc32, sarc};
 
 // The phive holder directly follows the outer archive's SARC resource object
-// (0x58 bytes, 0x20-aligned), so its free block starts at 24 mod 32.
+// (0x58 bytes, 0x20-aligned), so its free block starts at 24 mod 32
 const START_ADDRESS: i64 = 0x58 % 32;
 
 const CLOTH_OPERATORS: [&str; 7] = [
@@ -20,20 +16,31 @@ const CLOTH_OPERATORS: [&str; 7] = [
     "hclSimulateOperator",
 ];
 
-/// Bytes the phive allocations add to the resource ExpHeap, including headers and padding.
+// Bytes the phive allocations add to the resource ExpHeap, including headers and padding
 pub(crate) fn exp_heap_bytes(phive: &[u8]) -> Result<i64> {
     Ok(high_water_mark(&requests(phive)?, START_ADDRESS)? - START_ADDRESS)
 }
 
-/// The phive requests in allocation order; fails for members that are not modelled.
+// In allocation order, failing for members that are not modelled. Havok tagfile memory comes
+// from the phive system heap and is not charged to the resource
 pub(crate) fn requests(phive: &[u8]) -> Result<Vec<Request>> {
-    const NAMES: [&str; 4] = ["output.bphhb", "output_sub.bphhb", "output.bphcl", "output.bphfbc"];
+    const NAMES: [&str; 4] = [
+        "output.bphhb",
+        "output_sub.bphhb",
+        "output.bphcl",
+        "output.bphfbc",
+    ];
     let mut files: [Option<&[u8]>; 4] = [None; 4];
     for member in sarc::read(phive)? {
         let index = NAMES.iter().position(|&name| member.is(name));
         match index {
             Some(i) if files[i].is_none() => files[i] = Some(member.data(phive)),
-            _ => return fail(format!("Unsupported physics member {}", member.name.as_deref().unwrap_or(""))),
+            _ => {
+                return fail(format!(
+                    "Unsupported physics member {}",
+                    member.name.as_deref().unwrap_or("")
+                ));
+            }
         }
     }
 
@@ -50,14 +57,13 @@ pub(crate) fn requests(phive: &[u8]) -> Result<Vec<Request>> {
     Ok(requests)
 }
 
-/// One array with an 8-byte count cookie.
 fn array_request(count: i64, stride: i64) -> Request {
     request(count * stride + 8, 8)
 }
 
-// 0x7103DECFC0 creates the 0x4D0-byte object; 0x7103DE9C30 allocates its
+// 0x7103DECFC0 creates the 0x4D0-byte object, 0x7103DE9C30 allocates its
 // arrays, each with an 8-byte count cookie, and stops at the first empty one
-// of the curve keys, driver bones, driven bones and aim constraints.
+// of the curve keys, driver bones, driven bones and aim constraints
 fn add_helper_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     requests.push(request(0x4d0, 0x20));
     let aamp = Aamp::new(file)?;
@@ -67,9 +73,21 @@ fn add_helper_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     }
     let header = aamp.object(&root, 0);
     let int = |name| aamp.int(header, name, 0);
-    let (bones, curves, outputs) = (int("bone_num")?, int("connection_curve_num")?, int("output_num")?);
-    let (drivers, driven, pose) = (int("driver_bone_num")?, int("driven_bone_num")?, int("pose_driven_num")?);
-    let (position, rotate, aim) = (int("position_driven_num")?, int("rotate_driven_num")?, int("aim_driven_num")?);
+    let (bones, curves, outputs) = (
+        int("bone_num")?,
+        int("connection_curve_num")?,
+        int("output_num")?,
+    );
+    let (drivers, driven, pose) = (
+        int("driver_bone_num")?,
+        int("driven_bone_num")?,
+        int("pose_driven_num")?,
+    );
+    let (position, rotate, aim) = (
+        int("position_driven_num")?,
+        int("rotate_driven_num")?,
+        int("aim_driven_num")?,
+    );
 
     if bones < 1 {
         return Ok(());
@@ -117,9 +135,9 @@ fn add_helper_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     Ok(())
 }
 
-// 0x7103DE4B10 creates the 0x3B8-byte object; 0x7103DE4D40 then allocates a 0x30-byte bone
+// 0x7103DE4B10 creates the 0x3B8-byte object, 0x7103DE4D40 then allocates a 0x30-byte bone
 // list and one 0x28-byte entry per bone, with an 8-byte count cookie. The loader rejects
-// files whose root list has fewer than three objects.
+// files whose root list has fewer than three objects
 fn add_fish_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     requests.push(request(0x3b8, 8));
     let aamp = Aamp::new(file)?;
@@ -135,14 +153,17 @@ fn add_fish_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     Ok(())
 }
 
-// 0x7103E05A64 creates the 0xF8-byte cloth resource; 0x7103E05C30 loads the
-// Havok tagfile (0x7103E06650) and then sizes its mesh and collidable lists.
+// 0x7103E05A64 creates the 0xF8-byte cloth resource, 0x7103E05C30 loads the
+// Havok tagfile (0x7103E06650) and then sizes its mesh and collidable lists
 fn add_cloth(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     requests.push(request(0xf8, 0x20));
     if !file.magic(0, b"Phive\0")? || file.u16(8)? != 0xfeff {
         return fail("Cloth must be a little-endian Phive file.");
     }
-    add_cloth_havok(requests, &Tagfile::new(file.slice(file.u32(0xc)? as i64, file.u32(0x18)? as i64)?)?)?;
+    add_cloth_havok(
+        requests,
+        &Tagfile::new(file.slice(file.u32(0xc)? as i64, file.u32(0x18)? as i64)?)?,
+    )?;
 
     let aamp = Aamp::new(file.slice(file.u32(0x10)? as i64, file.u32(0x1c)? as i64)?)?;
     let root = aamp.list(aamp.root)?;
@@ -165,7 +186,7 @@ fn add_cloth(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
 }
 
 // The tagfile stores objects in their native layout with item indices in pointer
-// and array slots; an array's length is its item's count.
+// and array slots, an array's length is its item's count
 fn add_cloth_havok(requests: &mut Vec<Request>, tag: &Tagfile) -> Result<()> {
     let container = tag.single("hclClothContainer")?;
     requests.push(request(0x18, 8));
@@ -195,7 +216,7 @@ fn add_cloth_havok(requests: &mut Vec<Request>, tag: &Tagfile) -> Result<()> {
             if kind != "hclSimulateOperator" {
                 continue;
             }
-            // Operator type 1: one 2-byte entry per constraint set in execution order.
+            // Operator type 1: one 2-byte entry per constraint set in execution order
             let (configs, configs_at) = tag.array(tag.u32(tag.object(item, kind)? + 0x50)?)?;
             if configs < 1 {
                 continue;
@@ -205,7 +226,10 @@ fn add_cloth_havok(requests: &mut Vec<Request>, tag: &Tagfile) -> Result<()> {
                 if simulation >= sim_cloth_datas {
                     return fail("Simulate operator has no simulation data.");
                 }
-                let sim_cloth_data = tag.object(tag.u32(sim_cloth_datas_at + simulation * 8)?, "hclSimClothData")?;
+                let sim_cloth_data = tag.object(
+                    tag.u32(sim_cloth_datas_at + simulation * 8)?,
+                    "hclSimClothData",
+                )?;
                 entries = tag.array(tag.u32(sim_cloth_data + 0x88)?)?.0 + 1;
             }
             requests.push(request(entries * 2, 8));
@@ -233,7 +257,10 @@ impl<'a> Aamp<'a> {
         if !data.magic(0, b"AAMP")? || data.u32(4)? != 2 {
             return fail("Expected an AAMP v2 parameter file.");
         }
-        Ok(Aamp { data, root: to_int(0x30 + to_int(data.u32(0x14)? as i64)?)? })
+        Ok(Aamp {
+            data,
+            root: to_int(0x30 + to_int(data.u32(0x14)? as i64)?)?,
+        })
     }
 
     fn list(&self, at: i64) -> Result<AampList> {
@@ -255,7 +282,7 @@ impl<'a> Aamp<'a> {
         list.objects_at + index * 8
     }
 
-    /// A missing parameter keeps the game's default.
+    // A missing parameter keeps the game's default
     fn int(&self, object: i64, name: &str, fallback: i64) -> Result<i64> {
         let d = self.data;
         let crc = crc32(name);
@@ -284,7 +311,7 @@ struct Item {
 struct Tagfile<'a> {
     data: Reader<'a>,
     items: Vec<Item>,
-    /// Type names by index; type 0 is null.
+    // Type names by index, type 0 is null
     types: Vec<Option<String>>,
 }
 
@@ -296,10 +323,21 @@ struct Section {
 
 impl<'a> Tagfile<'a> {
     fn new(file: Reader<'a>) -> Result<Self> {
-        // The Phive header's tagfile size includes zero padding to 16 bytes after TAG0.
-        let roots = sections(file, 0, file.len().min((file.u32_be(0)? & 0x3fffffff) as i64))?;
-        let [root] = roots.as_slice() else { return fail("Expected a Havok TAG0 tagfile.") };
-        if &root.tag != b"TAG0" || file.range(root.end, file.len() - root.end)?.iter().any(|&b| b != 0) {
+        // The Phive header's tagfile size includes zero padding to 16 bytes after TAG0
+        let roots = sections(
+            file,
+            0,
+            file.len().min((file.u32_be(0)? & 0x3fffffff) as i64),
+        )?;
+        let [root] = roots.as_slice() else {
+            return fail("Expected a Havok TAG0 tagfile.");
+        };
+        if &root.tag != b"TAG0"
+            || file
+                .range(root.end, file.len() - root.end)?
+                .iter()
+                .any(|&b| b != 0)
+        {
             return fail("Expected a Havok TAG0 tagfile.");
         }
         let (mut body, mut strings, mut names, mut index) = (None, None, None, None);
@@ -320,13 +358,21 @@ impl<'a> Tagfile<'a> {
                 }
             }
         }
-        let (Some(data), Some(strings), Some(names), Some(index)) = (body.filter(|b| b.len() != 0), strings, names, index) else {
+        let (Some(data), Some(strings), Some(names), Some(index)) =
+            (body.filter(|b| b.len() != 0), strings, names, index)
+        else {
             return fail("Havok tagfile is missing its data, types or items.");
         };
 
-        // ASCII decoding, as .NET's Encoding.ASCII: other bytes become '?'.
-        let text: Vec<String> =
-            strings.split(|&b| b == 0).map(|s| s.iter().map(|&b| if b < 0x80 { b as char } else { '?' }).collect()).collect();
+        // ASCII decoding, as .NET's Encoding.ASCII: other bytes become '?'
+        let text: Vec<String> = strings
+            .split(|&b| b == 0)
+            .map(|s| {
+                s.iter()
+                    .map(|&b| if b < 0x80 { b as char } else { '?' })
+                    .collect()
+            })
+            .collect();
         let mut position = 0;
         let count = to_int(varint(names, &mut position)?)?;
         if count < 0 {
@@ -354,10 +400,15 @@ impl<'a> Tagfile<'a> {
         for record in index.as_chunks::<12>().0 {
             let word = |i: usize| u32::from_le_bytes(record[i..i + 4].try_into().unwrap());
             let (kind, offset, count) = (word(0) & 0xffffff, word(4), word(8));
-            if kind as usize >= types.len() || offset as i64 > data.len() || count > i32::MAX as u32 {
+            if kind as usize >= types.len() || offset as i64 > data.len() || count > i32::MAX as u32
+            {
                 return fail("Havok item is out of range.");
             }
-            items.push(Item { kind: kind as usize, offset: offset as i64, count: count as i64 });
+            items.push(Item {
+                kind: kind as usize,
+                offset: offset as i64,
+                count: count as i64,
+            });
         }
         Ok(Tagfile { data, items, types })
     }
@@ -377,7 +428,6 @@ impl<'a> Tagfile<'a> {
         Ok(self.types[self.item(item)?.kind].as_deref().unwrap_or(""))
     }
 
-    /// An array's item count and offset.
     fn array(&self, item: i64) -> Result<(i64, i64)> {
         if item == 0 {
             return Ok((0, 0));
@@ -415,14 +465,20 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
             return fail("Invalid Havok section size.");
         }
         let tag = file.range(start + 4, 4)?.try_into().unwrap();
-        sections.push(Section { tag, start: start + 8, end: start + size });
+        sections.push(Section {
+            tag,
+            start: start + 8,
+            end: start + size,
+        });
         start += size;
     }
     Ok(sections)
 }
 
 fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
-    let Some(&first) = data.get(*at) else { return fail("Truncated Havok varint.") };
+    let Some(&first) = data.get(*at) else {
+        return fail("Truncated Havok varint.");
+    };
     let extra = match first {
         0x00..=0x7f => 0,
         0x80..=0xbf => 1,

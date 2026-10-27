@@ -1,6 +1,5 @@
-use crate::reader::{fail, Reader, Result};
+use crate::reader::{Reader, Result, fail};
 
-/// A SARC member: its name and absolute data range.
 pub(crate) struct Member {
     pub name: Option<String>,
     pub offset: i64,
@@ -17,7 +16,6 @@ impl Member {
     }
 }
 
-/// Reads a little-endian SARC's member ranges in node order.
 pub(crate) fn read(archive: &[u8]) -> Result<Vec<Member>> {
     let sarc = Reader::new(archive);
     let length = sarc.len();
@@ -56,12 +54,23 @@ pub(crate) fn read(archive: &[u8]) -> Result<Vec<Member>> {
                 true => sarc.range(at, data - at)?.iter().position(|&b| b == 0),
                 false => None,
             };
-            let Some(terminator) = terminator else { return fail("SARC member name is invalid.") };
-            // ASCII decoding, as .NET's Encoding.ASCII: other bytes become '?'.
+            let Some(terminator) = terminator else {
+                return fail("SARC member name is invalid.");
+            };
+            // ASCII as .NET decodes it, other bytes become ?
             let bytes = sarc.range(at, terminator as i64)?;
-            name = Some(bytes.iter().map(|&b| if b < 0x80 { b as char } else { '?' }).collect());
+            name = Some(
+                bytes
+                    .iter()
+                    .map(|&b| if b < 0x80 { b as char } else { '?' })
+                    .collect(),
+            );
         }
-        members.push(Member { name, offset: start, length: end - start });
+        members.push(Member {
+            name,
+            offset: start,
+            length: end - start,
+        });
     }
     Ok(members)
 }
@@ -70,7 +79,6 @@ pub(crate) fn read(archive: &[u8]) -> Result<Vec<Member>> {
 mod tests {
     use super::*;
 
-    /// A little-endian SARC holding named members.
     fn archive(members: &[(&str, &[u8])]) -> Vec<u8> {
         let mut names: Vec<u8> = Vec::new();
         let mut data: Vec<u8> = Vec::new();

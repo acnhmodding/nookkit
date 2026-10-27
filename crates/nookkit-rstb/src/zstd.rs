@@ -1,21 +1,17 @@
-//! Zstandard (".zs") resources. Frame headers are walked first so the output buffer is reserved
-//! fallibly at its exact size; the decoder's own window is probed before it allocates it.
-
 use std::io::Read;
 
 use ruzstd::decoding::{BlockDecodingStrategy, FrameDecoder};
 
-use crate::reader::{fail, Error, Reader, Result};
+use crate::reader::{Error, Reader, Result, fail};
 
 const MAGIC: u32 = 0xfd2fb528;
-/// Larger windows are refused; ACNH's resources use at most a few MiB.
+// ACNH resources use at most a few MiB
 const MAX_WINDOW: u64 = 64 << 20;
 
 pub fn is_zstd(data: &[u8]) -> bool {
     data.starts_with(&MAGIC.to_le_bytes())
 }
 
-/// One frame's byte range, back-reference window and declared decompressed size.
 struct Frame {
     start: usize,
     end: usize,
@@ -23,7 +19,6 @@ struct Frame {
     content_size: Option<u64>,
 }
 
-/// Walks the frames of a Zstandard stream, skipping skippable frames.
 fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     let d = Reader::new(data);
     let mut frames = Vec::new();
@@ -88,18 +83,25 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
         if at > d.len() {
             return fail("Truncated Zstandard frame.");
         }
-        frames.push(Frame { start: start as usize, end: at as usize, window, content_size });
+        frames.push(Frame {
+            start: start as usize,
+            end: at as usize,
+            window,
+            content_size,
+        });
     }
     Ok(frames)
 }
 
-/// Fails, instead of aborting on allocation, when the decoder's window would not fit in memory.
+// Fails instead of aborting when the window would not fit in memory
 fn new_decoder(window: u64) -> Result<FrameDecoder> {
     if window > MAX_WINDOW {
         return fail("Zstandard window is too large.");
     }
     let mut probe: Vec<u8> = Vec::new();
-    probe.try_reserve_exact(2 * window as usize + (1 << 20)).map_err(|_| Error("Out of memory for the Zstandard window.".into()))?;
+    probe
+        .try_reserve_exact(2 * window as usize + (1 << 20))
+        .map_err(|_| Error("Out of memory for the Zstandard window.".into()))?;
     drop(probe);
     let mut decoder = FrameDecoder::new();
     decoder.set_max_window_size(MAX_WINDOW);
@@ -110,7 +112,7 @@ fn decode_error(error: impl std::fmt::Display) -> Error {
     Error(format!("Zstandard data is invalid: {error}"))
 }
 
-/// Decompressed size of a frame without a declared size, by decoding it.
+// For a frame without a declared size
 fn count_frame(frame: &[u8], window: u64) -> Result<u64> {
     let mut decoder = new_decoder(window)?;
     let mut input = frame;
@@ -118,7 +120,9 @@ fn count_frame(frame: &[u8], window: u64) -> Result<u64> {
     let mut scratch = vec![0u8; 0x10000];
     let mut total = 0u64;
     loop {
-        decoder.decode_blocks(&mut input, BlockDecodingStrategy::UptoBytes(1 << 20)).map_err(decode_error)?;
+        decoder
+            .decode_blocks(&mut input, BlockDecodingStrategy::UptoBytes(1 << 20))
+            .map_err(decode_error)?;
         loop {
             let read = decoder.read(&mut scratch)?;
             if read == 0 {
@@ -132,7 +136,6 @@ fn count_frame(frame: &[u8], window: u64) -> Result<u64> {
     }
 }
 
-/// The decompressed length of a Zstandard stream.
 pub fn decompressed_length(data: &[u8]) -> Result<u64> {
     total_length(data, &frames(data)?)
 }
@@ -143,19 +146,24 @@ fn total_length(data: &[u8], frames: &[Frame]) -> Result<u64> {
             Some(size) => size,
             None => count_frame(&data[frame.start..frame.end], frame.window)?,
         };
-        total.checked_add(size).ok_or_else(|| Error("Zstandard data is too large.".into()))
+        total
+            .checked_add(size)
+            .ok_or_else(|| Error("Zstandard data is too large.".into()))
     })
 }
 
-/// Decompresses a Zstandard stream.
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     let frames = frames(data)?;
-    let length = usize::try_from(total_length(data, &frames)?).map_err(|_| Error("Zstandard data is too large.".into()))?;
+    let length = usize::try_from(total_length(data, &frames)?)
+        .map_err(|_| Error("Zstandard data is too large.".into()))?;
     let mut out = Vec::new();
-    out.try_reserve_exact(length).map_err(|_| Error("Out of memory for Zstandard data.".into()))?;
+    out.try_reserve_exact(length)
+        .map_err(|_| Error("Out of memory for Zstandard data.".into()))?;
     out.resize(length, 0);
     let window = frames.iter().map(|f| f.window).max().unwrap_or(0);
-    let written = new_decoder(window)?.decode_all(data, &mut out).map_err(decode_error)?;
+    let written = new_decoder(window)?
+        .decode_all(data, &mut out)
+        .map_err(decode_error)?;
     if written != length {
         return fail("Zstandard frames do not match their declared sizes.");
     }
@@ -165,7 +173,7 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ruzstd::encoding::{compress_to_vec, CompressionLevel};
+    use ruzstd::encoding::{CompressionLevel, compress_to_vec};
 
     fn frame(data: &[u8]) -> Vec<u8> {
         compress_to_vec(data, CompressionLevel::Fastest)

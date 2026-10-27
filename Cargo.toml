@@ -4,6 +4,7 @@ members = [
     "crates/nookkit-core",
     "crates/nookkit-layouts",
     "crates/nookkit-msbt",
+    "crates/nookkit-rstb",
     "crates/nookkit-sym",
     "crates/nookkit-sys",
     "crates/nookkit-types",
@@ -21,11 +22,14 @@ lto = true
 skyline = "0.6.0"
 native-vtable = { git = "https://github.com/crackheadakira/vtable-rs" }
 thiserror = "2"
+crc32fast = "1.5.0"
+ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 
 nookkit = { path = "crates/nookkit" }
 nookkit-core = { path = "crates/nookkit-core" }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
 nookkit-msbt = { path = "crates/nookkit-msbt" }
+nookkit-rstb = { path = "crates/nookkit-rstb" }
 nookkit-sym = { path = "crates/nookkit-sym" }
 nookkit-sys = { path = "crates/nookkit-sys" }
 nookkit-types = { path = "crates/nookkit-types" }

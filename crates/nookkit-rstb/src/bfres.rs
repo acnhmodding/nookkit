@@ -1,10 +1,10 @@
-use crate::heap::{request, Request};
-use crate::reader::{align_up, fail, Reader, Result};
+use crate::heap::{Request, request};
+use crate::reader::{Reader, Result, align_up, fail};
 use crate::sarc::{self, Member};
 use crate::sizing::model_archive_load_bytes;
 
-/// The canonical single-member ACNH model archive: one BFRES at 0x2000. Other members
-/// (physics, shaders, nested archives) have independent allocations.
+// The canonical single-member ACNH model archive: one BFRES at 0x2000. Other members
+// (physics, shaders, nested archives) have independent allocations
 pub(crate) fn single_bfres(archive: &[u8]) -> Option<Member> {
     let mut members = sarc::read(archive).ok()?;
     if members.len() != 1 || members[0].offset != 0x2000 || !is_bfres(members[0].data(archive)) {
@@ -13,7 +13,7 @@ pub(crate) fn single_bfres(archive: &[u8]) -> Option<Member> {
     members.pop()
 }
 
-/// An unrelocated little-endian BFRES v9 with a relocation table inside its bounds.
+// An unrelocated little-endian BFRES v9 with a relocation table inside its bounds
 pub(crate) fn is_bfres(data: &[u8]) -> bool {
     let bfres = Reader::new(data);
     let header = || -> Result<bool> {
@@ -32,14 +32,26 @@ pub(crate) fn is_bfres(data: &[u8]) -> bool {
     header().unwrap_or(false)
 }
 
-/// The single runtime pool that BFRES setup (0x71038FB8C0) requests for a resource's
-/// models, materials, shapes, meshes, BNTX texture references and animations.
-pub(crate) fn runtime_pool_bytes(models: i64, materials: i64, shapes: i64, meshes: i64, textures: i64, animations: i64) -> i64 {
-    models * 0x430 + materials * 0x198 + shapes * (0x1120 + 0xb0) + meshes * 0x260 + textures * 0x10 + animations
+// The single runtime pool that BFRES setup (0x71038FB8C0) requests for a resource's
+// models, materials, shapes, meshes, BNTX texture references and animations
+pub(crate) fn runtime_pool_bytes(
+    models: i64,
+    materials: i64,
+    shapes: i64,
+    meshes: i64,
+    textures: i64,
+    animations: i64,
+) -> i64 {
+    models * 0x430
+        + materials * 0x198
+        + shapes * (0x1120 + 0xb0)
+        + meshes * 0x260
+        + textures * 0x10
+        + animations
 }
 
-/// Counts the textures of the external files, which must all be BNTX v4.1 archives
-/// stored before the relocation table.
+// Counts the textures of the external files, which must all be BNTX v4.1 archives
+// stored before the relocation table
 pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
     let files = bfres.u16(0xec)? as i64;
     let array = bfres.pointer(0xb8)?;
@@ -83,22 +95,26 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
     Ok(textures)
 }
 
-/// 0x18 bytes per skeletal, material, bone-visibility and shape animation, plus the
-/// 8-aligned normalized names of material and bone-visibility animations. Scene
-/// animations are not counted. Returns the total and the name bytes.
+// 0x18 bytes per skeletal, material, bone-visibility and shape animation, plus the
+// 8-aligned normalized names of material and bone-visibility animations. Scene
+// animations are not counted. Returns the total and the name bytes
 pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
     let mut animations = 0;
     for kind in 0..4 {
         let count = bfres.u16(0xe2 + kind * 2)? as i64;
         let array = 0x58 + kind * 0x10;
-        if (count == 0) != (bfres.u64(array)? == 0) || (count == 0) != (bfres.u64(array + 8)? == 0) {
+        if (count == 0) != (bfres.u64(array)? == 0) || (count == 0) != (bfres.u64(array + 8)? == 0)
+        {
             return fail("Animation arrays do not match their count.");
         }
         animations += count;
     }
 
     let mut name_bytes = 0;
-    for (array, stride, count) in [(0x68, 0x70, bfres.u16(0xe4)?), (0x78, 0x60, bfres.u16(0xe6)?)] {
+    for (array, stride, count) in [
+        (0x68, 0x70, bfres.u16(0xe4)?),
+        (0x78, 0x60, bfres.u16(0xe6)?),
+    ] {
         let start = bfres.pointer(array)?;
         let count = count as i64;
         bfres.range(start, count * stride)?;
@@ -116,10 +132,13 @@ pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
 
 // 0x71038B0F60 recognizes these three-byte suffixes, removes an optional
 // separator, and copies into a 1024-byte temporary. 0x71038FB8C0 reserves
-// the normalized name plus NUL even when its copy-name flag is disabled.
+// the normalized name plus NUL even when its copy-name flag is disabled
 fn normalized_animation_name_bytes(name: &str) -> i64 {
     let bytes = name.as_bytes();
-    if !["fsp", "fcl", "fts", "ftp", "fvb", "fvm"].iter().any(|suffix| name.ends_with(suffix)) {
+    if !["fsp", "fcl", "fts", "ftp", "fvb", "fvm"]
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+    {
         return 0;
     }
     let mut end = bytes.len() - 3;
@@ -129,29 +148,38 @@ fn normalized_animation_name_bytes(name: &str) -> i64 {
     end.min(1023) as i64 + 1
 }
 
-/// Calculates ACNH model archives whose single BFRES has no geometry: textures, animations or both.
-/// Geometry, scene animations and unfamiliar layouts deliberately return `None`.
+// Calculates ACNH model archives whose single BFRES has no geometry: textures, animations or both
+// Geometry, scene animations and unfamiliar layouts deliberately return `None`
 pub(crate) fn texture_animation_archive_size(archive: &[u8]) -> Option<u32> {
     let member = single_bfres(archive)?;
     let pool = runtime_pool_without_models(Reader::new(member.data(archive))).ok()??;
-    let allocation = model_archive_load_bytes(align_up(archive.len() as i64, 32), &[], &resource_requests(pool)).ok()?;
-    // No generic 32-byte rounding: ACNH's recorded allocations may be 16 mod 32.
+    let allocation = model_archive_load_bytes(
+        align_up(archive.len() as i64, 32),
+        &[],
+        &resource_requests(pool),
+    )
+    .ok()?;
+    // No generic 32-byte rounding: ACNH's recorded allocations may be 16 mod 32
     u32::try_from(allocation).ok()
 }
 
 // After the archive holder, 0x7103B26680 creates the BFRES resource (0x71038FB680). Its
 // constructor (0x71038FD400) lists one pointer per shader archive: the member hook's
 // static-model shader (0x710070FD2C passes it as a load argument when the archive has no
-// Park_UBER.bfsha) and the global registry's Park_UBER (gsys.bgapkginfo shader_num = 1).
-// Setup (0x71038FB8C0) then allocates the runtime pool; without models nothing else is charged.
+// Park_UBER.bfsha) and the global registry's Park_UBER (gsys.bgapkginfo shader_num = 1)
+// Setup (0x71038FB8C0) then allocates the runtime pool, without models nothing else is charged
 fn resource_requests(runtime_pool: i64) -> [Request; 3] {
-    [request(0x308, 8), request(2 * 8, 8), request(runtime_pool, 8)]
+    [
+        request(0x308, 8),
+        request(2 * 8, 8),
+        request(runtime_pool, 8),
+    ]
 }
 
-// The runtime pool of a BFRES without models: texture references plus the animation share.
+// The runtime pool of a BFRES without models: texture references plus the animation share
 fn runtime_pool_without_models(bfres: Reader) -> Result<Option<i64>> {
     // Version 9's model count and two reserved counts, then the scene animations (not counted
-    // by the pool and otherwise untraced), at most one external file and no external GPU flags.
+    // by the pool and otherwise untraced), at most one external file and no external GPU flags
     if bfres.u16(0xdc)? != 0
         || bfres.u16(0xde)? != 0
         || bfres.u16(0xe0)? != 0
@@ -162,7 +190,7 @@ fn runtime_pool_without_models(bfres: Reader) -> Result<Option<i64>> {
     {
         return Ok(None);
     }
-    // The model and reserved arrays/dictionaries, then the scene animation ones.
+    // The model and reserved arrays/dictionaries, then the scene animation ones
     for offset in (0x28..=0x50).step_by(8) {
         if bfres.u64(offset)? != 0 {
             return Ok(None);
@@ -173,14 +201,14 @@ fn runtime_pool_without_models(bfres: Reader) -> Result<Option<i64>> {
     }
 
     let pool = runtime_pool_bytes(0, 0, 0, 0, texture_count(bfres)?, animation_bytes(bfres)?.0);
-    // A BFRES with neither would request an empty pool, which has not been traced.
+    // A BFRES with neither would request an empty pool, which has not been traced
     Ok((pool != 0).then_some(pool))
 }
 
-// Some exporters emit an empty geometry pool even for texture-only files.
-// Its serialized storage is already part of the loaded archive.
-// Accept only an uninitialized pool with no GPU buffer bytes; actual geometry
-// still fails the count/array checks and cannot enter this calculation.
+// Some exporters emit an empty geometry pool even for texture-only files
+// Its serialized storage is already part of the loaded archive
+// Accept only an uninitialized pool with no GPU buffer bytes, actual geometry
+// still fails the count/array checks and cannot enter this calculation
 fn has_no_gpu_data(bfres: Reader) -> Result<bool> {
     let memory_pool = bfres.pointer(0xa8)?;
     let buffer_info = bfres.pointer(0xb0)?;

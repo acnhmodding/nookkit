@@ -1,13 +1,10 @@
-//! The shared Switch BFSHA (Park_UBER) reflection used by the resource loader's allocations.
-//! Only the reflection metadata is read; shader binaries are never decoded.
-
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
-use crate::reader::{fail, read_file, to_int, Reader, Result};
+use crate::reader::{Reader, Result, fail, read_file, to_int};
 use crate::{sarc, yaz0};
 
-/// A shader string: a 16-bit length, bytes and a terminator. A null pointer reads as "".
+// A shader string: a 16-bit length, bytes and a terminator. A null pointer reads as ""
 fn string(data: Reader, at: i64) -> Result<String> {
     if at == 0 {
         return Ok(String::new());
@@ -19,7 +16,7 @@ fn string(data: Reader, at: i64) -> Result<String> {
     Ok(String::from_utf8_lossy(data.range(at + 2, length)?).into_owned())
 }
 
-/// The key names of a dictionary in entry order, skipping its root node.
+// The key names of a dictionary in entry order, skipping its root node
 fn dictionary(data: Reader, at: i64) -> Result<Vec<String>> {
     if at == 0 {
         return Ok(Vec::new());
@@ -29,12 +26,17 @@ fn dictionary(data: Reader, at: i64) -> Result<Vec<String>> {
         return fail("Shader dictionary is too large.");
     }
     data.range(at + 8, (count + 1) * 16)?;
-    (0..count).map(|i| string(data, data.pointer(at + 32 + i * 16)?)).collect()
+    (0..count)
+        .map(|i| string(data, data.pointer(at + 32 + i * 16)?))
+        .collect()
 }
 
 fn signature(data: Reader, at: i64, expected: &[u8]) -> Result<()> {
     if !data.magic(at, expected)? {
-        return fail(format!("Expected {} shader section.", String::from_utf8_lossy(expected)));
+        return fail(format!(
+            "Expected {} shader section.",
+            String::from_utf8_lossy(expected)
+        ));
     }
     Ok(())
 }
@@ -69,11 +71,9 @@ pub(crate) struct ShadingModel {
     static_programs: OnceCell<HashMap<Vec<u32>, Vec<i64>>>,
 }
 
-/// A compiled program's resource reflection.
 pub(crate) struct ProgramLayout {
-    /// Vertex attribute names and locations.
     pub attributes: Vec<(String, i64)>,
-    /// Sampler locations in the model's sampler order.
+    /// Sampler locations in the model's sampler order
     pub samplers: Vec<(String, u32)>,
     pub uniforms: HashMap<String, u32>,
     pub storage: HashMap<String, u32>,
@@ -99,8 +99,14 @@ impl ShaderArchive {
         let array = data.pointer(72)?;
         let count = data.u16(120)? as i64;
         data.range(array, count * 256)?;
-        let models = (0..count).map(|i| ShadingModel::parse(data, array + i * 256)).collect::<Result<_>>()?;
-        Ok(ShaderArchive { bytes, name, models })
+        let models = (0..count)
+            .map(|i| ShadingModel::parse(data, array + i * 256))
+            .collect::<Result<_>>()?;
+        Ok(ShaderArchive {
+            bytes,
+            name,
+            models,
+        })
     }
 
     fn data(&self) -> Reader<'_> {
@@ -127,7 +133,10 @@ impl ShaderArchive {
                 return Ok(true);
             }
         }
-        Ok(model.uniform_blocks.iter().any(|b| b.kind == 4 && b.size != 0))
+        Ok(model
+            .uniform_blocks
+            .iter()
+            .any(|b| b.kind == 4 && b.size != 0))
     }
 
     pub fn shader_object_work_bytes(&self, model: &ShadingModel) -> Result<i64> {
@@ -141,30 +150,47 @@ impl ShaderArchive {
         aligned_blocks(&[dynamics, dynamics, dynamics])
     }
 
-    /// Programs whose static key matches the choices.
-    pub fn static_candidates(&self, model: &ShadingModel, choices: &HashMap<String, String>) -> Result<Vec<i64>> {
+    pub fn static_candidates(
+        &self,
+        model: &ShadingModel,
+        choices: &HashMap<String, String>,
+    ) -> Result<Vec<i64>> {
         if model.static_programs.get().is_none() {
             let mut statics: HashMap<Vec<u32>, Vec<i64>> = HashMap::new();
             for i in 0..model.program_count {
                 let words = (0..model.static_key_words)
-                    .map(|j| self.data().u32(model.key_table + (i * model.key_words + j) * 4))
+                    .map(|j| {
+                        self.data()
+                            .u32(model.key_table + (i * model.key_words + j) * 4)
+                    })
                     .collect::<Result<Vec<_>>>()?;
                 statics.entry(words).or_default().push(i);
             }
             let _ = model.static_programs.set(statics);
         }
         let words = self.key(model, choices, false)?;
-        Ok(model.static_programs.get().unwrap().get(&words).cloned().unwrap_or_default())
+        Ok(model
+            .static_programs
+            .get()
+            .unwrap()
+            .get(&words)
+            .cloned()
+            .unwrap_or_default())
     }
 
-    /// The candidate whose dynamic key matches the choices, or `None`.
-    pub fn find_program(&self, model: &ShadingModel, candidates: &[i64], choices: &HashMap<String, String>) -> Result<Option<i64>> {
+    pub fn find_program(
+        &self,
+        model: &ShadingModel,
+        candidates: &[i64],
+        choices: &HashMap<String, String>,
+    ) -> Result<Option<i64>> {
         let words = self.key(model, choices, true)?;
         let mut found = None;
         for &index in candidates {
             let mut matches = true;
             for (j, &word) in words.iter().enumerate() {
-                let at = model.key_table + (index * model.key_words + model.static_key_words + j as i64) * 4;
+                let at = model.key_table
+                    + (index * model.key_words + model.static_key_words + j as i64) * 4;
                 if self.data().u32(at)? != word {
                     matches = false;
                     break;
@@ -181,13 +207,28 @@ impl ShaderArchive {
         Ok(found)
     }
 
-    fn key(&self, model: &ShadingModel, choices: &HashMap<String, String>, dynamic: bool) -> Result<Vec<u32>> {
+    fn key(
+        &self,
+        model: &ShadingModel,
+        choices: &HashMap<String, String>,
+        dynamic: bool,
+    ) -> Result<Vec<u32>> {
         let static_count = self.data().u16(model.offset + 0xe4)? as usize;
-        let length = if dynamic { model.key_words - model.static_key_words } else { model.static_key_words };
+        let length = if dynamic {
+            model.key_words - model.static_key_words
+        } else {
+            model.static_key_words
+        };
         let mut words = vec![0u32; length as usize];
-        let options = if dynamic { static_count..model.options.len() } else { 0..static_count };
+        let options = if dynamic {
+            static_count..model.options.len()
+        } else {
+            0..static_count
+        };
         for i in options {
-            let Some(option) = model.options.get(i) else { return fail("Shader option index is out of range.") };
+            let Some(option) = model.options.get(i) else {
+                return fail("Shader option index is out of range.");
+            };
             let word = option.word - if dynamic { model.static_key_words } else { 0 };
             if word < 0 || word >= length {
                 return fail("Shader option references the wrong key region.");
@@ -196,9 +237,11 @@ impl ShaderArchive {
             if let Some(value) = choices.get(&option.name) {
                 match option.choices.iter().position(|c| c == value) {
                     Some(found) => selected = found as i64,
-                    // The dynamic setter leaves its default for an unknown choice.
-                    // An unknown static value cannot establish a compiled candidate.
-                    None if !dynamic => return fail(format!("Unknown shader choice {}={value}.", option.name)),
+                    // The dynamic setter leaves its default for an unknown choice
+                    // An unknown static value cannot establish a compiled candidate
+                    None if !dynamic => {
+                        return fail(format!("Unknown shader choice {}={value}.", option.name));
+                    }
                     None => {}
                 }
             }
@@ -222,17 +265,27 @@ impl ShaderArchive {
             .attributes
             .iter()
             .enumerate()
-            // C# `1u << i` masks the shift count.
+            // C# `1u << i` masks the shift count
             .filter(|(i, (_, location))| mask & 1u32.wrapping_shl(*i as u32) != 0 && *location >= 0)
             .map(|(_, attribute)| attribute.clone())
             .collect();
-        let block_names: Vec<String> = model.uniform_blocks.iter().map(|b| b.name.clone()).collect();
+        let block_names: Vec<String> = model
+            .uniform_blocks
+            .iter()
+            .map(|b| b.name.clone())
+            .collect();
         let storage_names = dictionary(self.data(), self.data().pointer(model.offset + 0x78)?)?;
         Ok(ProgramLayout {
             attributes,
             samplers: self.locations(self.data().pointer(program)?, &model.sampler_names)?,
-            uniforms: self.locations(self.data().pointer(program + 0x10)?, &block_names)?.into_iter().collect(),
-            storage: self.locations(self.data().pointer(program + 0x18)?, &storage_names)?.into_iter().collect(),
+            uniforms: self
+                .locations(self.data().pointer(program + 0x10)?, &block_names)?
+                .into_iter()
+                .collect(),
+            storage: self
+                .locations(self.data().pointer(program + 0x18)?, &storage_names)?
+                .into_iter()
+                .collect(),
         })
     }
 
@@ -247,7 +300,7 @@ impl ShaderArchive {
         self.data().range(at, names.len() as i64 * 24)?;
         for (i, name) in names.iter().enumerate() {
             let entry = at + i as i64 * 24;
-            // The game packs source stages 0, 2, 1, and an absent compute slot.
+            // The game packs source stages 0, 2, 1, and an absent compute slot
             let packed = (self.data().u32(entry)? & 255)
                 | (self.data().u32(entry + 8)? & 255) << 8
                 | (self.data().u32(entry + 4)? & 255) << 16
@@ -278,14 +331,31 @@ impl ShadingModel {
         if bnsh_size < 32 {
             return fail("Invalid BNSH file size.");
         }
-        let mut options = read_options(data, data.pointer(at + 8)?, data.pointer(at + 16)?, 0, key_words)?;
-        options.extend(read_options(data, data.pointer(at + 24)?, data.pointer(at + 32)?, static_words, key_words)?);
+        let mut options = read_options(
+            data,
+            data.pointer(at + 8)?,
+            data.pointer(at + 16)?,
+            0,
+            key_words,
+        )?;
+        options.extend(read_options(
+            data,
+            data.pointer(at + 24)?,
+            data.pointer(at + 32)?,
+            static_words,
+            key_words,
+        )?);
 
         let attribute_array = data.pointer(at + 40)?;
         let attributes = dictionary(data, data.pointer(at + 48)?)?
             .into_iter()
             .enumerate()
-            .map(|(i, name)| Ok((name, data.byte(attribute_array + i as i64 * 2 + 1)? as i8 as i64)))
+            .map(|(i, name)| {
+                Ok((
+                    name,
+                    data.byte(attribute_array + i as i64 * 2 + 1)? as i8 as i64,
+                ))
+            })
             .collect::<Result<_>>()?;
         let sampler_names = dictionary(data, data.pointer(at + 64)?)?;
 
@@ -296,7 +366,7 @@ impl ShadingModel {
             let size = data.u16(b + 26)? as i64;
             let defaults = data.pointer(b + 16)?;
             let uniform_array = data.pointer(b)?;
-            // Uniform offsets are not needed, but the game's reflection reads them.
+            // Uniform offsets are not needed, but the game's reflection reads them
             for i in 0..dictionary(data, data.pointer(b + 8)?)?.len() as i64 {
                 data.u16(uniform_array + i * 16 + 12)?;
             }
@@ -324,7 +394,13 @@ impl ShadingModel {
     }
 }
 
-fn read_options(data: Reader, array: i64, names: i64, dynamic_base: i64, key_words: i64) -> Result<Vec<ShaderOption>> {
+fn read_options(
+    data: Reader,
+    array: i64,
+    names: i64,
+    dynamic_base: i64,
+    key_words: i64,
+) -> Result<Vec<ShaderOption>> {
     let names = dictionary(data, names)?;
     data.range(array, names.len() as i64 * 40)?;
     let mut options = Vec::with_capacity(names.len());
@@ -347,16 +423,26 @@ fn read_options(data: Reader, array: i64, names: i64, dynamic_base: i64, key_wor
         {
             return fail("Invalid shader option bit packing.");
         }
-        options.push(ShaderOption { name, choices, default_choice, word, shift, mask });
+        options.push(ShaderOption {
+            name,
+            choices,
+            default_choice,
+            word,
+            shift,
+            mask,
+        });
     }
     Ok(options)
 }
 
 fn aligned_blocks(sizes: &[i64]) -> i64 {
-    sizes.iter().filter(|&&size| size != 0).fold(0, |end, size| ((end + 7) & !7) + size)
+    sizes
+        .iter()
+        .filter(|&&size| size != 0)
+        .fold(0, |end, size| ((end + 7) & !7) + size)
 }
 
-/// Loads the shader archive file: a BFSHA, optionally inside a SARC, optionally Yaz0-compressed.
+// Loads the shader archive file: a BFSHA, optionally inside a SARC, optionally Yaz0-compressed
 pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
     let mut data = read_file(path)?;
     if yaz0::is_yaz0(&data) {
@@ -364,11 +450,16 @@ pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
     }
     if !data.starts_with(b"FSHA") {
         let members = sarc::read(&data)?;
-        let mut archives = members.iter().filter(|m| m.data(&data).starts_with(b"FSHA"));
+        let mut archives = members
+            .iter()
+            .filter(|m| m.data(&data).starts_with(b"FSHA"));
         let (Some(archive), None) = (archives.next(), archives.next()) else {
             return fail("Expected one BFSHA file in the shader archive.");
         };
-        let (start, end) = (archive.offset as usize, (archive.offset + archive.length) as usize);
+        let (start, end) = (
+            archive.offset as usize,
+            (archive.offset + archive.length) as usize,
+        );
         data.truncate(end);
         data.drain(..start);
     }

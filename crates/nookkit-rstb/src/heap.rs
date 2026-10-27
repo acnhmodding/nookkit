@@ -1,6 +1,5 @@
-use crate::reader::{align_up, fail, Result};
+use crate::reader::{Result, align_up, fail};
 
-/// One allocation request: payload bytes and a power-of-two alignment.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Request {
     pub bytes: i64,
@@ -13,9 +12,8 @@ pub(crate) const fn request(bytes: i64, alignment: i64) -> Request {
 
 const HEADER_BYTES: i64 = 32;
 
-/// ACNH 3.0.3's forward ExpHeap allocation path (0x71037C77A0), with sufficient space and no
-/// frees: the end of the last payload, or the starting address when nothing is requested. The
-/// starting address is the free block's header address, not the first payload address.
+// ACNH 3.0.3 forward ExpHeap allocation (0x71037C77A0) with enough space and no frees. The
+// start is the free block header address, not the first payload address
 pub(crate) fn high_water_mark(requests: &[Request], initial_free_block: i64) -> Result<i64> {
     if initial_free_block < 0 || initial_free_block & 7 != 0 {
         return fail("The initial free block must be 8-aligned.");
@@ -27,7 +25,9 @@ pub(crate) fn high_water_mark(requests: &[Request], initial_free_block: i64) -> 
         }
         let alignment = request.alignment;
         if !(8..=8192).contains(&alignment) || alignment & (alignment - 1) != 0 {
-            return fail("Only the native-verified positive alignments from 8 through 8192 are supported.");
+            return fail(
+                "Only the native-verified positive alignments from 8 through 8192 are supported.",
+            );
         }
         let address = align_up(front + HEADER_BYTES, alignment);
         front = address + align_up(request.bytes.max(8), 8);
@@ -36,14 +36,17 @@ pub(crate) fn high_water_mark(requests: &[Request], initial_free_block: i64) -> 
 }
 
 // 3.0.3 startup GPU-pool policy (0x71005C9B44 → 0x71037FEBE0): managed reuse with
-// 16 KiB minimum pools. Every resource ExpHeap already holds one empty minimum pool.
+// 16 KiB minimum pools. Every resource ExpHeap already holds one empty minimum pool
 const MINIMUM_POOL_BYTES: i64 = 0x4000;
 
-/// Parent ExpHeap requests from 3.0.3's GPU-pool manager (0x71037F8590) for GPU buffers
-/// (memory flags 3) in loader order. Requests that fit an existing pool add nothing; others
-/// create a pool whose metadata and page-aligned backing follow on the same heap.
+// Parent ExpHeap requests of the GPU-pool manager (0x71037F8590) for GPU buffers (memory
+// flags 3) in loader order. A request that fits an existing pool adds nothing, others create a
+// pool whose metadata and page-aligned backing follow on the same heap
 pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Request>> {
-    let mut pools = vec![Pool::new(MINIMUM_POOL_BYTES, entries(MINIMUM_POOL_BYTES, 0))];
+    let mut pools = vec![Pool::new(
+        MINIMUM_POOL_BYTES,
+        entries(MINIMUM_POOL_BYTES, 0),
+    )];
     let mut parent = Vec::new();
     for wanted in requests {
         let alignment = wanted.alignment;
@@ -53,17 +56,22 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
         if alignment <= 0 || alignment & (alignment - 1) != 0 {
             return fail("GPU alignment must be a positive power of two.");
         }
-        // Virtual heaps start at 0x100000; larger alignments need base-aware placement.
+        // Virtual heaps start at 0x100000, larger alignments need base-aware placement
         if alignment > 0x100000 {
             return fail("GPU alignments above the native virtual base are unresolved.");
         }
         let mut best: Option<(usize, i64)> = None;
         for (i, pool) in pools.iter().enumerate() {
-            let Some(candidate) = pool.try_place(wanted) else { continue };
-            // Native selection maximizes request/free-size (single-precision).
+            let Some(candidate) = pool.try_place(wanted) else {
+                continue;
+            };
+            // Native selection maximizes request/free-size (single-precision)
             let better = match best {
                 None => true,
-                Some((b, _)) => wanted.bytes as f32 / pool.free as f32 > wanted.bytes as f32 / pools[b].free as f32,
+                Some((b, _)) => {
+                    wanted.bytes as f32 / pool.free as f32
+                        > wanted.bytes as f32 / pools[b].free as f32
+                }
             };
             if better {
                 best = Some((i, candidate));
@@ -74,7 +82,7 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
             None => {
                 let backing = align_up(wanted.bytes, 4096).max(MINIMUM_POOL_BYTES);
                 let entries = entries(backing, wanted.bytes);
-                // 0x138 pool record + 0x108 virtual heap + 32 bytes per entry.
+                // 0x138 pool record + 0x108 virtual heap + 32 bytes per entry
                 parent.push(request(0x240 + entries * 0x20, 8));
                 parent.push(request(backing, align_up(alignment, 4096)));
                 pools.push(Pool::new(backing, entries));
@@ -106,10 +114,14 @@ struct Pool {
 
 impl Pool {
     fn new(length: i64, capacity: i64) -> Self {
-        Pool { length, capacity: capacity as usize, allocated: Vec::new(), free: length }
+        Pool {
+            length,
+            capacity: capacity as usize,
+            allocated: Vec::new(),
+            free: length,
+        }
     }
 
-    /// First fit over the sorted blocks.
     fn try_place(&self, request: &Request) -> Option<i64> {
         if self.allocated.len() >= self.capacity {
             return None;

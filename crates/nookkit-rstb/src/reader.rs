@@ -2,7 +2,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 
-/// Why a file could not be sized. Callers keep the game's own sizing for it (no table entry).
+/// Why a file could not be sized. Callers keep the game's own sizing for it (no table entry)
 #[derive(Debug)]
 pub struct Error(pub String);
 
@@ -26,21 +26,21 @@ pub(crate) fn fail<T>(message: impl Into<String>) -> Result<T> {
     Err(Error(message.into()))
 }
 
-/// A file's bytes, failing instead of aborting when they do not fit in memory.
+// Fails instead of aborting when the file does not fit in memory
 pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut data = Vec::new();
-    data.try_reserve_exact(file.metadata()?.len() as usize).map_err(|_| Error(format!("Out of memory reading {path}.")))?;
+    data.try_reserve_exact(file.metadata()?.len() as usize)
+        .map_err(|_| Error(format!("Out of memory reading {path}.")))?;
     file.read_to_end(&mut data)?;
     Ok(data)
 }
 
-/// Rounds up to a power-of-two alignment.
 pub(crate) fn align_up(value: i64, alignment: i64) -> i64 {
     (value + alignment - 1) & -alignment
 }
 
-/// A C# `checked((int)value)` conversion.
+// A C# `checked((int)value)`
 pub(crate) fn to_int(value: i64) -> Result<i64> {
     if value < i32::MIN as i64 || value > i32::MAX as i64 {
         return fail("Arithmetic operation resulted in an overflow.");
@@ -48,8 +48,6 @@ pub(crate) fn to_int(value: i64) -> Result<i64> {
     Ok(value)
 }
 
-/// Bounds-checked little-endian reads over a resource's bytes. Reads outside the data fail,
-/// so malformed files never produce a partial size.
 #[derive(Clone, Copy)]
 pub(crate) struct Reader<'a> {
     data: &'a [u8],
@@ -106,7 +104,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// A relocated 64-bit offset into this data (BFRES, BNTX); zero is a null pointer.
+    /// A relocated 64-bit offset into this data (BFRES, BNTX), zero is a null pointer
     pub fn pointer(&self, at: i64) -> Result<i64> {
         let value = self.u64(at)?;
         if value > self.len() as u64 {
@@ -115,7 +113,7 @@ impl<'a> Reader<'a> {
         Ok(value as i64)
     }
 
-    /// A BFRES string: a 16-bit length, strict UTF-8 bytes and a terminator. A null pointer reads as "".
+    /// A 16-bit length, strict UTF-8 bytes and a terminator. A null pointer reads as ""
     pub fn name(&self, at: i64) -> Result<&'a str> {
         if at == 0 {
             return Ok("");

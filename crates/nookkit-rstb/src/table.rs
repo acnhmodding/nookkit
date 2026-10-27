@@ -1,18 +1,13 @@
-//! The RSTC resource size table: the allocation budget the game reserves for each file.
-
 use std::collections::BTreeMap;
 
 use crate::crc32;
-use crate::reader::{fail, Reader, Result};
+use crate::reader::{Reader, Result, fail};
 
-/// The table's path in the romfs.
 pub const PATH: &str = "System/Resource/ResourceSizeTable.srsizetable";
 
 const COLLIDED_NAME_BYTES: usize = 128;
-/// Size and DLC number.
 const ENTRY_BYTES: usize = 8;
 
-/// A table entry's recorded size and DLC number.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Entry {
     pub size: u32,
@@ -21,9 +16,8 @@ pub struct Entry {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Table {
-    /// Entries whose name hash is unique, by hash.
     pub unique: BTreeMap<u32, Entry>,
-    /// Entries whose name hash collides with another entry's, by name (ordinal order).
+    /// Names whose hash collides, told apart by name
     pub collided: BTreeMap<String, Entry>,
 }
 
@@ -36,7 +30,6 @@ pub enum Update {
 }
 
 impl Table {
-    /// Parses a decompressed table.
     pub fn parse(data: &[u8]) -> Result<Table> {
         let d = Reader::new(data);
         if !d.magic(0, b"RSTC")? {
@@ -44,9 +37,17 @@ impl Table {
         }
         let unique_count = d.u32(4)? as i64;
         let collided_count = d.u32(8)? as i64;
-        let mut table = Table { unique: BTreeMap::new(), collided: BTreeMap::new() };
+        let mut table = Table {
+            unique: BTreeMap::new(),
+            collided: BTreeMap::new(),
+        };
         let mut at = 12;
-        let entry = |at: i64| -> Result<Entry> { Ok(Entry { size: d.u32(at)?, dlc: d.u32(at + 4)? }) };
+        let entry = |at: i64| -> Result<Entry> {
+            Ok(Entry {
+                size: d.u32(at)?,
+                dlc: d.u32(at + 4)?,
+            })
+        };
         for _ in 0..unique_count {
             let crc = d.u32(at)?;
             if table.unique.insert(crc, entry(at + 4)?).is_some() {
@@ -57,8 +58,15 @@ impl Table {
         for _ in 0..collided_count {
             let bytes = d.range(at, COLLIDED_NAME_BYTES as i64)?;
             let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-            let Ok(name) = std::str::from_utf8(&bytes[..end]) else { return fail("Collided table name is not text.") };
-            if !name.is_ascii() || table.collided.insert(name.to_owned(), entry(at + COLLIDED_NAME_BYTES as i64)?).is_some() {
+            let Ok(name) = std::str::from_utf8(&bytes[..end]) else {
+                return fail("Collided table name is not text.");
+            };
+            if !name.is_ascii()
+                || table
+                    .collided
+                    .insert(name.to_owned(), entry(at + COLLIDED_NAME_BYTES as i64)?)
+                    .is_some()
+            {
                 return fail(format!("Invalid or duplicate table entry {name}."));
             }
             at += (COLLIDED_NAME_BYTES + ENTRY_BYTES) as i64;
@@ -67,10 +75,11 @@ impl Table {
         Ok(table)
     }
 
-    /// The decompressed table: unique entries by hash, then collided entries by name.
     pub fn serialize(&self) -> Vec<u8> {
-        let mut out =
-            Vec::with_capacity(12 + self.unique.len() * (4 + ENTRY_BYTES) + self.collided.len() * (COLLIDED_NAME_BYTES + ENTRY_BYTES));
+        let mut out = Vec::with_capacity(
+            12 + self.unique.len() * (4 + ENTRY_BYTES)
+                + self.collided.len() * (COLLIDED_NAME_BYTES + ENTRY_BYTES),
+        );
         out.extend_from_slice(b"RSTC");
         out.extend_from_slice(&(self.unique.len() as u32).to_le_bytes());
         out.extend_from_slice(&(self.collided.len() as u32).to_le_bytes());
@@ -91,20 +100,26 @@ impl Table {
         out
     }
 
-    /// The entry the game finds for a file, if any.
     pub fn get(&self, name: &str) -> Option<Entry> {
-        self.collided.get(name).or_else(|| self.unique.get(&crc32(name))).copied()
+        self.collided
+            .get(name)
+            .or_else(|| self.unique.get(&crc32(name)))
+            .copied()
     }
 
-    /// Stores a calculated size. Negative or oversized values remove the entry, so the game
-    /// sizes the file itself. A unique hash is assumed to belong to the named file; only
-    /// collided entries store names to tell files apart.
+    /// Negative or oversized sizes remove the entry, so the game sizes the file itself. A unique
+    /// hash is assumed to belong to `name`
     pub fn set(&mut self, name: &str, size: i64) -> Result<Update> {
         let crc = crc32(name);
         let Ok(size) = u32::try_from(size) else {
-            let removed = self.collided.remove(name).is_some() || self.unique.remove(&crc).is_some();
+            let removed =
+                self.collided.remove(name).is_some() || self.unique.remove(&crc).is_some();
             self.normalize();
-            return Ok(if removed { Update::Removed } else { Update::None });
+            return Ok(if removed {
+                Update::Removed
+            } else {
+                Update::None
+            });
         };
         let existing = match self.collided.get_mut(name) {
             Some(entry) => Some(entry),
@@ -121,20 +136,26 @@ impl Table {
             if !name.is_ascii() || name.len() > COLLIDED_NAME_BYTES {
                 return fail(format!("{name} cannot be stored as a collided table name."));
             }
-            self.collided.insert(name.to_owned(), Entry { size, dlc: 0 });
+            self.collided
+                .insert(name.to_owned(), Entry { size, dlc: 0 });
         } else {
             self.unique.insert(crc, Entry { size, dlc: 0 });
         }
         Ok(Update::Added)
     }
 
-    /// Collided entries left without a partner become unique again.
+    // Collided entries left without a partner become unique again
     fn normalize(&mut self) {
         let mut counts: BTreeMap<u32, usize> = BTreeMap::new();
         for name in self.collided.keys() {
             *counts.entry(crc32(name)).or_default() += 1;
         }
-        let single: Vec<String> = self.collided.keys().filter(|name| counts[&crc32(name)] == 1).cloned().collect();
+        let single: Vec<String> = self
+            .collided
+            .keys()
+            .filter(|name| counts[&crc32(name)] == 1)
+            .cloned()
+            .collect();
         for name in single {
             let entry = self.collided.remove(&name).unwrap();
             self.unique.entry(crc32(&name)).or_insert(entry);
@@ -170,7 +191,10 @@ mod tests {
 
     #[test]
     fn updates_unique_entries() {
-        let mut table = Table { unique: BTreeMap::new(), collided: BTreeMap::new() };
+        let mut table = Table {
+            unique: BTreeMap::new(),
+            collided: BTreeMap::new(),
+        };
         assert_eq!(table.set("A.bin", 10).unwrap(), Update::Added);
         assert_eq!(table.set("A.bin", 10).unwrap(), Update::None);
         assert_eq!(table.set("A.bin", 20).unwrap(), Update::Changed);
