@@ -39,6 +39,17 @@ impl Vtable {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Data {
+    pub name: &'static str,
+}
+
+impl Data {
+    pub const fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
 pub struct Sig<Args, Ret>(PhantomData<fn() -> (Args, Ret)>);
 
 pub struct Unchecked;

@@ -13,13 +13,15 @@ rodata_hash = 0xacfdd336a5d95bb0
 "Lp::UI::UIMgr::findMessage" = 0x3c4cd40
 "Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = 0x3c877b8
 "Lp::Utl::StateMachine::changeState" = 0x3dbb160
+"game::PlayerAction::beginCategory" = 0x245403c
+"game::PlayerControlLockMgr::acquire" = 0x971bb8
+"game::PlayerControlLockMgr::isPlayerLocked" = 0x9738a0
 "game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
 "game::UI::AppBodyCtrl::getRuntimeTypeInfo" = 0x2fb9964
 "game::UI::AppLocatorCtrl::getRuntimeTypeInfo" = 0x2fbbd6c
 "game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo" = 0x2fbd914
 "game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo" = 0x2fc0fac
 "game::UI::CommandSelectSeq::getRuntimeTypeInfo" = 0x2cb4080
-"game::UI::FieldMenuRequestSeq::tryLockPlayer" = 0x2df7758
 "game::UI::KeyGuideSeq::addGuide" = 0x2de2b00
 "game::UI::KeyGuideSeq::getRuntimeTypeInfo" = 0x2de5988
 "game::UI::ListBtnGroup::isSelectable" = 0x3306de4
@@ -55,3 +57,6 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UISys::ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
 "sead::FixedSafeString<64>::vtable" = 0x47fb9f8
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
+
+[data]
+"game::PlayerControlLockMgr::sInstance" = 0x4ca4ab8

@@ -147,6 +147,7 @@ code! {
     SymbolKind(u32) {
         FN = 0,
         VTABLE = 1,
+        DATA = 2,
     }
 }
 

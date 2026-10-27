@@ -4,7 +4,7 @@ use crate::sead::runtime_type_info::Interface;
 
 #[doc(hidden)]
 pub use nookkit_sym as __sym;
-pub use nookkit_sym::{Abi, Fn, Vtable, check, sym};
+pub use nookkit_sym::{Abi, Data, Fn, Vtable, check, sym};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolKind {
@@ -12,6 +12,9 @@ pub enum SymbolKind {
 
     /// The address an object's vptr holds
     Vtable,
+
+    /// A global variable
+    Data,
 }
 
 /// Returns the absolute address of a symbol, or `None` when the symbol file lacks it
@@ -57,6 +60,11 @@ pub unsafe trait Class {
 
 pub fn vtable<T>(symbol: &Vtable) -> NativeResult<*const T> {
     lookup(symbol.name, SymbolKind::Vtable).map(|address| address as *const T)
+}
+
+/// The global's address, not its value
+pub fn data<T>(symbol: &Data) -> NativeResult<*mut T> {
+    lookup(symbol.name, SymbolKind::Data).map(|address| address as *mut T)
 }
 
 pub fn fun_addr<S>(symbol: &Fn<S>) -> NativeResult<usize> {

@@ -175,6 +175,7 @@ fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
     let kind = match kind {
         NativeKind::Fn => SymbolKind::FN,
         NativeKind::Vtable => SymbolKind::VTABLE,
+        NativeKind::Data => SymbolKind::DATA,
     };
 
     let address = unsafe { (table.resolve)(Str::new(name), kind) };

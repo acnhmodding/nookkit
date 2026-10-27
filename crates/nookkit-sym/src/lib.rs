@@ -5,7 +5,7 @@ mod typed;
 mod runtime;
 
 pub use parse::{Kind, ParseError, SymbolFile, parse};
-pub use typed::{Abi, AbiArgs, Fn, Matches, Sig, Unchecked, Vtable, abi, check};
+pub use typed::{Abi, AbiArgs, Data, Fn, Matches, Sig, Unchecked, Vtable, abi, check};
 
 #[allow(non_snake_case, non_upper_case_globals)]
 pub mod sym {

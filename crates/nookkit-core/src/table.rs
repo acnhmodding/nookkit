@@ -144,6 +144,7 @@ unsafe extern "C" fn resolve(name: Str, kind: SymbolKind) -> usize {
     let kind = match kind {
         SymbolKind::FN => Kind::Fn,
         SymbolKind::VTABLE => Kind::Vtable,
+        SymbolKind::DATA => Kind::Data,
         _ => return 0,
     };
 

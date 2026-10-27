@@ -47,6 +47,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
         let kind = match kind {
             SymbolKind::Fn => nookkit_sym::Kind::Fn,
             SymbolKind::Vtable => nookkit_sym::Kind::Vtable,
+            SymbolKind::Data => nookkit_sym::Kind::Data,
         };
 
         nookkit_sym::address(kind, name).ok()

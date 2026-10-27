@@ -170,6 +170,7 @@ fn main() {
                 None => format!("crate::Fn = crate::Fn::new({name:?})"),
             },
             Kind::Vtable => format!("crate::Vtable = crate::Vtable::new({name:?})"),
+            Kind::Data => format!("crate::Data = crate::Data::new({name:?})"),
         };
         module.items.insert(last.clone(), item);
     }

@@ -38,5 +38,8 @@ fn	game::UI::PocketMenuSeq::requestOpen
 fn	game::UI::PocketMenuSeq::getRuntimeTypeInfo
 fn	game::UI::CommandSelectSeq::getRuntimeTypeInfo
 fn	game::UI::StorageSeq::getRuntimeTypeInfo
-fn	game::UI::FieldMenuRequestSeq::tryLockPlayer
+fn	game::PlayerControlLockMgr::isPlayerLocked
+fn	game::PlayerAction::beginCategory
+fn	game::PlayerControlLockMgr::acquire
+data	game::PlayerControlLockMgr::sInstance
 fn	game::PlayerControlLockMgr::releaseMenuLock

@@ -71,6 +71,10 @@ pub fn vtable<T>(symbol: &crate::Vtable) -> Result<*const T, SymError> {
     Ok(address(Kind::Vtable, symbol.name)? as *const T)
 }
 
+pub fn data<T>(symbol: &crate::Data) -> Result<*mut T, SymError> {
+    Ok(address(Kind::Data, symbol.name)? as *mut T)
+}
+
 #[doc(hidden)]
 pub use skyline::hooks::A64HookFunction as __hook_function;
 

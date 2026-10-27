@@ -6,6 +6,9 @@ pub enum Kind {
 
     /// The address an object's vptr holds
     Vtable,
+
+    /// A global variable
+    Data,
 }
 
 impl Kind {
@@ -13,11 +16,12 @@ impl Kind {
         match self {
             Kind::Fn => "fn",
             Kind::Vtable => "vtable",
+            Kind::Data => "data",
         }
     }
 
     pub fn from_section(name: &str) -> Option<Self> {
-        [Kind::Fn, Kind::Vtable]
+        [Kind::Fn, Kind::Vtable, Kind::Data]
             .into_iter()
             .find(|k| k.section() == name)
     }
@@ -206,8 +210,12 @@ rodata_hash = 0x1234abcd
 
     #[test]
     fn keeps_hashes_inside_names() {
-        let text = "game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"A::{lambda()#1}\" = 0x10 # c\n";
-        assert_eq!(parse(text).unwrap().get(Kind::Fn, "A::{lambda()#1}"), Some(0x10));
+        let text =
+            "game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"A::{lambda()#1}\" = 0x10 # c\n";
+        assert_eq!(
+            parse(text).unwrap().get(Kind::Fn, "A::{lambda()#1}"),
+            Some(0x10)
+        );
         assert!(matches!(
             parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"\" = 0x1\n"),
             Err(ParseError::Syntax { .. })
