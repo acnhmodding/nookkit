@@ -69,6 +69,7 @@ dependencies = [
 name = "nookkit-core"
 version = "0.2.0"
 dependencies = [
+ "nookkit-msbt",
  "nookkit-sym",
  "nookkit-sys",
  "nookkit-types",

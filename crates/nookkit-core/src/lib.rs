@@ -1,5 +1,6 @@
 mod keys;
 mod lists;
+mod messages;
 mod pages;
 mod seqs;
 mod states;
@@ -61,7 +62,10 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     seqs::sequence_on_deactivated::install()?;
     seqs::sequence_update::install()?;
     keys::key_guide_add::install()?;
-    keys::message_find::install()
+    keys::message_find::install()?;
+
+    messages::load();
+    messages::install()
 }
 
 #[skyline::main(name = "NookKit")]

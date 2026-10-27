@@ -135,8 +135,9 @@ impl PatchSet {
         Ok(replaced)
     }
 
-    pub fn has_file(&self, file: &str) -> bool {
-        self.files.contains_key(file)
+    /// The patched file named `file`, borrowed from the set
+    pub fn file(&self, file: &str) -> Option<&str> {
+        self.files.get_key_value(file).map(|(name, _)| name.as_str())
     }
 
     pub fn get(&self, file: &str, label: &str) -> Option<&Entry> {
@@ -174,7 +175,7 @@ mod tests {
         assert_eq!(entry.text_for("USen"), Some(&tags::encode("Island Sketch").unwrap()[..]));
         assert_eq!(entry.text_for("JPja"), Some(&tags::encode("Island").unwrap()[..]));
         assert_eq!(entry.attribute, Some(Attribute::Like("0002".into())));
-        assert!(set.has_file("MenuDevice"));
+        assert_eq!(set.file("MenuDevice"), Some("MenuDevice"));
         assert!(set.get("MenuDevice", "0002").is_none());
     }
 

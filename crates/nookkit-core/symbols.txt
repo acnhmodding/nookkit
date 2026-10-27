@@ -7,3 +7,14 @@ fn	game::UI::SequenceBase::update
 fn	Lp::UI::UIMgr::findMessage
 fn	game::UI::ViewPage::~ViewPage
 fn	game::UI::KeyGuideSeq::addGuide
+fn	Lp::UI::MessageArchive::findFile
+fn	Lp::UI::MessageFile::findText
+fn	Lp::UI::MessageFile::hasLabel
+fn	game::MessageAttribute::read1
+fn	game::MessageAttribute::read2
+fn	game::MessageAttribute::read3
+fn	game::MessageAttribute::read5
+fn	game::MessageAttribute::read6
+fn	game::MessageAttribute::read7
+fn	game::System::getLanguageImpl
+data	game::System::sLanguageCodes
