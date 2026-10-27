@@ -182,6 +182,13 @@ fn source(log: &mut Log, relative: &str) -> Option<String> {
 
 fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<(), String> {
     let (files, counts) = mods::files(folders)?;
+    let hints: Vec<_> = folders
+        .iter()
+        .filter_map(|folder| {
+            let bytes = platform::read_optional(&format!("{}/{TABLE}", folder.root)).ok()??;
+            Some((format!("{}/", folder.root), parse_table(&bytes).ok()?))
+        })
+        .collect();
     let listed: Vec<_> = folders
         .iter()
         .zip(&counts)
@@ -235,13 +242,32 @@ fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<()
         if let Ok(stamp) = stamp {
             cache.insert(relative, length, stamp, size);
         }
-        if size == UNSUPPORTED {
+        let update = if size == UNSUPPORTED {
+            // The table the file's own mod ships is the best guess left
+            let hint = hints
+                .iter()
+                .filter(|(root, _)| {
+                    copies
+                        .iter()
+                        .any(|(path, _)| path.starts_with(root.as_str()))
+                })
+                .filter_map(|(_, hints)| hints.get(name))
+                .map(|entry| entry.size)
+                .max();
+            let Some(hint) = hint else {
+                log.line(format!(
+                    "{relative}: no traced size, its table entry was left as it is"
+                ));
+                continue;
+            };
             log.line(format!(
-                "{relative}: no traced size, its table entry was left as it is"
+                "{relative}: no traced size, raised to its mod's entry {hint} at least"
             ));
-            continue;
-        }
-        match table.set(name, size) {
+            table.raise(name, hint)
+        } else {
+            table.set(name, size)
+        };
+        match update {
             Ok(Update::Changed) => changed += 1,
             Ok(Update::Added) => added += 1,
             Ok(Update::Removed) => removed += 1,

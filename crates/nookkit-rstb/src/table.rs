@@ -144,6 +144,14 @@ impl Table {
         Ok(Update::Added)
     }
 
+    /// Like [`set`](Self::set), but only ever grows the entry
+    pub fn raise(&mut self, name: &str, size: u32) -> Result<Update> {
+        match self.get(name) {
+            Some(entry) if entry.size >= size => Ok(Update::None),
+            _ => self.set(name, size.into()),
+        }
+    }
+
     // Collided entries left without a partner become unique again
     fn normalize(&mut self) {
         let mut counts: BTreeMap<u32, usize> = BTreeMap::new();
@@ -201,6 +209,18 @@ mod tests {
         assert_eq!(table.get("A.bin"), Some(entry(20)));
         assert_eq!(table.set("A.bin", -1).unwrap(), Update::Removed);
         assert_eq!(table.get("A.bin"), None);
+    }
+
+    #[test]
+    fn raise_only_grows() {
+        let mut table = Table {
+            unique: BTreeMap::new(),
+            collided: BTreeMap::new(),
+        };
+        assert_eq!(table.raise("A.bin", 10).unwrap(), Update::Added);
+        assert_eq!(table.raise("A.bin", 5).unwrap(), Update::None);
+        assert_eq!(table.raise("A.bin", 20).unwrap(), Update::Changed);
+        assert_eq!(table.get("A.bin"), Some(entry(20)));
     }
 
     #[test]
