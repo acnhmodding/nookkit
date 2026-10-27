@@ -1,5 +1,3 @@
-//! Reading MsgStdBn files: labels, texts and ATR1 attributes
-
 use std::collections::BTreeMap;
 
 pub struct Msbt {
@@ -98,7 +96,9 @@ impl Msbt {
     }
 
     pub fn text(&self, label: &str) -> Option<&[u16]> {
-        self.texts.get(*self.labels.get(label)? as usize).map(Vec::as_slice)
+        self.texts
+            .get(*self.labels.get(label)? as usize)
+            .map(Vec::as_slice)
     }
 
     pub fn attribute(&self, label: &str) -> Option<&[u8]> {

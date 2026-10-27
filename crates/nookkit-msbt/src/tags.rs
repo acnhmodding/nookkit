@@ -1,6 +1,3 @@
-//! Message text with `{{Name key="value"}}` tags, to and from MsgStd UTF-16 (0x0E opens a tag with
-//! group, type, byte size and params, 0x0F closes one with group and type)
-
 use std::fmt::{self, Write};
 
 const OPEN: u16 = 0x0E;
@@ -174,9 +171,27 @@ fn encode_tag(body: &str, at: usize, out: &mut Vec<u16>) -> Result<(), TagError>
             params.extend(value);
             push_tag(out, SYSTEM, RUBY, &params, at)?;
         }
-        "Font" => push_tag(out, SYSTEM, FONT, &attrs.take_u16("face", at)?.to_le_bytes(), at)?,
-        "Size" => push_tag(out, SYSTEM, SIZE, &attrs.take_u16("percent", at)?.to_le_bytes(), at)?,
-        "Color" => push_tag(out, SYSTEM, COLOR, &attrs.take_u16("index", at)?.to_le_bytes(), at)?,
+        "Font" => push_tag(
+            out,
+            SYSTEM,
+            FONT,
+            &attrs.take_u16("face", at)?.to_le_bytes(),
+            at,
+        )?,
+        "Size" => push_tag(
+            out,
+            SYSTEM,
+            SIZE,
+            &attrs.take_u16("percent", at)?.to_le_bytes(),
+            at,
+        )?,
+        "Color" => push_tag(
+            out,
+            SYSTEM,
+            COLOR,
+            &attrs.take_u16("index", at)?.to_le_bytes(),
+            at,
+        )?,
         "PageBreak" => push_tag(out, SYSTEM, PAGE_BREAK, &[], at)?,
         "Tag" => {
             let group = attrs.take_u16("group", at)?;
@@ -364,7 +379,9 @@ mod tests {
     #[test]
     fn raw_tags() {
         round_trip("{{Tag group=\"10\" type=\"2\"}}");
-        round_trip("{{Tag group=\"115\" type=\"0\" data=\"00cd\"}}x{{/Tag group=\"10\" type=\"5\"}}");
+        round_trip(
+            "{{Tag group=\"115\" type=\"0\" data=\"00cd\"}}x{{/Tag group=\"10\" type=\"5\"}}",
+        );
     }
 
     #[test]

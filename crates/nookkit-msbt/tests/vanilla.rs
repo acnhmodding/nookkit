@@ -1,5 +1,3 @@
-//! Every message of an unpacked 3.0.3 romfs survives decode then encode unchanged. Set
-//! NOOKKIT_ROMFS to the romfs folder, without it the test passes without checking anything
 use std::io::Read;
 use std::path::Path;
 
@@ -14,11 +12,13 @@ fn every_message_round_trips() {
     };
 
     let folder = Path::new(&romfs).join("Message");
+
     let mut archives: Vec<_> = std::fs::read_dir(&folder)
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.to_string_lossy().ends_with(".sarc.zs"))
         .collect();
+
     archives.sort();
 
     let (mut messages, mut failures) = (0usize, Vec::new());
@@ -35,6 +35,7 @@ fn every_message_round_trips() {
             if !name.ends_with(".msbt") {
                 continue;
             }
+
             let msbt = Msbt::parse(file).unwrap_or_else(|| panic!("{name} isn't an MSBT"));
 
             for (index, units) in msbt.texts.iter().enumerate() {
@@ -42,7 +43,9 @@ fn every_message_round_trips() {
                 let decoded = tags::decode(units);
                 let encoded = decoded.as_deref().map(tags::encode);
 
-                if encoded.as_ref().map(|e| e.as_ref().ok()) != Some(Some(units)) && failures.len() < 10 {
+                if encoded.as_ref().map(|e| e.as_ref().ok()) != Some(Some(units))
+                    && failures.len() < 10
+                {
                     failures.push(format!(
                         "{} {name} #{index}: {decoded:?}",
                         path.file_name().unwrap().to_string_lossy()

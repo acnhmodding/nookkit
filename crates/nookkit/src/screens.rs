@@ -1,6 +1,3 @@
-//! Typed views of game screens' own state, for what the page API doesn't cover. Get one with
-//! [`Seq::downcast`], which checks the seq's class with the game's RTTI
-
 use nookkit_types::game::ui::{
     CommandSelectSeq, POCKET_EVENT_OPEN_COMMANDS, PocketMenuSeq, StorageSeq,
 };

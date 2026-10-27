@@ -42,7 +42,8 @@ impl StateHook {
 fn hook_of(entry: &StateEntry) -> Option<&'static StateHook> {
     let vt = unsafe { entry.vtable.as_ref() }?;
 
-    (vt.enter as *const () == enter as *const ()).then(|| unsafe { &*entry.vtable.cast::<StateHook>() })
+    (vt.enter as *const () == enter as *const ())
+        .then(|| unsafe { &*entry.vtable.cast::<StateHook>() })
 }
 
 pub fn on_state(

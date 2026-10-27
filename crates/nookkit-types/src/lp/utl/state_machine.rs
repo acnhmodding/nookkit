@@ -42,8 +42,6 @@ crate::native! {
     }
 }
 
-/// What the state machine calls on a state entry: enter on a change, exec every step, exit on
-/// leaving with the next state
 #[repr(C)]
 pub struct StateVtable {
     pub enter: unsafe extern "C" fn(entry: *mut StateEntry),
@@ -51,7 +49,6 @@ pub struct StateVtable {
     pub exit: unsafe extern "C" fn(entry: *mut StateEntry, next: i32),
 }
 
-/// One state, its slots invoking member functions of `obj` (usually the seq)
 #[repr(C)]
 pub struct StateEntry {
     pub vtable: *const StateVtable,

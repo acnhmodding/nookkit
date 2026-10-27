@@ -11,8 +11,6 @@ use crate::{
     Direction, Key, KeyBuilder, List, ListRef, ListTarget, PaneRef, Result, Ui, callback, check,
 };
 
-/// One build of a game page. Calls fail with [`UiError::Stale`](crate::UiError::Stale) once the
-/// game destroys it
 #[derive(Clone, Copy)]
 pub struct Page {
     ui: Ui,
@@ -32,7 +30,6 @@ impl Page {
         self.handle
     }
 
-    /// The game hasn't destroyed the page
     pub fn is_alive(&self) -> bool {
         self.check().is_ok()
     }
@@ -45,7 +42,7 @@ impl Page {
         self.find(path.path(), "")
     }
 
-    /// `class` needs its `<class>::getRuntimeTypeInfo` in the framework's symbol file
+    /// class needs its <class>::getRuntimeTypeInfo in the framework's symbol file
     pub fn pane_as(&self, path: impl PaneRef, class: &str) -> Result<Pane> {
         self.find(path.path(), class)
     }
@@ -86,7 +83,7 @@ impl Page {
         Ok(*self)
     }
 
-    /// The scroll list at `path`; lists a layout mod added are bound by the framework while the page builds
+    /// Lists a layout mod adds are bound by the framework while the page builds
     pub fn list(&self, path: impl ListRef) -> Result<List> {
         let mut raw = core::ptr::null_mut();
 
@@ -95,7 +92,6 @@ impl Page {
         Ok(List::new(*self, raw))
     }
 
-    /// The button the page's player has focused, `None` before the page's seq is ready
     pub fn focused(&self) -> Result<Option<Pane>> {
         let Some(seq) = self.seq()? else {
             return Ok(None);
@@ -108,7 +104,6 @@ impl Page {
         Ok((!raw.is_null()).then(|| Pane::new(*self, raw)))
     }
 
-    /// The seq that built this page, `None` before it is ready
     pub fn seq(&self) -> Result<Option<Seq>> {
         let mut raw = core::ptr::null_mut();
 
@@ -117,17 +112,14 @@ impl Page {
         Ok((!raw.is_null()).then(|| Seq::new(*self, raw)))
     }
 
-    /// Callbacks around one state of the page's seq, see [`StateHooks`]
     pub fn on_state(&self, state: SeqState) -> StateHooks {
         StateHooks { page: *self, state }
     }
 
-    /// Binds `key` on this page, see [`KeyBuilder`]
     pub fn bind_key(&self, key: Key) -> KeyBuilder {
         KeyBuilder::new(*self, key)
     }
 
-    /// After the page's seq has set up its controls
     pub fn on_ready(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::READY, f)
     }
@@ -140,19 +132,15 @@ impl Page {
         self.on_seq(SeqEvent::DEACTIVATE, f)
     }
 
-    /// Every frame the page's seq updates
     pub fn on_update(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::UPDATE, f)
     }
 
-    /// Drops the game's own key-guide entries for `key` while this page is up, e.g. to replace them
-    /// with a binding's guide
     pub fn set_guide_hidden(&self, key: Key, hidden: bool) -> Result {
         check(unsafe { (self.ui.table.page_hide_guide)(self.handle, key.id(), hidden) })
     }
 
-    /// A disabled page fires none of its input, the game's handlers and bindings alike, e.g. while
-    /// another menu is open over it
+    /// The game's own handlers included
     pub fn set_input_enabled(&self, enable: bool) -> Result {
         check(unsafe { (self.ui.table.page_set_input_enabled)(self.handle, enable) })
     }
@@ -171,13 +159,9 @@ impl Page {
     }
 }
 
-/// A state of a seq's state machine. The numbers are each seq class's own, e.g. from its
-/// `initStateMachine`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SeqState(pub i32);
 
-/// Runs callbacks before or after the game's own code for one state of a page's seq. Exec runs
-/// every step the state is current, [`Seq::state_frame`] is 0 on its first. Dropped with the page
 #[derive(Debug, Clone, Copy)]
 pub struct StateHooks {
     page: Page,
@@ -231,7 +215,6 @@ pub struct Pane {
     raw: *mut c_void,
 }
 
-/// The seq that built a page, valid while that page is
 #[derive(Clone, Copy)]
 pub struct Seq {
     page: Page,
@@ -243,14 +226,12 @@ impl Seq {
         Self { page, raw }
     }
 
-    // Checked against its page, which the seq owns
     fn base(&self) -> Result<&SequenceBase> {
         self.page.check()?;
 
         unsafe { self.raw.cast::<SequenceBase>().as_ref() }.ok_or(crate::UiError::InvalidArg)
     }
 
-    /// For reading the seq's own struct
     pub fn raw(&self) -> *mut c_void {
         self.raw
     }
@@ -259,48 +240,43 @@ impl Seq {
         self.page
     }
 
-    /// `Stale` once its page is destroyed
     pub fn check(&self) -> Result {
         self.page.check()
     }
 
-    /// The state machine's current state, -1 before the first
+    /// -1 before the first
     pub fn state(&self) -> Result<SeqState> {
         Ok(SeqState(self.base()?.state_machine.current_state))
     }
 
-    /// How many times the current state has run, 0 on its first exec
+    /// 0 on the state's first exec
     pub fn state_frame(&self) -> Result<i32> {
         Ok(self.base()?.state_machine.frame)
     }
 
-    /// The local player the seq is open for
     pub fn player(&self) -> Result<Player> {
         Ok(Player::new(self.base()?.player).unwrap_or_default())
     }
 
-    /// `None` when the parent has no page the framework saw built
+    /// None when the framework didn't see the parent's page built
     pub fn parent(&self) -> Result<Option<Seq>> {
         let parent = self.base()?.base.parent;
 
         self.page.ui.seq_at(parent.cast())
     }
 
-    /// A state request is queued for the state machine's next step
     pub fn has_request(&self) -> Result<bool> {
         Ok(self.base()?.has_request())
     }
 
-    /// Settled with nothing pending: no open request, no queued state, and the seq's own idle
-    /// check, e.g. the pocket menu once it has closed
+    /// No open request, no queued state, and the seq's own idle check
     pub fn is_idle(&self) -> Result<bool> {
         let seq = self.base()?;
 
         Ok(!seq.base.pending_focus_restore && unsafe { seq.base.is_idle() })
     }
 
-    /// Queues a state for the seq's state machine the way the game does, `false` when a request is
-    /// already queued
+    /// false when a request is already queued
     pub fn request_state(&self, state: SeqState) -> Result<bool> {
         self.page.check()?;
 
@@ -354,7 +330,7 @@ impl Pane {
         Self { page, raw }
     }
 
-    /// Keeps the link pointed at `target` of the list's visible window as it scrolls
+    /// Follows the list's visible window as it scrolls
     pub fn link_into(&self, direction: Direction, list: &List, target: ListTarget) -> Result {
         check(unsafe {
             (self.page.ui.table.list_link_into)(
@@ -370,8 +346,7 @@ impl Pane {
         check(unsafe { (self.page.ui.table.set_visible)(self.handle(), visible) })
     }
 
-    /// Presses the button as if decided: its Decide animation plays and the page's decide event
-    /// fires, so the game reacts as to A. `false` when it was already deciding
+    /// As if decided, false when it was already deciding
     pub fn decide(&self) -> Result<bool> {
         let mut decided = false;
 
@@ -380,7 +355,7 @@ impl Pane {
         Ok(decided)
     }
 
-    /// The button's valid look, the one the game greys out when an entry can't be used
+    /// The look the game greys out for unusable entries
     pub fn set_valid(&self, valid: bool) -> Result {
         check(unsafe { (self.page.ui.table.pane_set_valid)(self.handle(), valid) })
     }

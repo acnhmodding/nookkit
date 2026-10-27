@@ -1,5 +1,3 @@
-//! nookkit-msbt dump <romfs> <archive> <file> [label…]   a message patch of the game's own text
-//! nookkit-msbt check <patch.json…>                       validates patches as the game loads them
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
@@ -11,10 +9,12 @@ use nookkit_msbt::{Message, Patch, PatchSet, sarc, tags};
 fn unzstd(path: &Path) -> Result<Vec<u8>, String> {
     let file = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut out = Vec::new();
+
     ruzstd::decoding::StreamingDecoder::new(file.as_slice())
         .map_err(|e| format!("{}: {e}", path.display()))?
         .read_to_end(&mut out)
         .map_err(|e| format!("{}: {e}", path.display()))?;
+
     Ok(out)
 }
 
@@ -30,6 +30,7 @@ fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, M
         .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
         .filter(|name| name.starts_with(&prefix) && name.ends_with(".sarc.zs"))
         .collect();
+
     names.sort();
 
     for name in names {
@@ -44,8 +45,12 @@ fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, M
     }
 
     if out.is_empty() {
-        return Err(format!("no {wanted} in {}/{prefix}*.sarc.zs", folder.display()));
+        return Err(format!(
+            "no {wanted} in {}/{prefix}*.sarc.zs",
+            folder.display()
+        ));
     }
+
     Ok(out)
 }
 
@@ -67,6 +72,7 @@ fn dump(romfs: &str, archive: &str, file: &str, only: &[String]) -> Result<(), S
             if let Some(units) = msbt.text(label) {
                 let decoded = tags::decode(units)
                     .ok_or_else(|| format!("{locale} {label}: malformed text"))?;
+
                 text.insert(locale.clone(), decoded);
             }
         }
@@ -83,7 +89,11 @@ fn dump(romfs: &str, archive: &str, file: &str, only: &[String]) -> Result<(), S
         archive: Some(archive.to_owned()),
         messages,
     };
-    println!("{}", serde_json::to_string_pretty(&patch).map_err(|e| e.to_string())?);
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&patch).map_err(|e| e.to_string())?
+    );
     Ok(())
 }
 
@@ -93,6 +103,7 @@ fn check(paths: &[String]) -> Result<(), String> {
 
     for path in paths {
         let json = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+
         match set.add(path, &json) {
             Ok(replaced) => {
                 for label in replaced {
@@ -109,6 +120,7 @@ fn check(paths: &[String]) -> Result<(), String> {
     if failed {
         return Err("some patches don't load".into());
     }
+
     eprintln!("{} labels in {} patches", set.len(), paths.len());
     Ok(())
 }

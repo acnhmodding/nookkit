@@ -110,7 +110,10 @@ fn kind(control: &str) -> &'static str {
         | "ButtonRepeat" => "crate::kind::Button",
         _ => {
             // A new button or list control would silently lose its typing as plain parts
-            if ["Button", "Btn", "List"].iter().any(|k| control.contains(k)) {
+            if ["Button", "Btn", "List"]
+                .iter()
+                .any(|k| control.contains(k))
+            {
                 println!("cargo::warning=control `{control}` is typed as plain parts");
             }
 

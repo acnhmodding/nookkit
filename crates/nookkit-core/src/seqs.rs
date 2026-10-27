@@ -118,6 +118,5 @@ pub fn on_seq_event(page: *mut ViewPage, kind: SeqEvent, cb: Callback) -> Status
         return Status::INVALID_ARG;
     }
 
-    with_page(page, |state| state.seq[kind].push(cb))
-        .map_or(Status::INVALID_ARG, |()| Status::OK)
+    with_page(page, |state| state.seq[kind].push(cb)).map_or(Status::INVALID_ARG, |()| Status::OK)
 }

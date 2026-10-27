@@ -98,7 +98,6 @@ impl Control {
         Ok(unsafe { self.is_derived(type_info::<T>()?) })
     }
 
-    /// `None` when the control isn't a `T`
     pub unsafe fn cast<T: Class>(&mut self) -> NativeResult<Option<&mut T>> {
         Ok(unsafe { self.is::<T>()? }.then(|| unsafe { &mut *(self as *mut Self).cast::<T>() }))
     }

@@ -1,5 +1,3 @@
-//! Message patches: one JSON file per mod, each label carrying its text in every locale
-
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -108,9 +106,14 @@ impl PatchSet {
             let attribute = match message.attributes {
                 None => None,
                 Some(Attributes::Like(label)) => Some(Attribute::Like(label)),
-                Some(Attributes::Hex(hex)) => Some(Attribute::Bytes(tags::from_hex(&hex).ok_or_else(
-                    || error(format!("{} {}: attributes {hex:?} isn't hex", patch.file, message.label)),
-                )?)),
+                Some(Attributes::Hex(hex)) => {
+                    Some(Attribute::Bytes(tags::from_hex(&hex).ok_or_else(|| {
+                        error(format!(
+                            "{} {}: attributes {hex:?} isn't hex",
+                            patch.file, message.label
+                        ))
+                    })?))
+                }
             };
 
             entries.push((
@@ -137,7 +140,9 @@ impl PatchSet {
 
     /// The patched file named `file`, borrowed from the set
     pub fn file(&self, file: &str) -> Option<&str> {
-        self.files.get_key_value(file).map(|(name, _)| name.as_str())
+        self.files
+            .get_key_value(file)
+            .map(|(name, _)| name.as_str())
     }
 
     pub fn get(&self, file: &str, label: &str) -> Option<&Entry> {
@@ -172,8 +177,14 @@ mod tests {
         assert!(set.add("a.json", ISLAND_SKETCH).unwrap().is_empty());
 
         let entry = set.get("MenuDevice", "IslandSketch").unwrap();
-        assert_eq!(entry.text_for("USen"), Some(&tags::encode("Island Sketch").unwrap()[..]));
-        assert_eq!(entry.text_for("JPja"), Some(&tags::encode("Island").unwrap()[..]));
+        assert_eq!(
+            entry.text_for("USen"),
+            Some(&tags::encode("Island Sketch").unwrap()[..])
+        );
+        assert_eq!(
+            entry.text_for("JPja"),
+            Some(&tags::encode("Island").unwrap()[..])
+        );
         assert_eq!(entry.attribute, Some(Attribute::Like("0002".into())));
         assert_eq!(set.file("MenuDevice"), Some("MenuDevice"));
         assert!(set.get("MenuDevice", "0002").is_none());
@@ -185,17 +196,38 @@ mod tests {
         set.add("a.json", ISLAND_SKETCH).unwrap();
         let replaced = set.add("b.json", ISLAND_SKETCH).unwrap();
 
-        assert_eq!(replaced, vec!["MenuDevice IslandSketch from a.json".to_owned()]);
-        assert_eq!(set.get("MenuDevice", "IslandSketch").unwrap().source, "b.json");
+        assert_eq!(
+            replaced,
+            vec!["MenuDevice IslandSketch from a.json".to_owned()]
+        );
+        assert_eq!(
+            set.get("MenuDevice", "IslandSketch").unwrap().source,
+            "b.json"
+        );
     }
 
     #[test]
     fn rejects_bad_patches() {
         let mut set = PatchSet::default();
         assert!(set.add("x", "{}").is_err());
-        assert!(set.add("x", r#"{"file":"F","messages":[{"label":"L","text":{"USen":"{{Nope}}"}}]}"#).is_err());
-        assert!(set.add("x", r#"{"file":"F","messages":[{"label":"L","text":{},"attributes":{"hex":"zz"}}]}"#).is_err());
-        assert!(set.add("x", r#"{"file":"F","extra":1,"messages":[]}"#).is_err());
+        assert!(
+            set.add(
+                "x",
+                r#"{"file":"F","messages":[{"label":"L","text":{"USen":"{{Nope}}"}}]}"#
+            )
+            .is_err()
+        );
+        assert!(
+            set.add(
+                "x",
+                r#"{"file":"F","messages":[{"label":"L","text":{},"attributes":{"hex":"zz"}}]}"#
+            )
+            .is_err()
+        );
+        assert!(
+            set.add("x", r#"{"file":"F","extra":1,"messages":[]}"#)
+                .is_err()
+        );
         assert!(set.is_empty());
     }
 }

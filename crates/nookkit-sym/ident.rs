@@ -52,7 +52,8 @@ const OPERATORS: &[(&str, &str)] = &[
 pub fn ident(segment: &str) -> String {
     let segment = match segment.strip_prefix("operator") {
         Some(op)
-            if !op.is_empty() && !op.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') =>
+            if !op.is_empty()
+                && !op.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') =>
         {
             let op = op.trim();
             let word = OPERATORS

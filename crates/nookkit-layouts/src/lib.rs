@@ -1,6 +1,3 @@
-//! Typed page identities and parts pane paths, generated from `data/pages-3.0.3.tsv` (Ghidra export) and
-//! `data/layouts-3.0.3.toml` (romfs harvest). A path's kind comes from its part layout's cnt1 control
-
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
@@ -8,8 +5,10 @@ use std::marker::PhantomData;
 pub mod kind {
     /// Any parts pane
     pub struct Parts;
+
     /// A button control (LpUniteButton, FixedButton, …)
     pub struct Button;
+
     /// A UISysScrollBtnList
     pub struct List;
 }

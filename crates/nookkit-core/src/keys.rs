@@ -35,12 +35,10 @@ pub struct KeyState {
 
 unsafe impl Send for KeyState {}
 
-// Literal guide texts by sentinel id, as zero-terminated UTF-16
 static TEXTS: Mutex<BTreeMap<u32, Vec<u16>>> = Mutex::new(BTreeMap::new());
 static NEXT_TEXT: AtomicU32 = AtomicU32::new(0);
 
 impl KeyState {
-    // The game writes it too, through the page's input root
     #[allow(clippy::mut_from_ref)]
     fn handler(&self) -> &mut KeyHandler {
         unsafe { &mut *self.handler.get() }
@@ -296,6 +294,7 @@ pub fn hide_guide(page: *mut ViewPage, key: i32, hide: bool) -> Status {
 
     with_page(page, |state| {
         state.hidden_guides.retain(|&k| k != key);
+
         if hide {
             state.hidden_guides.push(key);
         }

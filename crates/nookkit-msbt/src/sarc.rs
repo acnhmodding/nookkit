@@ -1,5 +1,3 @@
-//! Reading SARC archives
-
 pub fn read(b: &[u8]) -> Option<Vec<(String, &[u8])>> {
     let u16_at = |at: usize| Some(u16::from_le_bytes(b.get(at..at + 2)?.try_into().ok()?));
     let u32_at = |at: usize| Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));

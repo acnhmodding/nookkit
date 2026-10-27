@@ -67,7 +67,6 @@ pub enum KeyEventKind {
     /// At press, after `InputRoot::repeat_delay` frames, then every `repeat_interval`
     Repeat = 3,
 
-    /// Every held frame
     Hold = 4,
 }
 
@@ -228,7 +227,6 @@ const _: () = {
     assert!(core::mem::size_of::<InputRoot>() == 0xa8);
 };
 
-/// One player's place in a focus navigator
 #[repr(C)]
 pub struct FocusCursor {
     _unk_0: [u8; 0x10],

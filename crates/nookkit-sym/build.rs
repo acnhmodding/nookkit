@@ -109,7 +109,10 @@ fn signatures(text: &str) -> HashMap<String, String> {
         let ty = signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
 
         if out.insert(name.to_owned(), ty).is_some() {
-            panic!("{SIGNATURES}:{}: duplicate signature for \"{name}\"", index + 1);
+            panic!(
+                "{SIGNATURES}:{}: duplicate signature for \"{name}\"",
+                index + 1
+            );
         }
     }
 

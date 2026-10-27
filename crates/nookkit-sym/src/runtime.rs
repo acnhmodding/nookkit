@@ -78,15 +78,6 @@ pub fn data<T>(symbol: &crate::Data) -> Result<*mut T, SymError> {
 #[doc(hidden)]
 pub use skyline::hooks::A64HookFunction as __hook_function;
 
-/// ```ignore
-/// nookkit_sym::hook! {
-///     pub view_page_initialize = nookkit_sym::sym::game::UI::ViewPage::initialize;
-///     fn(page: *mut c_void) {
-///         unsafe { original(page) };
-///     }
-/// }
-/// view_page_initialize::install()?;
-/// ```
 #[macro_export]
 macro_rules! hook {
     (

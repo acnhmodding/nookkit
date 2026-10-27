@@ -91,7 +91,6 @@ impl ListState {
         self.active.set(active);
     }
 
-    // Game memory, not borrowed from self
     #[allow(clippy::mut_from_ref)]
     fn list(&self) -> &mut ScrollBtnListCtrl {
         unsafe { &mut *self.list }

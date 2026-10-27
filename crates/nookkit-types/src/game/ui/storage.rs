@@ -4,7 +4,6 @@ use core::mem::offset_of;
 use crate::game::ui::{SequenceBase, ViewPage};
 use crate::native::{Class, Fn, sym};
 
-/// The storage menu, prefix only
 #[repr(C)]
 pub struct StorageSeq {
     pub base: SequenceBase,

@@ -93,17 +93,7 @@ pub fn type_info_named(class: &str) -> NativeResult<*const Interface> {
     type_info_by_name(&format!("{class}::getRuntimeTypeInfo"))
 }
 
-/// Declares game functions by their [`sym`] constant, checking the declaration against the exported signature.
-/// Each returns [`NativeResult`], failing when the running symbol table lacks the function
-///
-/// ```ignore
-/// nookkit_types::native! {
-///     impl Page {
-///         pub unsafe fn add_key_handler(&mut self, player: u32, key: ButtonId, handler: *mut KeyHandler)
-///             = sym::Lp::UI::Page::addKeyHandler;
-///     }
-/// }
-/// ```
+/// Declares game functions by their [`sym`] constant, checked against the exported signature
 #[macro_export]
 macro_rules! native {
     (impl $self_ty:ty {

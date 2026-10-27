@@ -7,21 +7,6 @@ pub fn module_base() -> usize {
     unsafe { getRegionAddress(Region::Text) as usize }
 }
 
-/// A mod's own offsets into the supported game build, for what the framework doesn't bind
-///
-/// ```ignore
-/// mod offsets {
-///     nookkit::offsets! {
-///         fill_mouth_list = 0x2b8fe60,
-///     }
-/// }
-///
-/// #[native(resolve = crate::offsets::resolve)]
-/// unsafe extern "C" {
-///     #[native(symbol = "fill_mouth_list")]
-///     fn fill_mouth_list(values: *mut c_void);
-/// }
-/// ```
 #[macro_export]
 macro_rules! offsets {
     ($($name:ident = $offset:literal),* $(,)?) => {
@@ -36,19 +21,6 @@ macro_rules! offsets {
     };
 }
 
-/// An inline hook on a function the resolver finds
-///
-/// ```ignore
-/// nookkit::hook! {
-///     resolve = crate::offsets::resolve;
-///     pub fill = "fill_mouth_list";
-///     fn(values: *mut c_void) {
-///         unsafe { original(values) };
-///     }
-/// }
-///
-/// fill::install()?;
-/// ```
 #[macro_export]
 macro_rules! hook {
     (

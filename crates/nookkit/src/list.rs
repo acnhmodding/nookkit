@@ -47,7 +47,6 @@ impl ItemUpdate {
     }
 }
 
-/// A line of the list's visible window
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListTarget {
     line: usize,

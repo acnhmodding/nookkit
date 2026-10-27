@@ -1,13 +1,7 @@
-//! Message patches (nookkit-msbt): every NookKit/Message/*.json in the romfs is loaded on the
-//! game's first message lookup, so mods each ship their own file and patch the same msbt without
-//! overwriting each other's archives.
-//! Every text read goes through MessageFile::findText and every attribute read through one of
-//! MessageAttribute's readers, so those answer patched labels before the archives do
-
 use core::ffi::{CStr, c_char, c_void};
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use nookkit_msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
@@ -30,7 +24,9 @@ fn folder_exists() -> bool {
         return false;
     };
     let mut kind = u32::MAX;
-    unsafe { skyline::nn::fs::GetEntryType(&mut kind, path.as_ptr() as _) == 0 && kind == ENTRY_DIRECTORY }
+    unsafe {
+        skyline::nn::fs::GetEntryType(&mut kind, path.as_ptr() as _) == 0 && kind == ENTRY_DIRECTORY
+    }
 }
 
 /// Every patch, a broken one is reported and skipped
@@ -48,7 +44,10 @@ fn load() -> PatchSet {
     paths.sort();
 
     for path in &paths {
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let json = match std::fs::read_to_string(path) {
             Ok(json) => json,
             Err(e) => {
@@ -68,7 +67,11 @@ fn load() -> PatchSet {
     }
 
     if !set.is_empty() {
-        println!("[NookKit] {} patched messages from {} files", set.len(), paths.len());
+        println!(
+            "[NookKit] {} patched messages from {} files",
+            set.len(),
+            paths.len()
+        );
     }
     set
 }
@@ -87,7 +90,8 @@ fn locale() -> Option<&'static str> {
     let language: unsafe extern "C" fn() -> u32 = unsafe {
         core::mem::transmute(nookkit_sym::fun_addr(&sym::game::System::getLanguageImpl).ok()?)
     };
-    let codes = nookkit_sym::data::<[*const c_char; 16]>(&sym::game::System::sLanguageCodes).ok()?;
+    let codes =
+        nookkit_sym::data::<[*const c_char; 16]>(&sym::game::System::sLanguageCodes).ok()?;
 
     let code = unsafe { *(*codes).get(language() as usize)? };
     if code.is_null() {
@@ -99,12 +103,21 @@ fn locale() -> Option<&'static str> {
 }
 
 fn file_of(handle: *const c_void) -> Option<&'static str> {
-    HANDLES.lock().ok()?.as_ref()?.get(&(handle as usize)).copied()
+    HANDLES
+        .lock()
+        .ok()?
+        .as_ref()?
+        .get(&(handle as usize))
+        .copied()
 }
 
 fn handle_of(file: &str) -> Option<usize> {
     let handles = HANDLES.lock().ok()?;
-    handles.as_ref()?.iter().find(|(_, f)| **f == file).map(|(&handle, _)| handle)
+    handles
+        .as_ref()?
+        .iter()
+        .find(|(_, f)| **f == file)
+        .map(|(&handle, _)| handle)
 }
 
 unsafe fn str_of<'a>(string: *const SafeString<'a>) -> Option<&'a str> {
@@ -179,7 +192,12 @@ pub mod find_text {
     }
 
     #[unsafe(naked)]
-    unsafe extern "C" fn call(handle: *const c_void, label: *const c_char, out: *mut Text, original: usize) {
+    unsafe extern "C" fn call(
+        handle: *const c_void,
+        label: *const c_char,
+        out: *mut Text,
+        original: usize,
+    ) {
         naked_asm!("mov x8, x2", "br x3");
     }
 
@@ -228,7 +246,8 @@ unsafe fn attribute_size(handle: usize) -> usize {
     }
 }
 
-type ReadAttribute = unsafe fn(*mut c_void, *mut u8, *const SafeString<'static>, *const SafeString<'static>) -> bool;
+type ReadAttribute =
+    unsafe fn(*mut c_void, *mut u8, *const SafeString<'static>, *const SafeString<'static>) -> bool;
 
 /// One of MessageAttribute's readers for a patched label: its own attributes, another label's, or
 /// zeros for a new label without any. `None` leaves the read to the game

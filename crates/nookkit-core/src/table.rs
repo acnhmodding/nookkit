@@ -59,7 +59,6 @@ pub static TABLE: NookKitV2 = NookKitV2 {
     pane_is_valid,
 };
 
-/// Unwraps a check, returning its status from a `guarded` closure
 macro_rules! checked {
     ($e:expr) => {
         match $e {
@@ -583,7 +582,6 @@ unsafe extern "C" fn on_state(
     })
 }
 
-// The button whose focus node is `node`, anywhere under `control`
 unsafe fn owner_of(control: *mut Control, node: *mut FocusNode) -> NativeResult<*mut Control> {
     unsafe {
         let Some(control_ref) = control.as_mut() else {
@@ -607,7 +605,11 @@ unsafe fn owner_of(control: *mut Control, node: *mut FocusNode) -> NativeResult<
     }
 }
 
-unsafe extern "C" fn page_focused(handle: Handle, player_: Player, out: *mut *mut c_void) -> Status {
+unsafe extern "C" fn page_focused(
+    handle: Handle,
+    player_: Player,
+    out: *mut *mut c_void,
+) -> Status {
     guarded("page_focused", || unsafe {
         let page = checked!(page(handle));
         let player = checked!(player(player_));
@@ -621,7 +623,9 @@ unsafe extern "C" fn page_focused(handle: Handle, player_: Player, out: *mut *mu
         let node = page
             .input_root()
             .and_then(|root| root.focus_navigator.as_ref())
-            .map_or(core::ptr::null_mut(), |nav| nav.focused(u32::from(player.0)));
+            .map_or(core::ptr::null_mut(), |nav| {
+                nav.focused(u32::from(player.0))
+            });
         if node.is_null() {
             return Ok(Status::OK);
         }

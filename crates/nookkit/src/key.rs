@@ -87,8 +87,7 @@ impl KeyBuilder {
         }
     }
 
-    /// Pins the binding to one player. Without it the binding follows the player the page's seq
-    /// is opened for, each time it activates
+    /// Pins the binding to one player instead of the one the seq opens for
     pub fn player(self, player: Player) -> Self {
         Self {
             player: Some(player),
@@ -105,8 +104,7 @@ impl KeyBuilder {
         }
     }
 
-    /// Literal text in the key-guide bar, shown while the page's seq is active. The bar orders
-    /// its entries by button
+    /// Literal text in the key-guide bar, which orders entries by button
     pub fn guide(self, text: &str) -> Self {
         Self {
             guide: Some(Guide::Text(text.to_owned())),
@@ -177,7 +175,6 @@ impl KeyBuilder {
     }
 }
 
-/// Lives as long as its page
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyBinding {
     page: Page,
@@ -203,7 +200,6 @@ impl KeyBinding {
         self.on(KeyEventKind::REPEAT, f)
     }
 
-    /// Every held frame
     pub fn on_hold(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
         self.on(KeyEventKind::HOLD, f)
     }

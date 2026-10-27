@@ -41,7 +41,6 @@ pub struct PocketMenuPage {
 
 const _: () = assert!(offset_of!(PocketMenuPage, slots) == 0x590);
 
-/// The resident pocket menu, prefix only
 #[repr(C)]
 pub struct PocketMenuSeq {
     pub base: SequenceBase,
@@ -116,7 +115,6 @@ const _: () = assert!(core::mem::size_of::<CommandRecord>() == 0x538);
 
 pub const COMMAND_RECORDS: usize = 7;
 
-/// The pocket item command popup, prefix only
 #[repr(C)]
 pub struct CommandSelectSeq {
     pub base: SequenceBase,

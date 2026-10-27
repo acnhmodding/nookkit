@@ -163,8 +163,9 @@ impl PlayerLock {
 
 impl Drop for PlayerLock {
     fn drop(&mut self) {
-        self.ui
-            .report(check(unsafe { (self.ui.table.release_player)(self.player) }));
+        self.ui.report(check(unsafe {
+            (self.ui.table.release_player)(self.player)
+        }));
     }
 }
 
@@ -183,8 +184,7 @@ fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
     (address != 0).then_some(address)
 }
 
-/// Fails with [`UiError::UnsupportedBuild`] unless the game is the build this crate version supports.
-/// `name` prefixes the errors printed for failed callbacks
+/// Fails with [`UiError::UnsupportedBuild`] on any other game build
 pub fn connect(name: &'static str) -> Result<Ui> {
     let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV2>();
     if table.is_null() {
@@ -212,19 +212,6 @@ pub fn connect(name: &'static str) -> Result<Ui> {
 }
 
 impl Ui {
-    /// Runs `f` each time the game builds a `P` page
-    ///
-    /// ```no_run
-    /// use nookkit::pages::CharaMake;
-    ///
-    /// fn hook(ui: nookkit::Ui) -> nookkit::Result {
-    ///     ui.on_page::<CharaMake>(|page| {
-    ///         let eyes = page.list(CharaMake::L_BTN_LIST_EYE_00)?;
-    ///         let ok = page.pane(CharaMake::L_BTN_OK_00)?;
-    ///         Ok(())
-    ///     })
-    /// }
-    /// ```
     pub fn on_page<P: PageClass>(&self, f: impl FnMut(Page) -> Result + 'static) -> Result {
         self.on_page_filter(PageFilter::Class(P::CLASS), f)
     }
@@ -242,15 +229,16 @@ impl Ui {
         };
 
         let ui = *self;
-        let cb = callback::raw(ui, move |arg| match unsafe { arg.cast::<Handle>().as_ref() } {
-            Some(&handle) => f(Page::new(ui, handle)),
-            None => Ok(()),
+        let cb = callback::raw(ui, move |arg| {
+            match unsafe { arg.cast::<Handle>().as_ref() } {
+                Some(&handle) => f(Page::new(ui, handle)),
+                None => Ok(()),
+            }
         });
 
         check(unsafe { (self.table.on_page_built)(Str::new(layout), Str::new(class), cb) })
     }
 
-    /// Freezes `player` in the field until the lock is released or dropped
     pub fn lock_player(&self, player: Player) -> Result<PlayerLock> {
         check(unsafe { (self.table.lock_player)(player) })?;
 
@@ -266,13 +254,12 @@ impl Ui {
         Ok((!handle.raw.is_null()).then(|| Page::new(*self, handle)))
     }
 
-    /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivate` fires
-    /// when it closes
+    /// Opens over whatever is open, the page's `on_deactivate` fires when it closes
     pub fn open_pocket_menu(&self, player: Player, close_enabled: bool) -> Result {
         check(unsafe { (self.table.open_pocket_menu)(player, close_enabled) })
     }
 
-    /// The seq at `raw` if it built a page that is still alive
+    /// None once the seq's page is gone
     pub(crate) fn seq_at(&self, raw: *mut core::ffi::c_void) -> Result<Option<Seq>> {
         if raw.is_null() {
             return Ok(None);

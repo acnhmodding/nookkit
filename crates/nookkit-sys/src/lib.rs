@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::missing_safety_doc)]
 
 use core::ffi::{c_char, c_void};
 
@@ -36,7 +37,6 @@ code! {
         MISSING_SYMBOL = 7,
         UNSUPPORTED_BUILD = 8,
 
-        /// The page behind a handle was destroyed
         STALE = 9,
     }
 }
@@ -124,7 +124,7 @@ code! {
         /// Takes the key from the page's own handlers
         CONSUME = 1 << 0,
 
-        /// The binding takes its player from the page's seq each time the seq activates
+        /// Takes its player from the page's seq whenever the seq activates
         SEQ_PLAYER = 1 << 1,
     }
 }
@@ -151,7 +151,6 @@ code! {
     }
 }
 
-/// A local player, 0 to 7
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct Player(pub u8);
@@ -172,8 +171,6 @@ impl Player {
     }
 }
 
-/// A page as one build of it, so a handle to a destroyed page fails with `STALE` even when a new
-/// page lands at the same address
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Handle {
@@ -188,7 +185,6 @@ impl Handle {
     };
 }
 
-/// A control of a page, valid while the page is
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PaneHandle {
@@ -211,8 +207,6 @@ impl Str {
         }
     }
 
-    /// # Safety
-    /// `ptr` must point to `len` bytes of UTF-8 that outlive `'a`.
     pub unsafe fn as_str<'a>(self) -> Option<&'a str> {
         if self.ptr.is_null() {
             return (self.len == 0).then_some("");
@@ -233,8 +227,6 @@ pub struct Callback {
 unsafe impl Send for Callback {}
 
 impl Callback {
-    /// # Safety
-    /// `arg` must be what the registering entry documents for this callback.
     pub unsafe fn call(&self, arg: *const c_void) {
         unsafe { (self.func)(self.user, arg) }
     }
@@ -261,7 +253,7 @@ pub struct ItemUpdate {
     pub slot: u32,
     pub from_slot: u32,
 
-    /// -1 for `ItemOp::CLEAR`
+    /// -1 for ItemOp::CLEAR
     pub item: i32,
 }
 
@@ -280,10 +272,10 @@ pub struct KeyEvent {
 pub struct LeaveQuery {
     pub direction: Direction,
 
-    /// Visible line focus leaves from, `NO_LINE` if unknown
+    /// NO_LINE when unknown
     pub line: u32,
 
-    /// Set to the control focus moves to
+    /// Out: the control focus moves to
     pub target: *mut *mut c_void,
 }
 
@@ -291,8 +283,6 @@ pub struct LeaveQuery {
 #[derive(Clone, Copy)]
 pub struct ListTarget {
     pub line: u32,
-
-    /// Last button of the line instead of the first
     pub last: bool,
 }
 
@@ -301,31 +291,26 @@ pub struct NookKitV2 {
     pub size: usize,
     pub framework_version: u32,
 
-    /// `false` when the running game build isn't the supported one, every other entry then fails
+    /// false on an unsupported game build, every other entry then fails
     pub started: unsafe extern "C" fn() -> bool,
 
-    /// Absolute address of a symbol in the framework's table, 0 when missing
+    /// 0 when missing
     pub resolve: unsafe extern "C" fn(name: Str, kind: SymbolKind) -> usize,
 
-    /// Empty `layout` or `class` matches any. `cb` gets a `*const Handle` after the page is built
+    /// Empty layout or class matches any. cb gets a *const Handle after the page is built
     pub on_page_built: unsafe extern "C" fn(layout: Str, class: Str, cb: Callback) -> Status,
 
-    /// `STALE` once the page is destroyed
     pub page_check: unsafe extern "C" fn(page: Handle) -> Status,
 
-    /// Empty `class` skips the type check
-    pub find_pane: unsafe extern "C" fn(
-        page: Handle,
-        path: Str,
-        class: Str,
-        out: *mut *mut c_void,
-    ) -> Status,
+    /// Empty class skips the type check
+    pub find_pane:
+        unsafe extern "C" fn(page: Handle, path: Str, class: Str, out: *mut *mut c_void) -> Status,
 
-    /// `cb` gets a `*const ControlEvent`. Dropped with the page
+    /// cb gets a *const ControlEvent. Dropped with the page
     pub on_control_event:
         unsafe extern "C" fn(page: Handle, kind: ControlEventKind, cb: Callback) -> Status,
 
-    /// A null `to.raw` unlinks
+    /// A null to.raw unlinks
     pub link:
         unsafe extern "C" fn(from: PaneHandle, direction: Direction, to: PaneHandle) -> Status,
     pub set_focusable:
@@ -334,12 +319,12 @@ pub struct NookKitV2 {
     pub release_player: unsafe extern "C" fn(player: Player) -> Status,
     pub set_visible: unsafe extern "C" fn(pane: PaneHandle, visible: bool) -> Status,
 
-    /// `cb` gets the seq pointer. Dropped with the page
+    /// cb gets the seq. Dropped with the page
     pub on_seq_event: unsafe extern "C" fn(page: Handle, kind: SeqEvent, cb: Callback) -> Status,
 
     pub list_get: unsafe extern "C" fn(page: Handle, path: Str, out: *mut *mut c_void) -> Status,
 
-    /// `cb` gets `*const ItemUpdate`, `*const u32` item for focus and decide, or `*const LeaveQuery`
+    /// cb gets a *const ItemUpdate, a *const u32 item for focus and decide, or a *const LeaveQuery
     pub list_on: unsafe extern "C" fn(list: *mut c_void, kind: ListEvent, cb: Callback) -> Status,
 
     pub list_set_items: unsafe extern "C" fn(
@@ -361,7 +346,7 @@ pub struct NookKitV2 {
     pub list_button:
         unsafe extern "C" fn(list: *mut c_void, slot: u32, out: *mut *mut c_void) -> Status,
 
-    /// One binding per page, player and key; binding again returns it. Dropped with the page
+    /// One binding per page, player and key, binding again returns it. Dropped with the page
     pub key_bind: unsafe extern "C" fn(
         page: Handle,
         player: Player,
@@ -370,40 +355,36 @@ pub struct NookKitV2 {
         out: *mut *mut c_void,
     ) -> Status,
 
-    /// `cb` gets a `*const KeyEvent`
+    /// cb gets a *const KeyEvent
     pub key_on: unsafe extern "C" fn(key: *mut c_void, kind: KeyEventKind, cb: Callback) -> Status,
 
     pub key_set_enabled: unsafe extern "C" fn(key: *mut c_void, enable: bool) -> Status,
 
-    /// Shows the key in the key-guide bar with literal `text`, or a `label` from
-    /// LayoutMsg/KeyGuide.msbt when `text` is empty; both empty removes it. Takes effect at the
-    /// page's next guide refresh
+    /// Literal text, or a LayoutMsg/KeyGuide.msbt label when text is empty, both empty removes it.
+    /// Applies at the page's next guide refresh
     pub key_set_guide: unsafe extern "C" fn(key: *mut c_void, text: Str, label: Str) -> Status,
 
-    /// A pane in the page's layout shown while the binding is enabled, empty for none
+    /// Shown while the binding is enabled, empty for none
     pub key_set_hint_pane: unsafe extern "C" fn(key: *mut c_void, path: Str) -> Status,
 
-    /// Drops the game's own key-guide entries for `key` while the page's seq is active
+    /// Hides the game's own guide entries for key while the page's seq is active
     pub page_hide_guide: unsafe extern "C" fn(page: Handle, key: i32, hide: bool) -> Status,
 
-    /// A disabled page's input root keeps its handlers' state but fires nothing, the game's own
-    /// handlers and bindings alike
+    /// Fires nothing, the game's handlers included, but keeps their state
     pub page_set_input_enabled: unsafe extern "C" fn(page: Handle, enable: bool) -> Status,
 
-    /// Opens the resident pocket menu for `player` over whatever is open
     pub open_pocket_menu: unsafe extern "C" fn(player: Player, close_enabled: bool) -> Status,
 
-    /// The most recently built page of `class` the game hasn't destroyed, `Handle::NULL` for none
+    /// The newest live page of class, Handle::NULL for none
     pub find_page: unsafe extern "C" fn(class: Str, out: *mut Handle) -> Status,
 
-    /// The seq that built `page`, null before it is ready
+    /// Null before it's ready
     pub page_seq: unsafe extern "C" fn(page: Handle, out: *mut *mut c_void) -> Status,
 
-    /// The page a seq built, `Handle::NULL` for a seq without a live page
+    /// Handle::NULL without a live page
     pub seq_page: unsafe extern "C" fn(seq: *mut c_void, out: *mut Handle) -> Status,
 
-    /// `cb` gets the seq pointer before or `after` the page's seq runs `phase` of `state`. Dropped
-    /// with the page
+    /// cb gets the seq, before or after the page's seq runs phase of state. Dropped with the page
     pub on_state: unsafe extern "C" fn(
         page: Handle,
         state: i32,
@@ -412,15 +393,15 @@ pub struct NookKitV2 {
         cb: Callback,
     ) -> Status,
 
-    /// The button `player` has focused on the page, null for none
+    /// Null for none
     pub page_focused:
         unsafe extern "C" fn(page: Handle, player: Player, out: *mut *mut c_void) -> Status,
 
-    /// Presses a button as if decided: its Decide animation and the page's decide event, so the
-    /// game reacts as to A. `out` is `false` when it was already deciding
+    /// As if decided: its Decide animation and the page's decide event. out is false when it was
+    /// already deciding
     pub pane_decide: unsafe extern "C" fn(pane: PaneHandle, out: *mut bool) -> Status,
 
-    /// The button's valid look, the one the game greys out when an entry can't be used
+    /// The valid look the game greys out for unusable entries
     pub pane_set_valid: unsafe extern "C" fn(pane: PaneHandle, valid: bool) -> Status,
     pub pane_is_valid: unsafe extern "C" fn(pane: PaneHandle, out: *mut bool) -> Status,
 }

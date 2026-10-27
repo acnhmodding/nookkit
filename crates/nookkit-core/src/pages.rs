@@ -25,7 +25,6 @@ struct PageListener {
 
 static PAGE_LISTENERS: Mutex<Vec<PageListener>> = Mutex::new(Vec::new());
 
-// Every page the game has built and not destroyed, whether or not a mod registered on it
 struct Live {
     class: String,
     seq: usize,
@@ -75,7 +74,6 @@ pub fn handle_of(page: *mut ViewPage) -> Handle {
         .unwrap_or(Handle::NULL)
 }
 
-/// The live page whose seq is `seq`
 pub fn page_of_seq(seq: usize) -> Option<Handle> {
     let live = LIVE.lock().ok()?;
 
