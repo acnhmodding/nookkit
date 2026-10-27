@@ -13,9 +13,6 @@ use talc::{ErrOnOom, Span, Talc};
 
 // Free space left in the lending heap, for the game's other threads
 const HEAP_RESERVE: usize = 64 << 20;
-const MAX_LOAN: usize = 1 << 30;
-// Room for the decompressed shader archive (41 MiB in 3.0.3) next to a large model
-const MIN_LOAN: usize = 128 << 20;
 const LOAN_ALIGNMENT: i32 = 0x1000;
 // Guards the heap walk against a corrupt list
 const MAX_HEAPS: usize = 4096;
@@ -25,6 +22,8 @@ struct Block {
     base: usize,
     size: usize,
     live: usize,
+    live_bytes: usize,
+    peak_bytes: usize,
 }
 
 pub struct Allocator {
@@ -77,6 +76,8 @@ unsafe impl GlobalAlloc for Allocator {
             let block = block.as_mut()?;
             let pointer = unsafe { block.talc.malloc(layout) }.ok()?;
             block.live += 1;
+            block.live_bytes += layout.size();
+            block.peak_bytes = block.peak_bytes.max(block.live_bytes);
             Some(pointer.as_ptr())
         });
         borrowed.unwrap_or_else(|| unsafe { System.alloc(layout) })
@@ -91,6 +92,7 @@ unsafe impl GlobalAlloc for Allocator {
                 {
                     unsafe { block.talc.free(NonNull::new_unchecked(pointer), layout) };
                     block.live -= 1;
+                    block.live_bytes -= layout.size();
                     true
                 }
                 _ => false,
@@ -128,12 +130,13 @@ unsafe fn heap_name(heap: *mut Heap) -> &'static str {
 
 pub struct Loan {
     pub size: usize,
+    pub need: usize,
     // Each heap's name, size and largest free block, with the lending heap marked
     pub report: String,
 }
 
 // Only ExpHeaps lend: their free returns the block, unlike frame heaps
-fn borrow(report: &mut String) -> Option<(*mut Heap, usize, usize)> {
+fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)> {
     let exp_heap = nookkit_sym::vtable::<u8>(&sym::sead::ExpHeap::vtable).ok()? as usize;
     let mut lender: Option<(*mut Heap, usize)> = None;
     for heap in unsafe { heaps() } {
@@ -156,8 +159,8 @@ fn borrow(report: &mut String) -> Option<(*mut Heap, usize, usize)> {
         }
     }
     let (heap, free) = lender?;
-    let size = free.checked_sub(HEAP_RESERVE)?.min(MAX_LOAN) & !(LOAN_ALIGNMENT as usize - 1);
-    if size < MIN_LOAN {
+    let size = need.min(free.checked_sub(HEAP_RESERVE)?) & !(LOAN_ALIGNMENT as usize - 1);
+    if size == 0 {
         return None;
     }
     // A negative alignment allocates from the heap's end, away from where the game allocates
@@ -172,12 +175,20 @@ fn borrow(report: &mut String) -> Option<(*mut Heap, usize, usize)> {
     (base != 0).then_some((heap, base, size))
 }
 
-// Runs `f` with this thread's allocations served from memory borrowed from the game's heaps. `f`
-// must free everything it allocates, its result can't own heap memory
-pub fn with_borrowed_memory<T: Copy>(f: impl FnOnce(&Loan) -> T) -> T {
+// Runs `f` with this thread's allocations served from up to `need` bytes borrowed from the game's heaps,
+// returning its result and the most it used. `f` must free everything it allocates, its result can't
+// own heap memory
+pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) -> (T, usize) {
     let mut report = String::from("sead heaps:\n");
-    let Some((heap, base, size)) = borrow(&mut report) else {
-        return f(&Loan { size: 0, report });
+    let Some((heap, base, size)) = borrow(need, &mut report) else {
+        return (
+            f(&Loan {
+                size: 0,
+                need,
+                report,
+            }),
+            0,
+        );
     };
     ALLOCATOR.with_block(|block| {
         let mut talc = Talc::new(ErrOnOom);
@@ -188,19 +199,21 @@ pub fn with_borrowed_memory<T: Copy>(f: impl FnOnce(&Loan) -> T) -> T {
             base,
             size,
             live: 0,
+            live_bytes: 0,
+            peak_bytes: 0,
         });
     });
     // The report is allocated before the loan, so it outlives it
-    let loan = Loan { size, report };
+    let loan = Loan { size, need, report };
     ALLOCATOR.owner.store(current_thread(), Ordering::Release);
     let result = f(&loan);
     ALLOCATOR.owner.store(0, Ordering::Release);
-    let live = ALLOCATOR.with_block(|block| {
-        let live = block.as_ref().map_or(0, |b| b.live);
-        if live == 0 {
+    let (live, peak) = ALLOCATOR.with_block(|block| {
+        let used = block.as_ref().map_or((0, 0), |b| (b.live, b.peak_bytes));
+        if used.0 == 0 {
             *block = None;
         }
-        live
+        used
     });
     if live == 0 {
         unsafe { (*heap).free(base as *mut _) };
@@ -211,5 +224,5 @@ pub fn with_borrowed_memory<T: Copy>(f: impl FnOnce(&Loan) -> T) -> T {
             size >> 20
         );
     }
-    result
+    (result, peak)
 }

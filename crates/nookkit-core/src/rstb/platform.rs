@@ -145,6 +145,17 @@ pub fn files(root: &str) -> Result<Vec<(String, u64)>, String> {
     Ok(out)
 }
 
+// On disk and decompressed, read from the Zstandard header alone
+pub fn lengths(path: &str) -> (u64, u64) {
+    let length = fs::metadata(path).map_or(0, |m| m.len());
+    let mut prefix = [0u8; 18];
+    let read = fs::File::open(path)
+        .and_then(|mut file| file.read(&mut prefix))
+        .unwrap_or(0);
+    let decompressed = nookkit_rstb::declared_length(&prefix[..read]).unwrap_or(length);
+    (length, decompressed)
+}
+
 // Identifies a file's contents for the size cache by its time stamps, or a hash of its bytes when the
 // file system has none
 pub fn stamp(path: &str) -> Result<String, String> {

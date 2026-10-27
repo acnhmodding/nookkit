@@ -5,16 +5,20 @@ mod platform;
 mod redirect;
 
 use core::ffi::c_void;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use nookkit_rstb::sizing::{GAME_SIZED, SHADER_ARCHIVE, Sizer, UNSUPPORTED, table_name};
+use nookkit_rstb::sizing::{
+    GAME_SIZED, SHADER_ARCHIVE, SHADER_PEAK_MEMORY, SHADER_RESIDENT_MEMORY, Sizer, TABLE_MEMORY,
+    UNSUPPORTED, is_model_archive, sizing_memory, table_name,
+};
 use nookkit_rstb::table::{PATH as TABLE, Table, Update};
 use nookkit_rstb::yaz0;
 use nookkit_sym::{SymError, sym};
 
 use cache::Cache;
-use mods::Folder;
+use mods::{Copies, Folder};
 
 const CONFIG: &str = "sd:/config/nookkit/rstb";
 // The table the game reads instead of its own
@@ -23,6 +27,8 @@ const VANILLA_TABLE: &str = "sd:/config/nookkit/rstb/vanilla.srsizetable";
 const CACHE: &str = "sd:/config/nookkit/rstb/cache.tsv";
 const LOG: &str = "sd:/config/nookkit/rstb/log.txt";
 const TEMPORARY: &str = "sd:/config/nookkit/rstb/table.tmp";
+// The fingerprint of the files the written table was built from
+const STATE: &str = "sd:/config/nookkit/rstb/state.txt";
 
 const ERROR_CODE: u32 = 2;
 
@@ -44,10 +50,21 @@ impl Log {
         self.0.push('\n');
     }
 
-    fn save(&self) {
-        if let Err(error) = platform::write(LOG, self.0.as_bytes()) {
+    // The log file holds the last launch, which starts with a fresh one
+    fn append(&mut self) {
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        let mut text = match STARTED.swap(true, Ordering::Relaxed) {
+            true => platform::read_optional(LOG)
+                .ok()
+                .flatten()
+                .unwrap_or_default(),
+            false => Vec::new(),
+        };
+        text.extend_from_slice(self.0.as_bytes());
+        if let Err(error) = platform::write(LOG, &text) {
             println!("[NookKit] rstb: {error}");
         }
+        self.0.clear();
     }
 }
 
@@ -80,7 +97,24 @@ fn update_once(redirect: bool) {
     if UPDATED.swap(true, Ordering::AcqRel) {
         return;
     }
-    arena::with_borrowed_memory(update);
+    let mut log = Log::default();
+    match scan(&mut log) {
+        Ok(Some(scan)) => {
+            log.append();
+            let (failed, peak) = arena::with_borrowed_memory(scan.need, |loan| update(loan, &scan));
+            log.line(format!(
+                "Used {} of the {} MiB needed",
+                peak.div_ceil(1 << 20),
+                scan.need >> 20
+            ));
+            if !failed {
+                let _ = platform::write(STATE, scan.fingerprint.as_bytes());
+            }
+        }
+        Ok(None) => {}
+        Err(error) => fail(&mut log, &error),
+    }
+    log.append();
     // A table from an earlier launch still beats the game's own when this update failed
     if redirect && platform::file_exists(MODDED_TABLE) {
         redirect::install(TABLE, MODDED_TABLE);
@@ -95,30 +129,153 @@ nookkit_sym::hook! {
     }
 }
 
-fn update(loan: &arena::Loan) {
+fn fail(log: &mut Log, error: &str) {
+    log.line(format!("Failed: {error}"));
+    skyline::error::show_error(
+        ERROR_CODE,
+        "NookKit could not update the resource size table.",
+        &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
+    );
+}
+
+struct Resource {
+    relative: String,
+    name: String,
+    path: String,
+    length: u64,
+    stamp: Option<String>,
+    cached: Option<i64>,
+}
+
+// What the update needs, gathered on malloc before any memory is borrowed
+struct Scan {
+    folders: Vec<Folder>,
+    files: BTreeMap<String, Copies>,
+    resources: Vec<Resource>,
+    epoch: String,
+    fingerprint: String,
+    need: usize,
+}
+
+// `None` when nothing changed since the table was last written
+fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
+    platform::create_dirs(CONFIG)?;
+    let folders = mods::folders()?;
+    let (files, counts) = mods::files(&folders)?;
+    let listed: Vec<_> = folders
+        .iter()
+        .zip(&counts)
+        .map(|(folder, count)| format!("{} ({count})", folder.root))
+        .collect();
+    log.line(format!("Modded files: {}", listed.join(", ")));
+
+    let shader = match files.get(SHADER_ARCHIVE) {
+        Some(copies) => format!(
+            "sd shader {} {}",
+            mods::length(copies),
+            mods::stamp(copies)?
+        ),
+        None => "game shader".to_string(),
+    };
+    let epoch = format!(
+        "nookkit {} rstb {} {shader}",
+        env!("CARGO_PKG_VERSION"),
+        nookkit_rstb::VERSION
+    );
+
+    // Every copy's length and stamp, mod tables included, and the written table's
+    let mut fingerprint = crc32fast::Hasher::new();
+    fingerprint.update(epoch.as_bytes());
+    for (relative, copies) in &files {
+        fingerprint.update(relative.as_bytes());
+        fingerprint.update(&mods::length(copies).to_le_bytes());
+        fingerprint.update(mods::stamp(copies).unwrap_or_default().as_bytes());
+    }
+    if platform::file_exists(MODDED_TABLE) {
+        fingerprint.update(platform::stamp(MODDED_TABLE)?.as_bytes());
+    }
+    let fingerprint = format!("{:08x}", fingerprint.finalize());
+    if platform::file_exists(MODDED_TABLE)
+        && platform::read_optional(STATE)?.is_some_and(|state| state == fingerprint.as_bytes())
+    {
+        log.line("Nothing changed since the table was written");
+        return Ok(None);
+    }
+
+    let cache = Cache::load(CACHE, epoch.clone());
+    let mut resources = Vec::new();
+    let (mut need, mut largest, mut models) = (TABLE_MEMORY, 0, false);
+    for (relative, copies) in &files {
+        // Each mod's table is parsed for hints
+        if relative == TABLE {
+            need += TABLE_MEMORY * copies.len();
+        }
+        let Some(name) = table_name(relative) else {
+            continue;
+        };
+        let Some(path) = source(log, relative) else {
+            continue;
+        };
+        let length = mods::length(copies);
+        let stamp = mods::stamp(copies).ok();
+        let cached = stamp
+            .as_deref()
+            .and_then(|stamp| cache.get(relative, length, stamp));
+        if cached.is_none() {
+            let (length, decompressed) = platform::lengths(&path);
+            largest = largest.max(sizing_memory(name, length, decompressed));
+            models |= is_model_archive(name);
+        }
+        resources.push(Resource {
+            relative: relative.clone(),
+            name: name.to_string(),
+            path,
+            length,
+            stamp,
+            cached,
+        });
+    }
+    need += match models {
+        true => SHADER_PEAK_MEMORY.max(SHADER_RESIDENT_MEMORY + largest),
+        false => largest,
+    };
+    // Headroom for talc's fragmentation
+    need = (need + need / 4 + (16 << 20)).next_multiple_of(1 << 20);
+
+    Ok(Some(Scan {
+        folders,
+        files,
+        resources,
+        epoch,
+        fingerprint,
+        need,
+    }))
+}
+
+// Whether it failed
+fn update(loan: &arena::Loan, scan: &Scan) -> bool {
     let mut log = Log::default();
     log.line(loan.report.trim_end());
     let outcome = match loan.size {
-        // malloc's 32 MiB, which the game shares, is too little for model and shader data
-        0 => Err("No game heap could lend enough memory to size files".to_string()),
-        _ => run(&mut log),
+        0 => Err("No game heap could lend memory to size files".to_string()),
+        size if size < loan.need => Err(format!(
+            "The game's heaps could lend {} MiB of the {} MiB needed",
+            size >> 20,
+            loan.need >> 20
+        )),
+        _ => run(&mut log, scan),
     };
+    let failed = outcome.is_err();
     if let Err(error) = outcome {
-        log.line(format!("Failed: {error}"));
-        skyline::error::show_error(
-            ERROR_CODE,
-            "NookKit could not update the resource size table.",
-            &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
-        );
+        fail(&mut log, &error);
     }
-    log.save();
+    log.append();
+    failed
 }
 
-fn run(log: &mut Log) -> Result<(), String> {
-    platform::create_dirs(CONFIG)?;
-    let folders = mods::folders()?;
-    let mut table = base_table(log, &folders)?;
-    size_files(log, &mut table, &folders)?;
+fn run(log: &mut Log, scan: &Scan) -> Result<(), String> {
+    let mut table = base_table(log, &scan.folders)?;
+    size_files(log, &mut table, scan)?;
 
     if platform::read_optional(MODDED_TABLE)?
         .is_some_and(|bytes| parse_table(&bytes).is_ok_and(|current| current == table))
@@ -180,70 +337,39 @@ fn source(log: &mut Log, relative: &str) -> Option<String> {
     None
 }
 
-fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<(), String> {
-    let (files, counts) = mods::files(folders)?;
-    let hints: Vec<_> = folders
+fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), String> {
+    let hints: Vec<_> = scan
+        .folders
         .iter()
         .filter_map(|folder| {
             let bytes = platform::read_optional(&format!("{}/{TABLE}", folder.root)).ok()??;
             Some((format!("{}/", folder.root), parse_table(&bytes).ok()?))
         })
         .collect();
-    let listed: Vec<_> = folders
-        .iter()
-        .zip(&counts)
-        .map(|(folder, count)| format!("{} ({count})", folder.root))
-        .collect();
-    log.line(format!("Modded files: {}", listed.join(", ")));
 
-    let shader_copies = files.get(SHADER_ARCHIVE);
-    let shader_path = platform::rom_path(SHADER_ARCHIVE);
-    let shader = match shader_copies {
-        Some(copies) => format!(
-            "sd shader {} {}",
-            mods::length(copies),
-            mods::stamp(copies)?
-        ),
-        None => "game shader".to_string(),
-    };
-    let mut cache = Cache::load(
-        CACHE,
-        format!(
-            "nookkit {} rstb {} {shader}",
-            env!("CARGO_PKG_VERSION"),
-            nookkit_rstb::VERSION
-        ),
-    );
-    let mut sizer = Sizer::new(shader_path);
-    let (mut sized, mut cached, mut changed, mut added, mut removed) = (0, 0, 0, 0, 0);
-    for (relative, copies) in &files {
-        let Some(name) = table_name(relative) else {
-            continue;
-        };
-        let Some(path) = source(log, relative) else {
-            continue;
-        };
-        let length = mods::length(copies);
-        let stamp = mods::stamp(copies);
-        let size = match stamp
-            .as_deref()
-            .ok()
-            .and_then(|stamp| cache.get(relative, length, stamp))
-        {
+    let mut cache = Cache::load(CACHE, scan.epoch.clone());
+    let mut sizer = Sizer::new(platform::rom_path(SHADER_ARCHIVE));
+    let (mut cached, mut changed, mut added, mut removed) = (0, 0, 0, 0);
+    for resource in &scan.resources {
+        let (relative, name) = (&resource.relative, resource.name.as_str());
+        let size = match resource.cached {
             Some(size) => {
                 cached += 1;
                 size
             }
-            None => sizer.file_size(&path, name).unwrap_or_else(|error| {
-                log.line(format!("{relative}: {error}, the game sizes it itself"));
-                GAME_SIZED
-            }),
+            None => sizer
+                .file_size(&resource.path, name)
+                .unwrap_or_else(|error| {
+                    log.line(format!("{relative}: {error}, the game sizes it itself"));
+                    GAME_SIZED
+                }),
         };
-        if let Ok(stamp) = stamp {
-            cache.insert(relative, length, stamp, size);
+        if let Some(stamp) = &resource.stamp {
+            cache.insert(relative, resource.length, stamp.clone(), size);
         }
         let update = if size == UNSUPPORTED {
             // The table the file's own mod ships is the best guess left
+            let copies = &scan.files[relative];
             let hint = hints
                 .iter()
                 .filter(|(root, _)| {
@@ -274,7 +400,6 @@ fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<()
             Ok(Update::None) => {}
             Err(error) => log.line(format!("{relative}: {error}")),
         }
-        sized += 1;
     }
     if let Some(error) = sizer.shader_error() {
         log.line(format!(
@@ -284,6 +409,10 @@ fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<()
     if let Err(error) = cache.save(CACHE) {
         log.line(error);
     }
-    log.line(format!("{} files, {sized} sized ({cached} from the cache), against the game's table {changed} entries changed, {added} added, {removed} removed", files.len()));
+    log.line(format!(
+        "{} resources, {} sized, {cached} from the cache, against the game's table {changed} entries changed, {added} added, {removed} removed",
+        scan.resources.len(),
+        scan.resources.len() - cached
+    ));
     Ok(())
 }
