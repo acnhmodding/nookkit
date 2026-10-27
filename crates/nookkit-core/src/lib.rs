@@ -63,8 +63,6 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     seqs::sequence_update::install()?;
     keys::key_guide_add::install()?;
     keys::message_find::install()?;
-
-    messages::load();
     messages::install()
 }
 

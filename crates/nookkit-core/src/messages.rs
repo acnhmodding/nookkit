@@ -1,5 +1,6 @@
-//! Message patches (nookkit-msbt): every rom:/NookKit/Message/*.json is loaded at startup, so mods
-//! each ship their own file and patch the same msbt without overwriting each other's archives.
+//! Message patches (nookkit-msbt): every NookKit/Message/*.json in the romfs is loaded on the
+//! game's first message lookup, so mods each ship their own file and patch the same msbt without
+//! overwriting each other's archives.
 //! Every text read goes through MessageFile::findText and every attribute read through one of
 //! MessageAttribute's readers, so those answer patched labels before the archives do
 
@@ -12,7 +13,10 @@ use nookkit_msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
 use nookkit_types::sead::SafeString;
 
-const FOLDER: &str = "rom:/NookKit/Message";
+// sead::FileDeviceMgr mounts the romfs, mods included, as "content", and the game reads messages only
+// once it has
+const FOLDER: &str = "content:/NookKit/Message";
+const ENTRY_DIRECTORY: u32 = 0;
 
 static PATCHES: OnceLock<PatchSet> = OnceLock::new();
 static LOCALE: OnceLock<String> = OnceLock::new();
@@ -20,9 +24,21 @@ static LOCALE: OnceLock<String> = OnceLock::new();
 // File handles (MessageArchive::findFile's {msbt*, count} entries) of patched files, by address
 static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 
-/// Loads every patch, a broken one is reported and skipped
-pub fn load() {
+// nn::fs aborts the game on some failures, GetEntryType reports a missing folder instead
+fn folder_exists() -> bool {
+    let Ok(path) = std::ffi::CString::new(FOLDER) else {
+        return false;
+    };
+    let mut kind = u32::MAX;
+    unsafe { skyline::nn::fs::GetEntryType(&mut kind, path.as_ptr() as _) == 0 && kind == ENTRY_DIRECTORY }
+}
+
+/// Every patch, a broken one is reported and skipped
+fn load() -> PatchSet {
     let mut set = PatchSet::default();
+    if !folder_exists() {
+        return set;
+    }
 
     let mut paths: Vec<_> = match std::fs::read_dir(FOLDER) {
         Ok(dir) => dir.filter_map(|e| Some(e.ok()?.path())).collect(),
@@ -54,10 +70,11 @@ pub fn load() {
     if !set.is_empty() {
         println!("[NookKit] {} patched messages from {} files", set.len(), paths.len());
     }
-    let _ = PATCHES.set(set);
+    set
 }
 
 fn patches() -> Option<&'static PatchSet> {
+    PATCHES.get_or_init(load);
     PATCHES.get().filter(|set| !set.is_empty())
 }
 
