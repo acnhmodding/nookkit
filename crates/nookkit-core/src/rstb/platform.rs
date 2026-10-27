@@ -145,14 +145,21 @@ pub fn files(root: &str) -> Result<Vec<(String, u64)>, String> {
     Ok(out)
 }
 
-// On disk and decompressed, read from the Zstandard header alone
+// On disk and decompressed, read from the Zstandard or Yaz0 header alone
 pub fn lengths(path: &str) -> (u64, u64) {
     let length = fs::metadata(path).map_or(0, |m| m.len());
     let mut prefix = [0u8; 18];
     let read = fs::File::open(path)
         .and_then(|mut file| file.read(&mut prefix))
         .unwrap_or(0);
-    let decompressed = nookkit_rstb::declared_length(&prefix[..read]).unwrap_or(length);
+    let prefix = &prefix[..read];
+    let yaz0 = || {
+        let size = prefix.strip_prefix(b"Yaz0")?.get(..4)?;
+        Some(u32::from_be_bytes(size.try_into().ok()?) as u64)
+    };
+    let decompressed = nookkit_rstb::declared_length(prefix)
+        .or_else(yaz0)
+        .unwrap_or(length);
     (length, decompressed)
 }
 

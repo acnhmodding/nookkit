@@ -381,9 +381,23 @@ fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), Strin
                 .map(|entry| entry.size)
                 .max();
             let Some(hint) = hint else {
-                log.line(format!(
-                    "{relative}: no traced size, its table entry was left as it is"
-                ));
+                // Without an entry the game sizes the file from its decompressed length, which beats
+                // an entry the file can't even fit in (game::ResourceMgr::getFallbackLoadSize)
+                let (_, decompressed) = platform::lengths(&resource.path);
+                if table
+                    .get(name)
+                    .is_some_and(|entry| decompressed > entry.size as u64)
+                {
+                    log.line(format!(
+                        "{relative}: no traced size and larger than its entry, which is removed so the game sizes it"
+                    ));
+                    table.set(name, GAME_SIZED).map_err(|error| error.0)?;
+                    removed += 1;
+                } else {
+                    log.line(format!(
+                        "{relative}: no traced size, its table entry was left as it is"
+                    ));
+                }
                 continue;
             };
             log.line(format!(
