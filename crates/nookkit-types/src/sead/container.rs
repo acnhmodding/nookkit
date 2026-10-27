@@ -1,3 +1,5 @@
+use core::ffi::c_void;
+
 #[repr(C)]
 pub struct PtrArray<T> {
     pub size: i32,
@@ -6,12 +8,18 @@ pub struct PtrArray<T> {
 }
 
 #[repr(C)]
-pub struct ObjArray<T> {
-    pub base: PtrArray<T>,
-    pub free_list: *mut u64,
+pub struct FreeList {
+    pub free: *mut c_void,
+    pub work: *mut c_void,
 }
 
-const _: () = assert!(core::mem::size_of::<ObjArray<u32>>() == 0x18);
+#[repr(C)]
+pub struct ObjArray<T> {
+    pub base: PtrArray<T>,
+    pub free_list: FreeList,
+}
+
+const _: () = assert!(core::mem::size_of::<ObjArray<u32>>() == 0x20);
 
 impl<T> PtrArray<T> {
     pub fn len(&self) -> usize {

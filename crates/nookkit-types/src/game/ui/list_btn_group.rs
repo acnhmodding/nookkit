@@ -72,10 +72,18 @@ crate::native! {
 }
 
 #[repr(C)]
-pub struct ScrollInfo {
-    _unk_0: [u8; 0xc],
+pub struct ScrollEvent {
+    pub list: *mut c_void,
+    pub prev_first_item: i32,
     pub first_item: i32,
+    pub is_jump: bool,
+    _pad_11: [u8; 0x7],
 }
+
+const _: () = {
+    assert!(core::mem::offset_of!(ScrollEvent, first_item) == 0xc);
+    assert!(core::mem::size_of::<ScrollEvent>() == 0x18);
+};
 
 #[derive(PartialEq, Eq)]
 pub enum ItemOp {
@@ -90,7 +98,7 @@ pub struct ItemEvent {
     pub slot: i32,
     pub from_slot: i32,
     _unk_c: i32,
-    pub scroll: *const ScrollInfo,
+    pub scroll: *const ScrollEvent,
 }
 
 const _: () = assert!(core::mem::offset_of!(ItemEvent, scroll) == 0x10);

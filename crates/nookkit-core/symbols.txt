@@ -1,6 +1,4 @@
 fn	game::UI::ViewPage::initialize
-fn	game::UI::FieldMenuRequestSeq::tryLockPlayer
-fn	game::PlayerControlLockMgr::releaseMenuLock
 fn	game::UI::ViewPage::dispatchLayoutBuilt
 fn	game::UISys::Sequence::create
 fn	game::UI::SequenceBase::onActivate
@@ -8,3 +6,4 @@ fn	game::UI::SequenceBase::onDeactivated
 fn	game::UI::SequenceBase::update
 fn	Lp::UI::UIMgr::findMessage
 fn	game::UI::ViewPage::~ViewPage
+fn	game::UI::KeyGuideSeq::addGuide
