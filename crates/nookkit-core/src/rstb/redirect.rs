@@ -14,6 +14,8 @@ struct Redirect {
 
 static REDIRECT: OnceLock<Redirect> = OnceLock::new();
 static USED: AtomicBool = AtomicBool::new(false);
+// Only while the game loads its table, so every other open skips the path compare
+static ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub fn install(table: &'static str, target: &str) {
     let Ok(target) = CString::new(target) else {
@@ -24,7 +26,17 @@ pub fn install(table: &'static str, target: &str) {
     }
 }
 
+pub fn while_active<T>(f: impl FnOnce() -> T) -> T {
+    ACTIVE.store(REDIRECT.get().is_some(), Ordering::Release);
+    let result = f();
+    ACTIVE.store(false, Ordering::Release);
+    result
+}
+
 fn redirect(path: *const u8) -> *const u8 {
+    if !ACTIVE.load(Ordering::Acquire) {
+        return path;
+    }
     let Some(redirect) = REDIRECT.get() else {
         return path;
     };

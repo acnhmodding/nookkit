@@ -91,7 +91,7 @@ nookkit_sym::hook! {
     pub table_load = sym::game::ResourceSizeTable::load;
     fn(table: *mut c_void, args: *const c_void) -> bool {
         update_once(true);
-        unsafe { original(table, args) }
+        redirect::while_active(|| unsafe { original(table, args) })
     }
 }
 
