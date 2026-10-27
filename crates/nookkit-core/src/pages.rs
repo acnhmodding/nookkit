@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use nookkit_sys::{Callback, ControlEvent as Event, SEQ_EVENT_KINDS, Status};
+use nookkit_sys::{Callback, ControlEvent as Event, ControlEventKind, Handle, SeqEvent, Status};
 use nookkit_types::game::ui::{ControlEvent, LayoutBuiltEvent, ViewPage};
 use nookkit_types::game::ui_sys::ScrollBtnListCtrl;
 use nookkit_types::lp::ui::Control;
@@ -36,13 +36,55 @@ static LIVE: Mutex<BTreeMap<usize, Live>> = Mutex::new(BTreeMap::new());
 static BUILT: AtomicU64 = AtomicU64::new(0);
 
 /// The most recently built live page of `class`
-pub fn find_live(class: &str) -> Option<usize> {
+pub fn find_live(class: &str) -> Option<Handle> {
     let live = LIVE.lock().ok()?;
 
     live.iter()
         .filter(|(_, l)| l.class == class)
         .max_by_key(|(_, l)| l.built)
-        .map(|(&page, _)| page)
+        .map(|(&page, l)| Handle {
+            raw: page as *mut c_void,
+            build: l.built,
+        })
+}
+
+/// The page behind `handle` while that build of it lives
+pub fn check(handle: Handle) -> Result<*mut ViewPage, Status> {
+    if handle.raw.is_null() {
+        return Err(Status::INVALID_ARG);
+    }
+
+    let live = LIVE.lock().map_err(|_| Status::INVALID_ARG)?;
+
+    match live.get(&(handle.raw as usize)) {
+        Some(l) if l.built == handle.build => Ok(handle.raw.cast()),
+        _ => Err(Status::STALE),
+    }
+}
+
+/// `Handle::NULL` once the page is destroyed
+pub fn handle_of(page: *mut ViewPage) -> Handle {
+    LIVE.lock()
+        .ok()
+        .and_then(|live| {
+            live.get(&(page as usize)).map(|l| Handle {
+                raw: page.cast(),
+                build: l.built,
+            })
+        })
+        .unwrap_or(Handle::NULL)
+}
+
+/// The live page whose seq is `seq`
+pub fn page_of_seq(seq: usize) -> Option<Handle> {
+    let live = LIVE.lock().ok()?;
+
+    live.iter()
+        .find(|(_, l)| l.seq == seq && seq != 0)
+        .map(|(&page, l)| Handle {
+            raw: page as *mut c_void,
+            build: l.built,
+        })
 }
 
 pub fn live_seq(page: *mut ViewPage) -> Option<usize> {
@@ -62,8 +104,8 @@ pub fn set_live_seq(page: *mut ViewPage, seq: usize) {
 }
 
 struct EventSlot {
-    page: *mut ViewPage,
-    kind: u32,
+    page: Handle,
+    kind: ControlEventKind,
     cbs: Mutex<Vec<Callback>>,
 }
 
@@ -75,7 +117,7 @@ pub struct PageState {
     #[allow(clippy::vec_box)]
     events: Vec<Box<EventSlot>>,
 
-    pub seq: [Vec<Callback>; SEQ_EVENT_KINDS],
+    pub seq: [Vec<Callback>; SeqEvent::COUNT],
     pub lists: Vec<&'static ListState>,
 
     // Boxed so the key handlers in the page's input root keep pointing at them
@@ -268,8 +310,10 @@ unsafe fn built(page: *mut ViewPage) {
         .and_then(|s| s.to_str().ok())
         .unwrap_or("");
 
+    // From 1, so build 0 never matches
+    let built = BUILT.fetch_add(1, Ordering::Relaxed) + 1;
+
     if let Ok(mut live) = LIVE.lock() {
-        let built = BUILT.fetch_add(1, Ordering::Relaxed);
         live.insert(
             page as usize,
             Live {
@@ -279,6 +323,11 @@ unsafe fn built(page: *mut ViewPage) {
             },
         );
     }
+
+    let handle = Handle {
+        raw: page.cast(),
+        build: built,
+    };
 
     let matching: Snapshot = match PAGE_LISTENERS.lock() {
         Ok(listeners) => listeners
@@ -292,12 +341,12 @@ unsafe fn built(page: *mut ViewPage) {
         Err(_) => return,
     };
 
-    unsafe { call(matching, page.cast()) };
+    unsafe { call(matching, (&handle as *const Handle).cast()) };
 }
 
 pub fn on_page_built(layout: &str, class: &str, cb: Callback) -> Status {
     let Ok(mut listeners) = PAGE_LISTENERS.lock() else {
-        return Status::InvalidArg;
+        return Status::INVALID_ARG;
     };
 
     listeners.push(PageListener {
@@ -306,7 +355,7 @@ pub fn on_page_built(layout: &str, class: &str, cb: Callback) -> Status {
         cb,
     });
 
-    Status::Ok
+    Status::OK
 }
 
 extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
@@ -316,7 +365,7 @@ extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
 
     let control = unsafe { event.as_ref() }.map_or(core::ptr::null_mut(), |e| e.control);
     let event = Event {
-        page: slot.page.cast(),
+        page: slot.page,
         control: control.cast(),
         kind: slot.kind,
     };
@@ -330,16 +379,17 @@ extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
 
 pub unsafe fn on_control_event(
     page: *mut ViewPage,
-    kind: u32,
+    kind: ControlEventKind,
     cb: Callback,
 ) -> NativeResult<Status> {
     if page.is_null() {
-        return Ok(Status::InvalidArg);
+        return Ok(Status::INVALID_ARG);
     }
 
     let waiting = live_seq(page).is_none();
+    let handle = handle_of(page);
     let Ok(mut pages) = PAGES.lock() else {
-        return Ok(Status::InvalidArg);
+        return Ok(Status::INVALID_ARG);
     };
 
     let events = &mut pages.entry(page as usize).or_default().events;
@@ -349,15 +399,15 @@ pub unsafe fn on_control_event(
             cbs.push(cb);
         }
 
-        return Ok(Status::Ok);
+        return Ok(Status::OK);
     }
 
     let Some(page_ref) = (unsafe { page.as_mut() }) else {
-        return Ok(Status::InvalidArg);
+        return Ok(Status::INVALID_ARG);
     };
 
-    let Some(table) = (unsafe { page_ref.control_events.kind(kind) }) else {
-        return Ok(Status::NoEventTable);
+    let Some(table) = (unsafe { page_ref.control_events.kind(kind.0) }) else {
+        return Ok(Status::NO_EVENT_TABLE);
     };
 
     // The page's seq registers with the first free column once it is set up, so taking the last
@@ -365,15 +415,15 @@ pub unsafe fn on_control_event(
     let mut columns = table.iter_mut().rev().filter(|d| unsafe { !d.is_bound() });
 
     let Some(free) = columns.next() else {
-        return Ok(Status::EventTableFull);
+        return Ok(Status::EVENT_TABLE_FULL);
     };
 
     if waiting && columns.next().is_none() {
-        return Ok(Status::EventTableFull);
+        return Ok(Status::EVENT_TABLE_FULL);
     }
 
     let mut slot = Box::new(EventSlot {
-        page,
+        page: handle,
         kind,
         cbs: Mutex::new(vec![cb]),
     });
@@ -381,5 +431,5 @@ pub unsafe fn on_control_event(
     *free = Delegate::bind(&mut *slot as *mut EventSlot, dispatch as *const () as usize);
     events.push(slot);
 
-    Ok(Status::Ok)
+    Ok(Status::OK)
 }

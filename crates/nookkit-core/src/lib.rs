@@ -7,7 +7,7 @@ mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use nookkit_sys::{API_NAME, API_VERSION, NookKitV1, sl_api_publish};
+use nookkit_sys::{API_NAME, API_VERSION, NookKitV2, sl_api_publish};
 use nookkit_types::native::{NativeResult, SymbolKind};
 
 #[unsafe(no_mangle)]
@@ -16,16 +16,17 @@ pub static __sl_framework: u8 = 0;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-fn nav(direction: nookkit_sys::Direction) -> nookkit_types::lp::ui::NavDirection {
+fn nav(direction: nookkit_sys::Direction) -> Option<nookkit_types::lp::ui::NavDirection> {
     use nookkit_sys::Direction;
     use nookkit_types::lp::ui::NavDirection;
 
-    match direction {
-        Direction::Up => NavDirection::Up,
-        Direction::Down => NavDirection::Down,
-        Direction::Left => NavDirection::Left,
-        Direction::Right => NavDirection::Right,
-    }
+    Some(match direction {
+        Direction::UP => NavDirection::Up,
+        Direction::DOWN => NavDirection::Down,
+        Direction::LEFT => NavDirection::Left,
+        Direction::RIGHT => NavDirection::Right,
+        _ => return None,
+    })
 }
 
 fn report(context: &str, result: NativeResult) {
@@ -74,7 +75,7 @@ pub fn main() {
         sl_api_publish(
             API_NAME.as_ptr(),
             API_VERSION,
-            (&table::TABLE as *const NookKitV1).cast(),
+            (&table::TABLE as *const NookKitV2).cast(),
         )
     };
 }

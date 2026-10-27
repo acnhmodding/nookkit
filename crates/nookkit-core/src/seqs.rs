@@ -1,9 +1,7 @@
 use core::ffi::c_void;
 use nookkit_sym::sym;
 
-use nookkit_sys::{
-    Callback, SEQ_ACTIVATE, SEQ_DEACTIVATED, SEQ_EVENT_KINDS, SEQ_READY, SEQ_UPDATE, Status,
-};
+use nookkit_sys::{Callback, SeqEvent, Status};
 use nookkit_types::game::ui::{SequenceBase, ViewPage};
 use nookkit_types::game::ui_sys::Sequence;
 
@@ -34,7 +32,7 @@ nookkit_sym::hook! {
         if let Some(seq_ref) = unsafe { seq.as_ref() } {
             crate::keys::follow_player(unsafe { page_of(seq) }, seq_ref.player);
         }
-        unsafe { fire(seq, SEQ_ACTIVATE) };
+        unsafe { fire(seq, SeqEvent::ACTIVATE) };
     }
 }
 
@@ -49,7 +47,7 @@ nookkit_sym::hook! {
 
         unsafe { set_active(seq, false) };
 
-        unsafe { fire(seq, SEQ_DEACTIVATED) };
+        unsafe { fire(seq, SeqEvent::DEACTIVATE) };
     }
 }
 
@@ -57,7 +55,7 @@ nookkit_sym::hook! {
     pub sequence_update = sym::game::UI::SequenceBase::update;
     fn(seq: *mut SequenceBase) {
         unsafe { original(seq) };
-        unsafe { fire(seq, SEQ_UPDATE) };
+        unsafe { fire(seq, SeqEvent::UPDATE) };
     }
 }
 
@@ -94,16 +92,16 @@ unsafe fn ready(seq: *mut SequenceBase) {
         report("list setup", unsafe { list.setup() });
     }
 
-    unsafe { fire(seq, SEQ_READY) };
+    unsafe { fire(seq, SeqEvent::READY) };
 }
 
 // Only pages someone registered on are in PAGES, so seqs without a SequenceBase page never match
-unsafe fn fire(seq: *mut SequenceBase, kind: u32) {
+unsafe fn fire(seq: *mut SequenceBase, kind: SeqEvent) {
     let page = unsafe { page_of(seq) } as usize;
 
     let cbs = PAGES.lock().ok().and_then(|pages| {
         let state = pages.get(&page)?;
-        let cbs = state.seq.get(kind as usize)?;
+        let cbs = state.seq.get(kind.0 as usize)?;
 
         (!cbs.is_empty()).then(|| snapshot(cbs))
     });
@@ -113,11 +111,13 @@ unsafe fn fire(seq: *mut SequenceBase, kind: u32) {
     }
 }
 
-pub fn on_seq_event(page: *mut ViewPage, kind: u32, cb: Callback) -> Status {
-    if kind as usize >= SEQ_EVENT_KINDS || page.is_null() {
-        return Status::InvalidArg;
+pub fn on_seq_event(page: *mut ViewPage, kind: SeqEvent, cb: Callback) -> Status {
+    let kind = kind.0 as usize;
+
+    if kind >= SeqEvent::COUNT || page.is_null() {
+        return Status::INVALID_ARG;
     }
 
-    with_page(page, |state| state.seq[kind as usize].push(cb))
-        .map_or(Status::InvalidArg, |()| Status::Ok)
+    with_page(page, |state| state.seq[kind].push(cb))
+        .map_or(Status::INVALID_ARG, |()| Status::OK)
 }

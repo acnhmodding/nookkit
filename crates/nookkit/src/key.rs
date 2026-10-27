@@ -1,9 +1,6 @@
 use core::ffi::c_void;
 
-use nookkit_sys::{
-    KEY_CANCEL, KEY_FLAG_CONSUME, KEY_FLAG_SEQ_PLAYER, KEY_HOLD, KEY_RELEASE, KEY_REPEAT,
-    KEY_TRIGGER, KeyEvent as RawKeyEvent, Str,
-};
+use nookkit_sys::{KeyEvent as RawKeyEvent, KeyEventKind, KeyFlags, Player, Str};
 
 use crate::{Page, PaneRef, Result, UiError, callback, check};
 
@@ -59,7 +56,7 @@ impl Key {
 #[derive(Clone, Copy, Debug)]
 pub struct KeyEvent {
     pub key: Key,
-    pub player: u32,
+    pub player: Player,
 }
 
 enum Guide {
@@ -71,7 +68,7 @@ enum Guide {
 pub struct KeyBuilder {
     page: Page,
     key: Key,
-    player: Option<u32>,
+    player: Option<Player>,
     consume: bool,
     guide: Option<Guide>,
     hint_pane: Option<String>,
@@ -91,7 +88,7 @@ impl KeyBuilder {
 
     /// Pins the binding to one player. Without it the binding follows the player the page's seq
     /// is opened for, each time it activates
-    pub fn player(self, player: u32) -> Self {
+    pub fn player(self, player: Player) -> Self {
         Self {
             player: Some(player),
             ..self
@@ -134,16 +131,20 @@ impl KeyBuilder {
 
     pub fn build(self) -> Result<KeyBinding> {
         let ui = self.page.ui();
-        let mut flags = if self.consume { KEY_FLAG_CONSUME } else { 0 };
+        let mut flags = if self.consume {
+            KeyFlags::CONSUME
+        } else {
+            KeyFlags::NONE
+        };
         if self.player.is_none() {
-            flags |= KEY_FLAG_SEQ_PLAYER;
+            flags = flags | KeyFlags::SEQ_PLAYER;
         }
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {
             (ui.table.key_bind)(
-                self.page.raw(),
-                self.player.unwrap_or(0),
+                self.page.handle(),
+                self.player.unwrap_or_default(),
                 self.key.id(),
                 flags,
                 &mut raw,
@@ -178,29 +179,33 @@ pub struct KeyBinding {
 
 impl KeyBinding {
     pub fn on_trigger(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_TRIGGER, f)
+        self.on(KeyEventKind::TRIGGER, f)
     }
 
     pub fn on_release(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_RELEASE, f)
+        self.on(KeyEventKind::RELEASE, f)
     }
 
     /// Taken by an earlier handler, or the binding was disabled, while held
     pub fn on_cancel(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_CANCEL, f)
+        self.on(KeyEventKind::CANCEL, f)
     }
 
     /// At press, after 30 frames, then every 5
     pub fn on_repeat(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_REPEAT, f)
+        self.on(KeyEventKind::REPEAT, f)
     }
 
     /// Every held frame
     pub fn on_hold(&self, f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
-        self.on(KEY_HOLD, f)
+        self.on(KeyEventKind::HOLD, f)
     }
 
-    fn on(&self, kind: u32, mut f: impl FnMut(KeyEvent) -> Result + 'static) -> Result<KeyBinding> {
+    fn on(
+        &self,
+        kind: KeyEventKind,
+        mut f: impl FnMut(KeyEvent) -> Result + 'static,
+    ) -> Result<KeyBinding> {
         let ui = self.page.ui();
         let cb = callback::raw(ui, move |arg| {
             let Some(event) = (unsafe { arg.cast::<RawKeyEvent>().as_ref() }) else {

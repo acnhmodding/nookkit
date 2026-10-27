@@ -14,20 +14,19 @@ pub mod screens;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 
-use nookkit_sys::{
-    API_NAME, API_VERSION, NookKitV1, SYMBOL_FN, SYMBOL_VTABLE, Status, Str, sl_api_get,
-};
-use nookkit_types::native::SymbolKind;
+use nookkit_sys::{API_NAME, API_VERSION, Handle, NookKitV2, Status, Str, SymbolKind, sl_api_get};
+use nookkit_types::native::SymbolKind as NativeKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
 pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, RelPath, kind, layouts, pages};
-pub use nookkit_sys::Direction;
+pub use nookkit_sys::Player;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
 pub use offsets::{__hook_function, module_base};
 pub use page::{Event, Page, Pane, Seq, StateHooks};
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UiError {
     #[error("NookKit is not loaded")]
@@ -59,22 +58,63 @@ pub enum UiError {
 
     #[error("unsupported game build")]
     UnsupportedBuild,
+
+    #[error("the page was destroyed")]
+    Stale,
+
+    #[error("unknown status {0} from a newer NookKit")]
+    Unknown(i32),
 }
 
 pub type Result<T = (), E = UiError> = core::result::Result<T, E>;
 
 fn check(status: Status) -> Result {
     Err(match status {
-        Status::Ok => return Ok(()),
-        Status::InvalidArg => UiError::InvalidArg,
-        Status::PaneNotFound => UiError::PaneNotFound,
-        Status::TypeMismatch => UiError::TypeMismatch,
-        Status::NoEventTable => UiError::NoEventTable,
-        Status::EventTableFull => UiError::EventTableFull,
-        Status::LockFailed => UiError::LockFailed,
-        Status::MissingSymbol => UiError::MissingSymbol,
-        Status::UnsupportedBuild => UiError::UnsupportedBuild,
+        Status::OK => return Ok(()),
+        Status::INVALID_ARG => UiError::InvalidArg,
+        Status::PANE_NOT_FOUND => UiError::PaneNotFound,
+        Status::TYPE_MISMATCH => UiError::TypeMismatch,
+        Status::NO_EVENT_TABLE => UiError::NoEventTable,
+        Status::EVENT_TABLE_FULL => UiError::EventTableFull,
+        Status::LOCK_FAILED => UiError::LockFailed,
+        Status::MISSING_SYMBOL => UiError::MissingSymbol,
+        Status::UNSUPPORTED_BUILD => UiError::UnsupportedBuild,
+        Status::STALE => UiError::Stale,
+        Status(code) => UiError::Unknown(code),
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+impl From<Direction> for nookkit_sys::Direction {
+    fn from(direction: Direction) -> Self {
+        match direction {
+            Direction::Up => Self::UP,
+            Direction::Down => Self::DOWN,
+            Direction::Left => Self::LEFT,
+            Direction::Right => Self::RIGHT,
+        }
+    }
+}
+
+impl TryFrom<nookkit_sys::Direction> for Direction {
+    type Error = UiError;
+
+    fn try_from(direction: nookkit_sys::Direction) -> Result<Self> {
+        Ok(match direction {
+            nookkit_sys::Direction::UP => Self::Up,
+            nookkit_sys::Direction::DOWN => Self::Down,
+            nookkit_sys::Direction::LEFT => Self::Left,
+            nookkit_sys::Direction::RIGHT => Self::Right,
+            nookkit_sys::Direction(code) => return Err(UiError::Unknown(code as i32)),
+        })
+    }
 }
 
 pub enum PageFilter<'a> {
@@ -84,17 +124,17 @@ pub enum PageFilter<'a> {
 
 #[derive(Clone, Copy)]
 pub struct Ui {
-    table: &'static NookKitV1,
+    table: &'static NookKitV2,
     name: &'static str,
 }
 
-static TABLE: AtomicPtr<NookKitV1> = AtomicPtr::new(core::ptr::null_mut());
+static TABLE: AtomicPtr<NookKitV2> = AtomicPtr::new(core::ptr::null_mut());
 
-fn resolve(name: &str, kind: SymbolKind) -> Option<usize> {
+fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
     let table = unsafe { TABLE.load(Ordering::Acquire).as_ref() }?;
     let kind = match kind {
-        SymbolKind::Fn => SYMBOL_FN,
-        SymbolKind::Vtable => SYMBOL_VTABLE,
+        NativeKind::Fn => SymbolKind::FN,
+        NativeKind::Vtable => SymbolKind::VTABLE,
     };
 
     let address = unsafe { (table.resolve)(Str::new(name), kind) };
@@ -105,14 +145,17 @@ fn resolve(name: &str, kind: SymbolKind) -> Option<usize> {
 /// Fails with [`UiError::UnsupportedBuild`] unless the game is the build this crate version supports.
 /// `name` prefixes the errors printed for failed callbacks
 pub fn connect(name: &'static str) -> Result<Ui> {
-    let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV1>();
-    let Some(table_ref) = (unsafe { table.as_ref() }) else {
+    let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV2>();
+    if table.is_null() {
         return Err(UiError::FrameworkMissing);
-    };
+    }
 
-    if table_ref.size < core::mem::size_of::<NookKitV1>() {
+    // An older framework's table is shorter, so only its size may be read before this check
+    if unsafe { table.cast::<usize>().read() } < core::mem::size_of::<NookKitV2>() {
         return Err(UiError::ApiTooOld);
     }
+
+    let table_ref = unsafe { &*table };
 
     if !unsafe { (table_ref.started)() } {
         return Err(UiError::UnsupportedBuild);
@@ -157,32 +200,52 @@ impl Ui {
         };
 
         let ui = *self;
-        let cb = callback::raw(ui, move |arg| f(Page::new(ui, arg.cast_mut())));
+        let cb = callback::raw(ui, move |arg| match unsafe { arg.cast::<Handle>().as_ref() } {
+            Some(&handle) => f(Page::new(ui, handle)),
+            None => Ok(()),
+        });
 
         check(unsafe { (self.table.on_page_built)(Str::new(layout), Str::new(class), cb) })
     }
 
-    pub fn lock_player(&self, player: u8) -> Result {
+    pub fn lock_player(&self, player: Player) -> Result {
         check(unsafe { (self.table.lock_player)(player) })
     }
 
-    pub fn release_player(&self, player: u8) -> Result {
+    pub fn release_player(&self, player: Player) -> Result {
         check(unsafe { (self.table.release_player)(player) })
     }
 
     /// The most recently built `P` page the game hasn't destroyed, e.g. the resident pocket menu
     pub fn find_page<P: PageClass>(&self) -> Result<Option<Page>> {
-        let mut raw = core::ptr::null_mut();
+        let mut handle = Handle::NULL;
 
-        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &mut raw) })?;
+        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &mut handle) })?;
 
-        Ok((!raw.is_null()).then(|| Page::new(*self, raw)))
+        Ok((!handle.raw.is_null()).then(|| Page::new(*self, handle)))
     }
 
     /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivated` fires
     /// when it closes
-    pub fn open_pocket_menu(&self, player: u8, close_enabled: bool) -> Result {
+    pub fn open_pocket_menu(&self, player: Player, close_enabled: bool) -> Result {
         check(unsafe { (self.table.open_pocket_menu)(player, close_enabled) })
+    }
+
+    /// The seq at `raw` if it built a page that is still alive
+    pub(crate) fn seq_at(&self, raw: *mut core::ffi::c_void) -> Result<Option<Seq>> {
+        if raw.is_null() {
+            return Ok(None);
+        }
+
+        let mut handle = Handle::NULL;
+
+        check(unsafe { (self.table.seq_page)(raw, &mut handle) })?;
+
+        Ok((!handle.raw.is_null()).then(|| Seq::new(Page::new(*self, handle), raw)))
+    }
+
+    pub fn framework_version(&self) -> u32 {
+        self.table.framework_version
     }
 
     fn report(&self, result: Result) {

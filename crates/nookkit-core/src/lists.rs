@@ -4,9 +4,8 @@ use core::ptr::null_mut;
 use std::ffi::CString;
 
 use nookkit_sys::{
-    Callback, ControlEvent, Direction, EVENT_DECIDE, EVENT_FOCUS, ITEM_CLEAR, ITEM_MOVE,
-    ITEM_RENDER, ItemUpdate, LIST_DECIDE, LIST_EVENT_KINDS, LIST_FOCUS, LIST_ITEM, LIST_LEAVE,
-    LeaveQuery, ListTarget, NO_LINE, Status,
+    Callback, ControlEvent, ControlEventKind, Direction, ItemOp as Op, ItemUpdate, LeaveQuery,
+    ListEvent, ListTarget, NO_LINE, Player, Status,
 };
 use nookkit_types::game::ui::{
     AppUniteBtnCtrl, ItemEvent, ItemOp, ItemUpdater, ListBtnGroup, VftListBtnGroup, ViewPage,
@@ -64,7 +63,7 @@ pub struct ListState {
     group: UnsafeCell<ListBtnGroup>,
     updater: UnsafeCell<ItemUpdater>,
     links: RefCell<Vec<Link>>,
-    cbs: [RefCell<Vec<Callback>>; LIST_EVENT_KINDS],
+    cbs: [RefCell<Vec<Callback>>; ListEvent::COUNT],
 }
 
 unsafe impl Send for ListState {}
@@ -102,8 +101,8 @@ impl ListState {
         (self as *const Self).cast_mut().cast()
     }
 
-    unsafe fn fire(&self, kind: u32, arg: *const c_void) {
-        let Some(cbs) = self.cbs.get(kind as usize) else {
+    unsafe fn fire(&self, kind: ListEvent, arg: *const c_void) {
+        let Some(cbs) = self.cbs.get(kind.0 as usize) else {
             return;
         };
 
@@ -145,11 +144,11 @@ impl ListState {
         Ok(())
     }
 
-    pub unsafe fn set_items(&self, count: u32, selected: u32, player: u8) -> NativeResult {
+    pub unsafe fn set_items(&self, count: u32, selected: u32, player: Player) -> NativeResult {
         unsafe {
             (*self.group.get()).selected = selected as i32;
             self.list()
-                .set_content(&default_content(count as i32, selected as i32), player)?;
+                .set_content(&default_content(count as i32, selected as i32), player.0)?;
         }
 
         if self.active.get() {
@@ -190,8 +189,10 @@ impl ListState {
                     continue;
                 };
 
-                if !target.focus_node.is_null() {
-                    from.set_link(crate::nav(link.direction), Some(target));
+                if let (false, Some(direction)) =
+                    (target.focus_node.is_null(), crate::nav(link.direction))
+                {
+                    from.set_link(direction, Some(target));
                 }
             }
         }
@@ -224,7 +225,7 @@ impl ListState {
 
         if index >= 0 {
             let item = index as u32;
-            unsafe { self.fire(LIST_FOCUS, (&item as *const u32).cast()) };
+            unsafe { self.fire(ListEvent::FOCUS, (&item as *const u32).cast()) };
         } else if self.active.get() {
             // Outside focus (e.g. a tab entering on another row) bypasses the list, which would keep the D-pad
             unsafe {
@@ -260,7 +261,7 @@ impl ListState {
         }
 
         let item = unsafe { group.selected() }.max(0) as u32;
-        unsafe { self.fire(LIST_DECIDE, (&item as *const u32).cast()) };
+        unsafe { self.fire(ListEvent::DECIDE, (&item as *const u32).cast()) };
 
         Ok(())
     }
@@ -294,9 +295,9 @@ extern "C" fn on_item(user: *mut c_void, event: *const ItemEvent) {
     };
 
     let (op, item) = match op {
-        ItemOp::Clear => (ITEM_CLEAR, -1),
-        ItemOp::Move => (ITEM_MOVE, unsafe { event.item() }),
-        ItemOp::Render => (ITEM_RENDER, unsafe { event.item() }),
+        ItemOp::Clear => (Op::CLEAR, -1),
+        ItemOp::Move => (Op::MOVE, unsafe { event.item() }),
+        ItemOp::Render => (Op::RENDER, unsafe { event.item() }),
     };
 
     let update = ItemUpdate {
@@ -306,7 +307,7 @@ extern "C" fn on_item(user: *mut c_void, event: *const ItemEvent) {
         item,
     };
 
-    unsafe { state.fire(LIST_ITEM, (&update as *const ItemUpdate).cast()) };
+    unsafe { state.fire(ListEvent::ITEM, (&update as *const ItemUpdate).cast()) };
 }
 
 extern "C" fn on_leave(user: *mut c_void, target: *mut *mut Control, event: *const LeaveEvent) {
@@ -315,8 +316,8 @@ extern "C" fn on_leave(user: *mut c_void, target: *mut *mut Control, event: *con
     };
 
     let direction = match event.direction() {
-        Some(LeaveDirection::Up) => Direction::Up,
-        Some(LeaveDirection::Down) => Direction::Down,
+        Some(LeaveDirection::Up) => Direction::UP,
+        Some(LeaveDirection::Down) => Direction::DOWN,
         None => return,
     };
 
@@ -330,7 +331,7 @@ extern "C" fn on_leave(user: *mut c_void, target: *mut *mut Control, event: *con
         target: &mut out,
     };
 
-    unsafe { state.fire(LIST_LEAVE, (&query as *const LeaveQuery).cast()) };
+    unsafe { state.fire(ListEvent::LEAVE, (&query as *const LeaveQuery).cast()) };
 
     if !out.is_null() && !target.is_null() {
         unsafe { *target = out.cast() };
@@ -366,21 +367,21 @@ pub unsafe fn get(
     path: &str,
 ) -> NativeResult<Result<&'static ListState, Status>> {
     let (Some(page_ref), Ok(path)) = (unsafe { page.as_ref() }, CString::new(path)) else {
-        return Ok(Err(Status::InvalidArg));
+        return Ok(Err(Status::INVALID_ARG));
     };
 
     let Some(root) = (unsafe { page_ref.root().as_mut() }) else {
-        return Ok(Err(Status::PaneNotFound));
+        return Ok(Err(Status::PANE_NOT_FOUND));
     };
 
     let control = unsafe { root.find_by_path(&path)? };
 
     if control.is_null() {
-        return Ok(Err(Status::PaneNotFound));
+        return Ok(Err(Status::PANE_NOT_FOUND));
     }
 
     let Some(list) = (unsafe { Control::cast_ptr::<ScrollBtnListCtrl>(control)? }) else {
-        return Ok(Err(Status::TypeMismatch));
+        return Ok(Err(Status::TYPE_MISMATCH));
     };
 
     let list = list as *mut ScrollBtnListCtrl;
@@ -410,8 +411,8 @@ pub unsafe fn get(
 
     // Published only once both events are in, so a failed get isn't found half registered later
     for (kind, func) in [
-        (EVENT_FOCUS, page_focus as _),
-        (EVENT_DECIDE, page_decide as _),
+        (ControlEventKind::FOCUS, page_focus as _),
+        (ControlEventKind::DECIDE, page_decide as _),
     ] {
         let cb = Callback {
             func,
@@ -427,7 +428,7 @@ pub unsafe fn get(
             }
         };
 
-        if status != Status::Ok {
+        if status != Status::OK {
             state.retire();
             return Ok(Err(status));
         }
@@ -443,13 +444,13 @@ pub unsafe fn get(
     Ok(Ok(state))
 }
 
-pub unsafe fn on(list: &ListState, kind: u32, cb: Callback) -> Status {
-    match list.cbs.get(kind as usize) {
+pub unsafe fn on(list: &ListState, kind: ListEvent, cb: Callback) -> Status {
+    match list.cbs.get(kind.0 as usize) {
         Some(cbs) => {
             cbs.borrow_mut().push(cb);
-            Status::Ok
+            Status::OK
         }
-        None => Status::InvalidArg,
+        None => Status::INVALID_ARG,
     }
 }
 
@@ -460,7 +461,7 @@ pub unsafe fn link_into(
     target: ListTarget,
 ) -> NativeResult<Status> {
     let Some(from) = (unsafe { Control::cast_ptr::<BtnPartsCtrl>(from.cast())? }) else {
-        return Ok(Status::TypeMismatch);
+        return Ok(Status::TYPE_MISMATCH);
     };
 
     list.links.borrow_mut().push(Link {
@@ -469,7 +470,7 @@ pub unsafe fn link_into(
         target,
     });
 
-    Ok(Status::Ok)
+    Ok(Status::OK)
 }
 
 pub fn slot_count(list: &ListState) -> u32 {

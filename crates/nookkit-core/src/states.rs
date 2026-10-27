@@ -1,7 +1,7 @@
 use core::ffi::c_void;
 use std::sync::Mutex;
 
-use nookkit_sys::{Callback, STATE_PHASES, Status};
+use nookkit_sys::{Callback, StatePhase, Status};
 use nookkit_types::game::ui::{SequenceBase, ViewPage};
 use nookkit_types::lp::utl::{StateEntry, StateVtable};
 
@@ -9,7 +9,7 @@ use crate::pages::{bury, call, dispatching, live_seq, snapshot, with_page, with_
 
 pub struct StateReg {
     state: i32,
-    phase: u32,
+    phase: StatePhase,
     after: bool,
     cb: Callback,
 }
@@ -21,7 +21,7 @@ pub struct StateHook {
     vt: StateVtable,
     original: *const StateVtable,
     seq: usize,
-    cbs: Mutex<[[Vec<Callback>; 2]; STATE_PHASES]>,
+    cbs: Mutex<[[Vec<Callback>; 2]; StatePhase::COUNT]>,
 }
 
 unsafe impl Send for StateHook {}
@@ -45,9 +45,15 @@ fn hook_of(entry: &StateEntry) -> Option<&'static StateHook> {
     (vt.enter as *const () == enter as *const ()).then(|| unsafe { &*entry.vtable.cast::<StateHook>() })
 }
 
-pub fn on_state(page: *mut ViewPage, state: i32, phase: u32, after: bool, cb: Callback) -> Status {
-    if phase as usize >= STATE_PHASES || state < 0 {
-        return Status::InvalidArg;
+pub fn on_state(
+    page: *mut ViewPage,
+    state: i32,
+    phase: StatePhase,
+    after: bool,
+    cb: Callback,
+) -> Status {
+    if phase.0 as usize >= StatePhase::COUNT || state < 0 {
+        return Status::INVALID_ARG;
     }
 
     let reg = StateReg {
@@ -61,7 +67,7 @@ pub fn on_state(page: *mut ViewPage, state: i32, phase: u32, after: bool, cb: Ca
     match live_seq(page) {
         Some(seq) => unsafe { apply(page, seq as *mut SequenceBase, reg) },
         None => with_page(page, |state| state.states.push(reg))
-            .map_or(Status::InvalidArg, |()| Status::Ok),
+            .map_or(Status::INVALID_ARG, |()| Status::OK),
     }
 }
 
@@ -74,7 +80,7 @@ pub unsafe fn ready(page: *mut ViewPage, seq: *mut SequenceBase) {
         let state = reg.state;
         let status = unsafe { apply(page, seq, reg) };
 
-        if status != Status::Ok {
+        if status != Status::OK {
             println!("[NookKit] on_state({state}): {status:?}");
         }
     }
@@ -82,18 +88,18 @@ pub unsafe fn ready(page: *mut ViewPage, seq: *mut SequenceBase) {
 
 unsafe fn apply(page: *mut ViewPage, seq: *mut SequenceBase, reg: StateReg) -> Status {
     let Some(seq_ref) = (unsafe { seq.as_mut() }) else {
-        return Status::InvalidArg;
+        return Status::INVALID_ARG;
     };
 
     let entry = seq_ref.state_machine.entry(reg.state);
     let Some(entry_ref) = (unsafe { entry.as_mut() }) else {
-        return Status::InvalidArg;
+        return Status::INVALID_ARG;
     };
 
     // A native vtable here means a new state table, from a new seq or a seq reset
     let hook = match hook_of(entry_ref) {
         Some(hook) => hook,
-        None if entry_ref.vtable.is_null() => return Status::InvalidArg,
+        None if entry_ref.vtable.is_null() => return Status::INVALID_ARG,
         None => {
             let hook: &'static StateHook = Box::leak(Box::new(StateHook {
                 vt: StateVtable { enter, exec, exit },
@@ -114,12 +120,12 @@ unsafe fn apply(page: *mut ViewPage, seq: *mut SequenceBase, reg: StateReg) -> S
     });
 
     let Ok(mut cbs) = hook.cbs.lock() else {
-        return Status::InvalidArg;
+        return Status::INVALID_ARG;
     };
 
-    cbs[reg.phase as usize][reg.after as usize].push(reg.cb);
+    cbs[reg.phase.0 as usize][reg.after as usize].push(reg.cb);
 
-    Status::Ok
+    Status::OK
 }
 
 unsafe fn dispatch(entry: *mut StateEntry, phase: usize, run: impl FnOnce(&StateVtable)) {
