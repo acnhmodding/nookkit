@@ -45,6 +45,8 @@ pub enum SymError {
     UnsupportedBuild { expected: u64, actual: u64 },
     #[error("bad symbol file: {0}")]
     Parse(#[from] ParseError),
+    #[error("hooking {0:#x} failed")]
+    HookFailed(usize),
 }
 
 pub fn manifest(text: &str) -> impl Iterator<Item = Result<(Kind, &str), &str>> {

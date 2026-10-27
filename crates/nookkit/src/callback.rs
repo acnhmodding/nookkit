@@ -1,12 +1,14 @@
+use core::cell::{Cell, UnsafeCell};
 use core::ffi::c_void;
 
 use nookkit_sys::Callback;
 
-use crate::{Result, Ui};
+use crate::{Result, Ui, UiError};
 
 struct Boxed<F> {
     ui: Ui,
-    f: F,
+    running: Cell<bool>,
+    f: UnsafeCell<F>,
 }
 
 pub fn raw<F: FnMut(*const c_void) -> Result + 'static>(ui: Ui, f: F) -> Callback {
@@ -14,11 +16,18 @@ pub fn raw<F: FnMut(*const c_void) -> Result + 'static>(ui: Ui, f: F) -> Callbac
         user: *mut c_void,
         arg: *const c_void,
     ) {
-        let Some(boxed) = (unsafe { user.cast::<Boxed<F>>().as_mut() }) else {
+        let Some(boxed) = (unsafe { user.cast::<Boxed<F>>().as_ref() }) else {
             return;
         };
 
-        let result = (boxed.f)(arg);
+        // A callback that fires its own event, e.g. decide inside on_decide, would alias its closure
+        if boxed.running.replace(true) {
+            boxed.ui.report(Err(UiError::Reentrant));
+            return;
+        }
+
+        let result = unsafe { (*boxed.f.get())(arg) };
+        boxed.running.set(false);
         boxed.ui.report(result);
     }
 
@@ -28,7 +37,12 @@ pub fn raw<F: FnMut(*const c_void) -> Result + 'static>(ui: Ui, f: F) -> Callbac
 
     Callback {
         func: call::<F>,
-        user: Box::into_raw(Box::new(Boxed { ui, f })).cast(),
+        user: Box::into_raw(Box::new(Boxed {
+            ui,
+            running: Cell::new(false),
+            f: UnsafeCell::new(f),
+        }))
+        .cast(),
         drop: Some(drop_boxed::<F>),
     }
 }

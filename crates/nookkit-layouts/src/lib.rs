@@ -19,9 +19,15 @@ pub trait PaneRef {
     fn path(&self) -> &str;
 }
 
-impl PaneRef for &str {
+impl PaneRef for str {
     fn path(&self) -> &str {
         self
+    }
+}
+
+impl<T: PaneRef + ?Sized> PaneRef for &T {
+    fn path(&self) -> &str {
+        T::path(self)
     }
 }
 
@@ -54,7 +60,8 @@ impl<K> PaneRef for PanePath<K> {
 /// ```
 pub trait ListRef: PaneRef {}
 
-impl ListRef for &str {}
+impl ListRef for str {}
+impl<T: ListRef + ?Sized> ListRef for &T {}
 impl ListRef for String {}
 impl ListRef for PanePath<kind::List> {}
 

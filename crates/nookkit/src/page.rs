@@ -60,11 +60,11 @@ impl Page {
         Ok(Pane { page: *self, raw })
     }
 
-    pub fn on_focus(&self, f: impl FnMut(Event) -> Result + 'static) -> Result {
+    pub fn on_focus(&self, f: impl FnMut(Event) -> Result + 'static) -> Result<Page> {
         self.on_event(ControlEventKind::FOCUS, f)
     }
 
-    pub fn on_decide(&self, f: impl FnMut(Event) -> Result + 'static) -> Result {
+    pub fn on_decide(&self, f: impl FnMut(Event) -> Result + 'static) -> Result<Page> {
         self.on_event(ControlEventKind::DECIDE, f)
     }
 
@@ -72,7 +72,7 @@ impl Page {
         &self,
         kind: ControlEventKind,
         mut f: impl FnMut(Event) -> Result + 'static,
-    ) -> Result {
+    ) -> Result<Page> {
         let page = *self;
         let cb = callback::raw(self.ui, move |arg| {
             match unsafe { arg.cast::<ControlEvent>().as_ref() } {
@@ -81,7 +81,9 @@ impl Page {
             }
         });
 
-        check(unsafe { (self.ui.table.on_control_event)(self.handle, kind, cb) })
+        check(unsafe { (self.ui.table.on_control_event)(self.handle, kind, cb) })?;
+
+        Ok(*self)
     }
 
     /// The scroll list at `path`; lists a layout mod added are bound by the framework while the page builds
@@ -116,7 +118,7 @@ impl Page {
     }
 
     /// Callbacks around one state of the page's seq, see [`StateHooks`]
-    pub fn on_state(&self, state: i32) -> StateHooks {
+    pub fn on_state(&self, state: SeqState) -> StateHooks {
         StateHooks { page: *self, state }
     }
 
@@ -126,20 +128,20 @@ impl Page {
     }
 
     /// After the page's seq has set up its controls
-    pub fn on_ready(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+    pub fn on_ready(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::READY, f)
     }
 
-    pub fn on_activate(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+    pub fn on_activate(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::ACTIVATE, f)
     }
 
-    pub fn on_deactivated(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+    pub fn on_deactivate(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::DEACTIVATE, f)
     }
 
     /// Every frame the page's seq updates
-    pub fn on_update(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result {
+    pub fn on_update(&self, f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         self.on_seq(SeqEvent::UPDATE, f)
     }
 
@@ -155,11 +157,13 @@ impl Page {
         check(unsafe { (self.ui.table.page_set_input_enabled)(self.handle, enable) })
     }
 
-    fn on_seq(&self, kind: SeqEvent, mut f: impl FnMut(Seq) -> Result + 'static) -> Result {
+    fn on_seq(&self, kind: SeqEvent, mut f: impl FnMut(Seq) -> Result + 'static) -> Result<Page> {
         let page = *self;
         let cb = callback::raw(self.ui, move |arg| f(Seq::new(page, arg.cast_mut())));
 
-        check(unsafe { (self.ui.table.on_seq_event)(self.handle, kind, cb) })
+        check(unsafe { (self.ui.table.on_seq_event)(self.handle, kind, cb) })?;
+
+        Ok(*self)
     }
 
     pub(crate) fn ui(&self) -> Ui {
@@ -167,12 +171,17 @@ impl Page {
     }
 }
 
+/// A state of a seq's state machine. The numbers are each seq class's own, e.g. from its
+/// `initStateMachine`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SeqState(pub i32);
+
 /// Runs callbacks before or after the game's own code for one state of a page's seq. Exec runs
 /// every step the state is current, [`Seq::state_frame`] is 0 on its first. Dropped with the page
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct StateHooks {
     page: Page,
-    state: i32,
+    state: SeqState,
 }
 
 impl StateHooks {
@@ -210,7 +219,7 @@ impl StateHooks {
         let ui = page.ui();
         let cb = callback::raw(ui, move |arg| f(Seq::new(page, arg.cast_mut())));
 
-        check(unsafe { (ui.table.on_state)(page.handle(), self.state, phase, after, cb) })?;
+        check(unsafe { (ui.table.on_state)(page.handle(), self.state.0, phase, after, cb) })?;
 
         Ok(self)
     }
@@ -256,8 +265,8 @@ impl Seq {
     }
 
     /// The state machine's current state, -1 before the first
-    pub fn state(&self) -> Result<i32> {
-        Ok(self.base()?.state_machine.current_state)
+    pub fn state(&self) -> Result<SeqState> {
+        Ok(SeqState(self.base()?.state_machine.current_state))
     }
 
     /// How many times the current state has run, 0 on its first exec
@@ -292,18 +301,18 @@ impl Seq {
 
     /// Queues a state for the seq's state machine the way the game does, `false` when a request is
     /// already queued
-    pub fn request_state(&self, state: i32) -> Result<bool> {
+    pub fn request_state(&self, state: SeqState) -> Result<bool> {
         self.page.check()?;
 
         let seq = unsafe { self.raw.cast::<SequenceBase>().as_mut() };
 
-        Ok(seq.is_some_and(|seq| seq.request_state(state)))
+        Ok(seq.is_some_and(|seq| seq.request_state(state.0)))
     }
 }
 
 impl PartialEq for Pane {
     fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw
+        self.raw == other.raw && self.page == other.page
     }
 }
 
@@ -324,27 +333,21 @@ impl Pane {
     }
 
     /// Both panes must be buttons
-    pub fn link(&self, direction: Direction, to: Pane) -> Result<Pane> {
-        check(unsafe { (self.page.ui.table.link)(self.handle(), direction.into(), to.handle()) })?;
-
-        Ok(*self)
+    pub fn link(&self, direction: Direction, to: Pane) -> Result {
+        check(unsafe { (self.page.ui.table.link)(self.handle(), direction.into(), to.handle()) })
     }
 
-    pub fn unlink(&self, direction: Direction) -> Result<Pane> {
+    pub fn unlink(&self, direction: Direction) -> Result {
         let none = PaneHandle {
             page: self.page.handle,
             raw: core::ptr::null_mut(),
         };
 
-        check(unsafe { (self.page.ui.table.link)(self.handle(), direction.into(), none) })?;
-
-        Ok(*self)
+        check(unsafe { (self.page.ui.table.link)(self.handle(), direction.into(), none) })
     }
 
-    pub fn set_focusable(&self, player: Player, enable: bool) -> Result<Pane> {
-        check(unsafe { (self.page.ui.table.set_focusable)(self.handle(), player, enable) })?;
-
-        Ok(*self)
+    pub fn set_focusable(&self, player: Player, enable: bool) -> Result {
+        check(unsafe { (self.page.ui.table.set_focusable)(self.handle(), player, enable) })
     }
 
     pub(crate) fn new(page: Page, raw: *mut c_void) -> Self {
@@ -352,7 +355,7 @@ impl Pane {
     }
 
     /// Keeps the link pointed at `target` of the list's visible window as it scrolls
-    pub fn link_into(&self, direction: Direction, list: &List, target: ListTarget) -> Result<Pane> {
+    pub fn link_into(&self, direction: Direction, list: &List, target: ListTarget) -> Result {
         check(unsafe {
             (self.page.ui.table.list_link_into)(
                 self.handle(),
@@ -360,15 +363,11 @@ impl Pane {
                 list.raw(),
                 target.into(),
             )
-        })?;
-
-        Ok(*self)
+        })
     }
 
-    pub fn set_visible(&self, visible: bool) -> Result<Pane> {
-        check(unsafe { (self.page.ui.table.set_visible)(self.handle(), visible) })?;
-
-        Ok(*self)
+    pub fn set_visible(&self, visible: bool) -> Result {
+        check(unsafe { (self.page.ui.table.set_visible)(self.handle(), visible) })
     }
 
     /// Presses the button as if decided: its Decide animation plays and the page's decide event
@@ -382,10 +381,8 @@ impl Pane {
     }
 
     /// The button's valid look, the one the game greys out when an entry can't be used
-    pub fn set_valid(&self, valid: bool) -> Result<Pane> {
-        check(unsafe { (self.page.ui.table.pane_set_valid)(self.handle(), valid) })?;
-
-        Ok(*self)
+    pub fn set_valid(&self, valid: bool) -> Result {
+        check(unsafe { (self.page.ui.table.pane_set_valid)(self.handle(), valid) })
     }
 
     pub fn is_valid(&self) -> Result<bool> {
@@ -423,6 +420,7 @@ impl Pane {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Event {
     pub page: Page,
     pub control: Option<Pane>,
@@ -436,5 +434,70 @@ impl Event {
         });
 
         Self { page, control }
+    }
+}
+
+impl PartialEq for Page {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
+    }
+}
+
+impl Eq for Page {}
+
+impl core::hash::Hash for Page {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
+}
+
+impl core::fmt::Debug for Page {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Page")
+            .field("raw", &self.handle.raw)
+            .field("build", &self.handle.build)
+            .finish()
+    }
+}
+
+impl PartialEq for Seq {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw == other.raw && self.page == other.page
+    }
+}
+
+impl Eq for Seq {}
+
+impl core::hash::Hash for Seq {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.raw.hash(state);
+        self.page.hash(state);
+    }
+}
+
+impl core::fmt::Debug for Seq {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Seq")
+            .field("raw", &self.raw)
+            .field("page", &self.page)
+            .finish()
+    }
+}
+
+impl Eq for Pane {}
+
+impl core::hash::Hash for Pane {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.raw.hash(state);
+        self.page.hash(state);
+    }
+}
+
+impl core::fmt::Debug for Pane {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Pane")
+            .field("raw", &self.raw)
+            .field("page", &self.page)
+            .finish()
     }
 }

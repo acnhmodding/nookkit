@@ -5,8 +5,9 @@ use nookkit_sys::{
     NO_LINE, Player,
 };
 
-use crate::{Direction, Page, Pane, Result, callback, check};
+use crate::{Direction, Page, Pane, Result, UiError, callback, check};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemUpdate {
     Render {
         slot: usize,
@@ -47,7 +48,7 @@ impl ItemUpdate {
 }
 
 /// A line of the list's visible window
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListTarget {
     line: usize,
     last: bool,
@@ -73,13 +74,13 @@ impl ListTarget {
 impl From<ListTarget> for RawListTarget {
     fn from(target: ListTarget) -> Self {
         Self {
-            line: target.line as u32,
+            line: u32::try_from(target.line).unwrap_or(u32::MAX),
             last: target.last,
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct List {
     page: Page,
     raw: *mut c_void,
@@ -156,9 +157,10 @@ impl List {
     }
 
     pub fn set_items(&self, count: usize, selected: usize, player: Player) -> Result {
-        check(unsafe {
-            (self.page.ui().table.list_set_items)(self.raw, count as u32, selected as u32, player)
-        })
+        let count = u32::try_from(count).map_err(|_| UiError::InvalidArg)?;
+        let selected = u32::try_from(selected).map_err(|_| UiError::InvalidArg)?;
+
+        check(unsafe { (self.page.ui().table.list_set_items)(self.raw, count, selected, player) })
     }
 
     pub fn set_enabled(&self, enable: bool, mode: u32) -> Result {
@@ -181,7 +183,9 @@ impl List {
     pub fn button(&self, slot: usize) -> Result<Pane> {
         let mut raw = core::ptr::null_mut();
 
-        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot as u32, &mut raw) })?;
+        let slot = u32::try_from(slot).map_err(|_| UiError::InvalidArg)?;
+
+        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot, &mut raw) })?;
 
         Ok(Pane::new(self.page, raw))
     }

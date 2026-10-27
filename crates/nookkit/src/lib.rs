@@ -24,7 +24,7 @@ pub use nookkit_sys::Player;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
 pub use offsets::{__hook_function, module_base};
-pub use page::{Event, Page, Pane, Seq, StateHooks};
+pub use page::{Event, Page, Pane, Seq, SeqState, StateHooks};
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -61,6 +61,12 @@ pub enum UiError {
 
     #[error("the page was destroyed")]
     Stale,
+
+    #[error("installing a hook failed")]
+    HookFailed,
+
+    #[error("a callback fired its own event, the nested call was skipped")]
+    Reentrant,
 
     #[error("unknown status {0} from a newer NookKit")]
     Unknown(i32),
@@ -117,15 +123,49 @@ impl TryFrom<nookkit_sys::Direction> for Direction {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum PageFilter<'a> {
     Layout(&'a str),
     Class(&'a str),
+    Both { layout: &'a str, class: &'a str },
 }
 
 #[derive(Clone, Copy)]
 pub struct Ui {
     table: &'static NookKitV2,
     name: &'static str,
+}
+
+impl core::fmt::Debug for Ui {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Ui").field("name", &self.name).finish()
+    }
+}
+
+#[must_use = "dropping the lock releases the player"]
+#[derive(Debug)]
+pub struct PlayerLock {
+    ui: Ui,
+    player: Player,
+}
+
+impl PlayerLock {
+    pub fn player(&self) -> Player {
+        self.player
+    }
+
+    pub fn release(self) -> Result {
+        let result = check(unsafe { (self.ui.table.release_player)(self.player) });
+        core::mem::forget(self);
+        result
+    }
+}
+
+impl Drop for PlayerLock {
+    fn drop(&mut self) {
+        self.ui
+            .report(check(unsafe { (self.ui.table.release_player)(self.player) }));
+    }
 }
 
 static TABLE: AtomicPtr<NookKitV2> = AtomicPtr::new(core::ptr::null_mut());
@@ -197,6 +237,7 @@ impl Ui {
         let (layout, class) = match filter {
             PageFilter::Layout(layout) => (layout, ""),
             PageFilter::Class(class) => ("", class),
+            PageFilter::Both { layout, class } => (layout, class),
         };
 
         let ui = *self;
@@ -208,12 +249,11 @@ impl Ui {
         check(unsafe { (self.table.on_page_built)(Str::new(layout), Str::new(class), cb) })
     }
 
-    pub fn lock_player(&self, player: Player) -> Result {
-        check(unsafe { (self.table.lock_player)(player) })
-    }
+    /// Freezes `player` in the field until the lock is released or dropped
+    pub fn lock_player(&self, player: Player) -> Result<PlayerLock> {
+        check(unsafe { (self.table.lock_player)(player) })?;
 
-    pub fn release_player(&self, player: Player) -> Result {
-        check(unsafe { (self.table.release_player)(player) })
+        Ok(PlayerLock { ui: *self, player })
     }
 
     /// The most recently built `P` page the game hasn't destroyed, e.g. the resident pocket menu
@@ -225,7 +265,7 @@ impl Ui {
         Ok((!handle.raw.is_null()).then(|| Page::new(*self, handle)))
     }
 
-    /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivated` fires
+    /// Opens the pocket menu for `player` over whatever is open, its page's `on_deactivate` fires
     /// when it closes
     pub fn open_pocket_menu(&self, player: Player, close_enabled: bool) -> Result {
         check(unsafe { (self.table.open_pocket_menu)(player, close_enabled) })
