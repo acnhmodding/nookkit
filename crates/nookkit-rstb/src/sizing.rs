@@ -20,11 +20,11 @@ const ZSTD_LOAD_FOLDERS: [&str; 4] = ["Layout/", "Font/", "Message/", "Model/Lay
 // A resource heap (0x71037C6D48) starts with its 0x108-byte ExpHeap object, the first free block follows it
 const RESOURCE_HEAP_FREE_BLOCK: i64 = 0x108;
 
-/// The table name of a romfs file (relative, '/'-separated), or `None` when the file is not
-/// a table resource: Skyline plugins, the table itself (compressed or not) and BYML files other than the one
-/// the game loads as a resource
+/// `None` for files that aren't table resources: plugins, NookKit's own data, the table itself and BYML
+/// files other than the one the game loads as a resource
 pub fn table_name(relative: &str) -> Option<&str> {
     if relative.starts_with("skyline")
+        || relative.starts_with("NookKit/")
         || relative.starts_with("System/Resource/ResourceSizeTable.")
         || (relative.ends_with(".byml") && relative != "EventFlow/Info/EventFlowInfoProduct.byml")
     {
