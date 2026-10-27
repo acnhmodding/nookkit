@@ -53,7 +53,7 @@ impl<K> PaneRef for PanePath<K> {
 /// list("/L_BtnListMouth_00");
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn list(_: impl nookkit_layouts::ListRef) {}
 ///
 /// list(nookkit_layouts::pages::CharaMake::L_BTN_OK_00);
@@ -111,7 +111,7 @@ impl<K> PanePath<K> {
 /// A parts pane inside a part layout, only usable through [`PanePath::then`] since the same part layout
 /// appears at many places
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn pane(_: impl nookkit_layouts::PaneRef) {}
 ///
 /// pane(nookkit_layouts::layouts::CharaMake::L_BTN_OK_00);

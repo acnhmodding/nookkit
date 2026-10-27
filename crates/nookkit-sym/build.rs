@@ -32,6 +32,15 @@ fn segments(name: &str) -> Vec<&str> {
     let mut i = 0;
 
     while i < bytes.len() {
+        // operator<, operator<< and friends name a function, they don't open a template
+        if name[i..].starts_with("operator") {
+            i += "operator".len();
+            while i < bytes.len() && b"<>=".contains(&bytes[i]) {
+                i += 1;
+            }
+            continue;
+        }
+
         match bytes[i] {
             b'<' => depth += 1,
             b'>' => depth = depth.saturating_sub(1),
@@ -82,7 +91,7 @@ fn signatures(text: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
 
     for (index, raw) in text.lines().enumerate() {
-        let line = raw.split_once('#').map_or(raw, |(code, _)| code).trim();
+        let line = parse::strip_comment(raw).trim();
         if line.is_empty() || line.starts_with('[') {
             continue;
         }
@@ -99,7 +108,9 @@ fn signatures(text: &str) -> HashMap<String, String> {
         let sig = sig.trim_matches('"');
         let ty = signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
 
-        out.insert(name.to_owned(), ty);
+        if out.insert(name.to_owned(), ty).is_some() {
+            panic!("{SIGNATURES}:{}: duplicate signature for \"{name}\"", index + 1);
+        }
     }
 
     out
@@ -125,9 +136,17 @@ fn main() {
     let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let file = parse::parse(&fs::read_to_string(dir.join(SYMBOLS)).expect("read the symbol file"))
         .unwrap_or_else(|e| panic!("{SYMBOLS}: {e}"));
-    let sigs = fs::read_to_string(dir.join(SIGNATURES))
-        .map(|t| signatures(&t))
-        .unwrap_or_default();
+    // Without it every hook's signature check would silently pass
+    let sigs = signatures(
+        &fs::read_to_string(dir.join(SIGNATURES))
+            .unwrap_or_else(|e| panic!("read {SIGNATURES}: {e}")),
+    );
+
+    for name in sigs.keys() {
+        if file.get(Kind::Fn, name).is_none() {
+            println!("cargo::warning=signature for \"{name}\", which isn't in [fn] of {SYMBOLS}");
+        }
+    }
 
     let mut root = Module::default();
     let mut seen = HashMap::new();

@@ -10,13 +10,16 @@ pub fn module_base() -> usize {
     unsafe { getRegionAddress(Region::Text) as usize }
 }
 
+// 0 when the window runs past the module's mapped image, as on a smaller executable
 fn running_fingerprint() -> u64 {
-    let window = unsafe {
-        core::slice::from_raw_parts(
-            (module_base() + FINGERPRINT_OFFSET) as *const u8,
-            FINGERPRINT_LEN,
-        )
-    };
+    let start = module_base() + FINGERPRINT_OFFSET;
+    let end = unsafe { getRegionAddress(Region::Bss) as usize };
+
+    if start + FINGERPRINT_LEN > end {
+        return 0;
+    }
+
+    let window = unsafe { core::slice::from_raw_parts(start as *const u8, FINGERPRINT_LEN) };
     fingerprint(window)
 }
 
