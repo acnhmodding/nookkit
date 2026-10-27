@@ -2,6 +2,7 @@ mod keys;
 mod lists;
 mod messages;
 mod pages;
+mod rstb;
 mod seqs;
 mod states;
 mod table;
@@ -63,7 +64,8 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     seqs::sequence_update::install()?;
     keys::key_guide_add::install()?;
     keys::message_find::install()?;
-    messages::install()
+    messages::install()?;
+    rstb::install()
 }
 
 #[skyline::main(name = "NookKit")]

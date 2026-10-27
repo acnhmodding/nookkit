@@ -1,38 +1,38 @@
-//! Auto RSTB: at launch, rebuilds Animal Crossing: New Horizons 3.0.3's resource size table
-//! for the modded files (see `mods`), starting from the game's own table. The table is written
-//! to the config folder, and the game's reads of its table are sent there (see `redirect`), so
-//! a changed table works in the same launch.
-
 mod arena;
 mod cache;
 mod mods;
 mod platform;
 mod redirect;
 
+use core::ffi::c_void;
 use std::fmt::Display;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use rstb::sizing::{table_name, Sizer, GAME_SIZED, SHADER_ARCHIVE, UNSUPPORTED};
-use rstb::table::{Table, Update, PATH as TABLE};
-use rstb::yaz0;
+use nookkit_rstb::sizing::{GAME_SIZED, SHADER_ARCHIVE, Sizer, UNSUPPORTED, table_name};
+use nookkit_rstb::table::{PATH as TABLE, Table, Update};
+use nookkit_rstb::yaz0;
+use nookkit_sym::{SymError, sym};
 
 use cache::Cache;
-use mods::{Copies, Folder};
-use platform::RomMount;
+use mods::Folder;
 
-const GAME_VERSION: &str = "3.0.3";
-
-const CONFIG: &str = "sd:/config/auto-rstb";
-/// The table the game reads instead of its own.
-const MODDED_TABLE: &str = "sd:/config/auto-rstb/ResourceSizeTable.srsizetable";
-/// A copy of the game's own table, read while no table in a romfs folder hides it.
-const VANILLA_TABLE: &str = "sd:/config/auto-rstb/vanilla.srsizetable";
-const CACHE: &str = "sd:/config/auto-rstb/cache.tsv";
-const LOG: &str = "sd:/config/auto-rstb/log.txt";
-const TEMPORARY: &str = "sd:/config/auto-rstb/table.tmp";
-
-const ROM_MOUNT: &str = "autorstb";
+const CONFIG: &str = "sd:/config/nookkit/rstb";
+// The table the game reads instead of its own
+const MODDED_TABLE: &str = "sd:/config/nookkit/rstb/ResourceSizeTable.srsizetable";
+// Read while no table in a romfs folder hides the game's own
+const VANILLA_TABLE: &str = "sd:/config/nookkit/rstb/vanilla.srsizetable";
+const CACHE: &str = "sd:/config/nookkit/rstb/cache.tsv";
+const LOG: &str = "sd:/config/nookkit/rstb/log.txt";
+const TEMPORARY: &str = "sd:/config/nookkit/rstb/table.tmp";
 
 const ERROR_CODE: u32 = 2;
+
+// game::ResourceMgr's ResourceSizeTable, and that table's RSTC and RSTB entry pointers
+const MGR_TABLE: usize = 0x820;
+const TABLE_RSTC_ENTRIES: usize = 0x70;
+const TABLE_RSTB_ENTRIES: usize = 0x50;
+
+static UPDATED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Default)]
 struct Log(String);
@@ -40,53 +40,77 @@ struct Log(String);
 impl Log {
     fn line(&mut self, text: impl Display) {
         let text = text.to_string();
-        println!("[auto-rstb] {text}");
+        println!("[NookKit] rstb: {text}");
         self.0 += &text;
         self.0.push('\n');
     }
 
     fn save(&self) {
         if let Err(error) = platform::write(LOG, self.0.as_bytes()) {
-            println!("[auto-rstb] {error}");
+            println!("[NookKit] rstb: {error}");
         }
     }
 }
 
 enum Outcome {
-    /// The table the game reads this launch is the one built.
     Ready,
-    /// The game would read a file that is gone this launch, so it must start again.
+    // The game would read a file that is gone this launch, so it must start again
     Restart(&'static str),
 }
 
-#[skyline::main(name = "auto-rstb")]
-pub fn main() {
-    // Sets up std's output before memory is borrowed, as it lives for the whole game
-    println!("[auto-rstb] Updating the resource size table.");
-    let version = skyline::nn::oe::get_display_version();
-    if version != GAME_VERSION {
-        // The heaps memory is borrowed from, and the table's contents, are only known for this version
-        let mut log = Log::default();
-        log.line(format!("Game version {version} is not {GAME_VERSION}; the game reads its own table."));
-        log.save();
+pub fn install() -> Result<(), SymError> {
+    table_load::install()?;
+
+    // Plugins start from nn::vi::CreateLayer, which nothing orders before the resource manager's start
+    if table_loaded() {
+        println!(
+            "[NookKit] rstb: the game read its table before NookKit started, the update applies from the next launch"
+        );
+        update_once(false);
+    }
+    Ok(())
+}
+
+fn table_loaded() -> bool {
+    let Ok(instance) = nookkit_sym::data::<usize>(&sym::game::ResourceMgr::sInstance) else {
+        return false;
+    };
+    let mgr = unsafe { *instance };
+    if mgr == 0 {
+        return false;
+    }
+    let entries = |offset: usize| unsafe { ((mgr + MGR_TABLE + offset) as *const usize).read() };
+    entries(TABLE_RSTC_ENTRIES) != 0 || entries(TABLE_RSTB_ENTRIES) != 0
+}
+
+fn update_once(redirect: bool) {
+    if UPDATED.swap(true, Ordering::AcqRel) {
         return;
     }
     if arena::with_borrowed_memory(update) {
         skyline::nn::oe::exit_application();
     }
     // A table from an earlier launch still beats the game's own when this update failed
-    if platform::file_exists(MODDED_TABLE) {
+    if redirect && platform::file_exists(MODDED_TABLE) {
         redirect::install(TABLE, MODDED_TABLE);
     }
 }
 
-/// Updates the table, returning whether the game must close.
+nookkit_sym::hook! {
+    pub table_load = sym::game::ResourceSizeTable::load;
+    fn(table: *mut c_void, args: *const c_void) -> bool {
+        update_once(true);
+        unsafe { original(table, args) }
+    }
+}
+
+// Whether the game must close
 fn update(loan: &arena::Loan) -> bool {
     let mut log = Log::default();
     log.line(loan.report.trim_end());
     let outcome = match loan.size {
         // malloc's 32 MiB, which the game shares, is too little for model and shader data
-        0 => Err("No game heap could lend enough memory to size files.".to_string()),
+        0 => Err("No game heap could lend enough memory to size files".to_string()),
         _ => run(&mut log),
     };
     match outcome {
@@ -97,7 +121,7 @@ fn update(loan: &arena::Loan) -> bool {
         Ok(Outcome::Restart(reason)) => {
             log.line(reason);
             log.save();
-            skyline::error::show_error(ERROR_CODE, "Auto RSTB: please start the game again.", reason);
+            skyline::error::show_error(ERROR_CODE, "NookKit: please start the game again.", reason);
             true
         }
         Err(error) => {
@@ -105,12 +129,8 @@ fn update(loan: &arena::Loan) -> bool {
             log.save();
             skyline::error::show_error(
                 ERROR_CODE,
-                "Auto RSTB could not update the resource size table.",
-                &format!(
-                    "{error}
-
-Modded files may crash the game. Details are in {LOG}."
-                ),
+                "NookKit could not update the resource size table.",
+                &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
             );
             false
         }
@@ -120,114 +140,131 @@ Modded files may crash the game. Details are in {LOG}."
 fn run(log: &mut Log) -> Result<Outcome, String> {
     platform::create_dirs(CONFIG)?;
     let folders = mods::folders()?;
-    let rom = RomMount::new(ROM_MOUNT).map_err(|error| log.line(format!("{error} Vanilla files are unavailable."))).ok();
-    let Some(vanilla) = vanilla_table(log, &folders, rom.as_ref())? else {
-        return Ok(Outcome::Restart("A resource size table in a romfs folder hid the game's own, so it was moved to the config folder. The game's table can be read from the next launch."));
+    let Some(vanilla) = vanilla_table(log, &folders)? else {
+        return Ok(Outcome::Restart(
+            "A resource size table in a romfs folder hid the game's own, so it was moved to the config folder. The game's table can be read from the next launch.",
+        ));
     };
 
     let mut table = vanilla;
-    size_files(log, &mut table, &folders, rom.as_ref())?;
-    drop(rom);
+    size_files(log, &mut table, &folders)?;
 
-    if platform::read_optional(MODDED_TABLE)?.is_some_and(|bytes| parse_table(&bytes).is_ok_and(|current| current == table)) {
-        log.line("The table is up to date.");
+    if platform::read_optional(MODDED_TABLE)?
+        .is_some_and(|bytes| parse_table(&bytes).is_ok_and(|current| current == table))
+    {
+        log.line("The table is up to date");
         return Ok(Outcome::Ready);
     }
     let bytes = yaz0::compress(&table.serialize());
     platform::replace(MODDED_TABLE, TEMPORARY, &bytes)?;
-    log.line(format!("Wrote the table ({} bytes).", bytes.len()));
+    log.line(format!("Wrote the table ({} bytes)", bytes.len()));
     Ok(Outcome::Ready)
 }
 
-/// The game's own table: the saved copy, else the romfs's table, which is the game's only
-/// while no romfs folder has a table. Tables found there are moved away, returning `None`:
-/// the game's romfs keeps showing them for this launch.
-fn vanilla_table(log: &mut Log, folders: &[Folder], rom: Option<&RomMount>) -> Result<Option<Table>, String> {
-    let modded: Vec<_> =
-        folders.iter().map(|folder| (folder, format!("{}/{TABLE}", folder.root))).filter(|(_, path)| platform::file_exists(path)).collect();
+// The saved copy, else the romfs table, which is the game's own only while no romfs folder has one.
+// Tables found there are moved away and `None` returned, as the romfs keeps showing them this launch
+fn vanilla_table(log: &mut Log, folders: &[Folder]) -> Result<Option<Table>, String> {
+    let modded: Vec<_> = folders
+        .iter()
+        .map(|folder| (folder, format!("{}/{TABLE}", folder.root)))
+        .filter(|(_, path)| platform::file_exists(path))
+        .collect();
     if let Some(bytes) = platform::read_optional(VANILLA_TABLE)? {
         match parse_table(&bytes) {
             Ok(table) => {
                 for (_, path) in &modded {
-                    log.line(format!("{path} is ignored: the game reads {MODDED_TABLE}, built from its own table."));
+                    log.line(format!(
+                        "{path} is ignored, the game reads {MODDED_TABLE}, built from its own table"
+                    ));
                 }
                 return Ok(Some(table));
             }
-            Err(error) => log.line(format!("The saved copy of the game's table is invalid ({error}), so it is read again.")),
+            Err(error) => log.line(format!(
+                "The saved copy of the game's table is invalid ({error}), so it is read again"
+            )),
         }
     }
     if !modded.is_empty() {
         for (folder, path) in &modded {
             let moved = format!("{CONFIG}/moved-from-{}.srsizetable", folder.name);
             platform::rename(path, &moved)?;
-            log.line(format!("Moved {path} to {moved}."));
+            log.line(format!("Moved {path} to {moved}"));
         }
         return Ok(None);
     }
-    let rom = rom.ok_or("The game's resource size table cannot be read without the romfs.")?;
-    let bytes = platform::read(&rom.path(TABLE))?;
+    let bytes = platform::read(&platform::rom_path(TABLE))?;
     let table = parse_table(&bytes)?;
     platform::write(VANILLA_TABLE, &bytes)?;
     Ok(Some(table))
 }
 
 fn parse_table(bytes: &[u8]) -> Result<Table, String> {
-    yaz0::decompress(bytes).and_then(|data| Table::parse(&data)).map_err(|error| error.0)
+    yaz0::decompress(bytes)
+        .and_then(|data| Table::parse(&data))
+        .map_err(|error| error.0)
 }
 
-/// The path a modded file is read from. The game's romfs holds the copy the game loads, as
-/// it resolves files that several folders replace. Without it, the first copy is read.
-fn source(log: &mut Log, rom: Option<&RomMount>, relative: &str, copies: &Copies) -> Option<String> {
-    match rom {
-        Some(rom) => {
-            let path = rom.path(relative);
-            if platform::file_exists(&path) {
-                return Some(path);
-            }
-            // A new file of a mod the emulator does not load
-            log.line(format!("{relative}: not in the game's romfs, so its mod is not loaded; skipped."));
-            None
-        }
-        None => {
-            if copies.len() > 1 {
-                log.line(format!("{relative}: {} copies, and without the game's romfs the first is sized.", copies.len()));
-            }
-            Some(copies[0].0.clone())
-        }
+// The game's romfs holds the copy the game loads when several folders replace a file
+fn source(log: &mut Log, relative: &str) -> Option<String> {
+    let path = platform::rom_path(relative);
+    if platform::file_exists(&path) {
+        return Some(path);
     }
+    log.line(format!(
+        "{relative}: not in the game's romfs, so its mod is not loaded, skipped"
+    ));
+    None
 }
 
-/// Sizes every table resource in the romfs folders into `table`.
-fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder], rom: Option<&RomMount>) -> Result<(), String> {
+fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder]) -> Result<(), String> {
     let (files, counts) = mods::files(folders)?;
-    let listed: Vec<_> = folders.iter().zip(&counts).map(|(folder, count)| format!("{} ({count})", folder.root)).collect();
-    log.line(format!("Modded files: {}.", listed.join(", ")));
+    let listed: Vec<_> = folders
+        .iter()
+        .zip(&counts)
+        .map(|(folder, count)| format!("{} ({count})", folder.root))
+        .collect();
+    log.line(format!("Modded files: {}", listed.join(", ")));
 
     let shader_copies = files.get(SHADER_ARCHIVE);
-    let shader_path = match (rom, shader_copies) {
-        (Some(rom), _) => rom.path(SHADER_ARCHIVE),
-        (None, Some(copies)) => copies[0].0.clone(),
-        (None, None) => format!("{}/{SHADER_ARCHIVE}", folders[0].root),
-    };
+    let shader_path = platform::rom_path(SHADER_ARCHIVE);
     let shader = match shader_copies {
-        Some(copies) => format!("sd shader {} {}", mods::length(copies), mods::stamp(copies)?),
+        Some(copies) => format!(
+            "sd shader {} {}",
+            mods::length(copies),
+            mods::stamp(copies)?
+        ),
         None => "game shader".to_string(),
     };
-    let mut cache = Cache::load(CACHE, format!("auto-rstb {} rstb {} {shader}", env!("CARGO_PKG_VERSION"), rstb::VERSION));
+    let mut cache = Cache::load(
+        CACHE,
+        format!(
+            "nookkit {} rstb {} {shader}",
+            env!("CARGO_PKG_VERSION"),
+            nookkit_rstb::VERSION
+        ),
+    );
     let mut sizer = Sizer::new(shader_path);
     let (mut sized, mut cached, mut changed, mut added, mut removed) = (0, 0, 0, 0, 0);
     for (relative, copies) in &files {
-        let Some(name) = table_name(relative) else { continue };
-        let Some(path) = source(log, rom, relative, copies) else { continue };
+        let Some(name) = table_name(relative) else {
+            continue;
+        };
+        let Some(path) = source(log, relative) else {
+            continue;
+        };
         let length = mods::length(copies);
         let stamp = mods::stamp(copies);
-        let size = match stamp.as_deref().ok().and_then(|stamp| cache.get(relative, length, stamp)) {
+        let size = match stamp
+            .as_deref()
+            .ok()
+            .and_then(|stamp| cache.get(relative, length, stamp))
+        {
             Some(size) => {
                 cached += 1;
                 size
             }
             None => sizer.file_size(&path, name).unwrap_or_else(|error| {
-                log.line(format!("{relative}: {error} The game sizes it itself."));
+                log.line(format!("{relative}: {error}, the game sizes it itself"));
                 GAME_SIZED
             }),
         };
@@ -235,7 +272,9 @@ fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder], rom: Option<
             cache.insert(relative, length, stamp, size);
         }
         if size == UNSUPPORTED {
-            log.line(format!("{relative}: no traced size; its table entry was left as it is."));
+            log.line(format!(
+                "{relative}: no traced size, its table entry was left as it is"
+            ));
             continue;
         }
         match table.set(name, size) {
@@ -248,11 +287,13 @@ fn size_files(log: &mut Log, table: &mut Table, folders: &[Folder], rom: Option<
         sized += 1;
     }
     if let Some(error) = sizer.shader_error() {
-        log.line(format!("The shader archive could not be read ({error}); the game sizes geometry models itself."));
+        log.line(format!(
+            "The shader archive could not be read ({error}), the game sizes geometry models itself"
+        ));
     }
     if let Err(error) = cache.save(CACHE) {
         log.line(error);
     }
-    log.line(format!("{} files, {sized} sized ({cached} from the cache); against the game's table, {changed} entries changed, {added} added, {removed} removed.", files.len()));
+    log.line(format!("{} files, {sized} sized ({cached} from the cache), against the game's table {changed} entries changed, {added} added, {removed} removed", files.len()));
     Ok(())
 }

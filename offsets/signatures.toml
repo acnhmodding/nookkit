@@ -19,6 +19,7 @@
 "game::PlayerControlLockMgr::acquire" = "ptr, ptr, i64, i32 -> i8"
 "game::PlayerControlLockMgr::isPlayerLocked" = "ptr, i32 -> i8"
 "game::PlayerControlLockMgr::releaseMenuLock" = "ptr -> i8"
+"game::ResourceSizeTable::load" = "ptr, ptr -> i8"
 "game::System::getLanguageImpl" = " -> i32"
 "game::UI::AppScrollBtnListCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UI::AppUniteBtnCtrl::getRuntimeTypeInfo" = "ptr -> ptr"

@@ -2,8 +2,8 @@ use core::ffi::c_void;
 
 use native_vtable::{vtable, vtable_impl};
 
-use crate::sead::IDisposer;
 use crate::sead::runtime_type_info::Interface;
+use crate::sead::{IDisposer, ListNode, OffsetList, SafeString};
 
 #[vtable(path = sead::heap::VftHeap)]
 pub unsafe trait VftHeap {
@@ -49,12 +49,29 @@ const _: () = {
 #[repr(C)]
 pub struct Heap {
     pub base: IDisposer,
+    pub name: SafeString<'static>,
+    pub start: *mut c_void,
+    pub size: usize,
+    pub parent: *mut Heap,
+    pub children: OffsetList,
+    pub list_node: ListNode,
 }
+
+const _: () = {
+    assert!(core::mem::offset_of!(Heap, name) == 0x20);
+    assert!(core::mem::offset_of!(Heap, size) == 0x38);
+    assert!(core::mem::offset_of!(Heap, children) == 0x48);
+    assert!(core::mem::offset_of!(Heap, list_node) == 0x60);
+};
 
 #[vtable_impl]
 unsafe impl VftHeap for Heap {}
 
 impl Heap {
+    pub unsafe fn children(&self) -> impl Iterator<Item = *mut Heap> + '_ {
+        unsafe { self.children.iter() }
+    }
+
     pub unsafe fn alloc<T>(&mut self) -> *mut T {
         unsafe {
             self.try_alloc(core::mem::size_of::<T>(), core::mem::align_of::<T>() as i32)

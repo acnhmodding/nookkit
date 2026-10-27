@@ -26,6 +26,7 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::PlayerControlLockMgr::acquire" = 0x971bb8
 "game::PlayerControlLockMgr::isPlayerLocked" = 0x9738a0
 "game::PlayerControlLockMgr::releaseMenuLock" = 0x977c2c
+"game::ResourceSizeTable::load" = 0x3e3c8dc
 "game::System::getLanguageImpl" = 0x37cefc4
 "game::UI::AppBodyCtrl::getRuntimeTypeInfo" = 0x2fb9964
 "game::UI::AppLocatorCtrl::getRuntimeTypeInfo" = 0x2fbbd6c
@@ -65,9 +66,12 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UI::ListBtnGroup::vtable" = 0x49aaf10
 "game::UISys::ScrollBtnListCtrl::EnableParams::vtable" = 0x4a2b050
 "game::UISys::ScrollBtnListCtrl::SetContentParams::vtable" = 0x4a2b020
+"sead::ExpHeap::vtable" = 0x4a64448
 "sead::FixedSafeString<64>::vtable" = 0x47fb9f8
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
 
 [data]
 "game::PlayerControlLockMgr::sInstance" = 0x4ca4ab8
+"game::ResourceMgr::sInstance" = 0x5a05848
 "game::System::sLanguageCodes" = 0x4812310
+"sead::HeapMgr::sRootHeaps" = 0x59e7550

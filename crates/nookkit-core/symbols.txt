@@ -18,3 +18,7 @@ fn	game::MessageAttribute::read6
 fn	game::MessageAttribute::read7
 fn	game::System::getLanguageImpl
 data	game::System::sLanguageCodes
+fn	game::ResourceSizeTable::load
+data	game::ResourceMgr::sInstance
+data	sead::HeapMgr::sRootHeaps
+vtable	sead::ExpHeap::vtable
