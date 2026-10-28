@@ -31,6 +31,7 @@ const TEMPORARY: &str = "sd:/config/nookkit/rstb/table.tmp";
 const STATE: &str = "sd:/config/nookkit/rstb/state.txt";
 
 const ERROR_CODE: u32 = 2;
+const PLUGINS: &str = "skyline/plugins";
 
 // game::ResourceMgr's ResourceSizeTable, and that table's RSTC and RSTB entry pointers
 const MGR_TABLE: usize = 0x820;
@@ -168,6 +169,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
         .map(|(folder, count)| format!("{} ({count})", folder.root))
         .collect();
     log.line(format!("Modded files: {}", listed.join(", ")));
+    warn_unseen_mods(log, &files);
 
     let shader = match files.get(SHADER_ARCHIVE) {
         Some(copies) => format!(
@@ -264,6 +266,33 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
         fingerprint,
         need,
     }))
+}
+
+// Skyline loads every plugin from the game's romfs, so a plugin no scanned folder holds comes from a mod
+// folder the game can't see, like an emulator's own mods folder outside its SD card. That mod's files
+// keep their old sizes and may crash the game
+fn warn_unseen_mods(log: &mut Log, files: &BTreeMap<String, Copies>) {
+    let plugins = platform::files(&platform::rom_path(PLUGINS)).unwrap_or_default();
+    let unseen: Vec<_> = plugins
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .filter(|name| !files.contains_key(&format!("{PLUGINS}/{name}")))
+        .collect();
+    if unseen.is_empty() {
+        return;
+    }
+    let error = format!(
+        "{} loaded from a mod folder outside the SD card, so its files can't be sized",
+        unseen.join(", ")
+    );
+    log.line(&error);
+    skyline::error::show_error(
+        ERROR_CODE,
+        "NookKit can't see a mod folder, its files may crash the game.",
+        &format!(
+            "{error}.\n\nMove the mod to sdcard/atmosphere/contents/01006F8002326000/<mod>/romfs, or link the emulator's mods/contents folder to sdcard/load."
+        ),
+    );
 }
 
 // Whether it failed
