@@ -132,8 +132,7 @@ nookkit_sym::hook! {
 
 fn fail(log: &mut Log, error: &str) {
     log.line(format!("Failed: {error}"));
-    skyline::error::show_error(
-        ERROR_CODE,
+    show_error(
         "NookKit could not update the resource size table.",
         &format!("{error}\n\nModded files may crash the game. Details are in {LOG}."),
     );
@@ -268,6 +267,11 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
     }))
 }
 
+// skyline's show_error only terminates strings it truncates, so short ones would run into whatever follows
+fn show_error(message: &str, details: &str) {
+    skyline::error::show_error(ERROR_CODE, &format!("{message}\0"), &format!("{details}\0"));
+}
+
 // Skyline loads every plugin from the game's romfs, so a plugin no scanned folder holds comes from a mod
 // folder the game can't see, like an emulator's own mods folder outside its SD card. That mod's files
 // keep their old sizes and may crash the game
@@ -286,8 +290,7 @@ fn warn_unseen_mods(log: &mut Log, files: &BTreeMap<String, Copies>) {
         unseen.join(", ")
     );
     log.line(&error);
-    skyline::error::show_error(
-        ERROR_CODE,
+    show_error(
         "NookKit can't see a mod folder, its files may crash the game.",
         &format!(
             "{error}.\n\nMove the mod to sdcard/atmosphere/contents/01006F8002326000/<mod>/romfs, or link the emulator's mods/contents folder to sdcard/load."
