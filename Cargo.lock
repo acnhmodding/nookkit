@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "nookkit-bcsv"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "nookkit-hash",
  "serde",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "nookkit-hash"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "crc32fast",
 ]
