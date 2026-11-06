@@ -3,12 +3,10 @@ use std::sync::OnceLock;
 
 use nookkit_bcsv::{PatchSet, Table};
 use nookkit_sym::sym;
+use nookkit_types::bcsv::BcsvMgr;
 use nookkit_types::sead::{DirectResource, Heap, SafeString, VftDirectResource, VftHeap};
 
 const FOLDER: &str = "content:/NookKit/Bcsv";
-
-// game::BcsvMgr's count of loaded tables
-const MGR_LOADED: usize = 0x82c;
 
 static PATCHES: OnceLock<PatchSet> = OnceLock::new();
 
@@ -133,15 +131,11 @@ nookkit_sym::hook! {
     }
 }
 
-fn loaded_tables() -> u32 {
-    let Ok(instance) = nookkit_sym::data::<usize>(&sym::game::BcsvMgr::sInstance) else {
+fn loaded_tables() -> i32 {
+    let Ok(instance) = nookkit_sym::data::<*const BcsvMgr>(&sym::game::BcsvMgr::sInstance) else {
         return 0;
     };
-    let mgr = unsafe { *instance };
-    if mgr == 0 {
-        return 0;
-    }
-    unsafe { ((mgr + MGR_LOADED) as *const u32).read() }
+    unsafe { (*instance).as_ref() }.map_or(0, |mgr| mgr.table_count)
 }
 
 pub fn install() -> Result<(), nookkit_sym::SymError> {
