@@ -2,6 +2,7 @@
 members = [
     "crates/nookkit",
     "crates/nookkit-core",
+    "crates/nookkit-hash",
     "crates/nookkit-layouts",
     "crates/nookkit-msbt",
     "crates/nookkit-rstb",
@@ -27,6 +28,7 @@ ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 
 nookkit = { path = "crates/nookkit" }
 nookkit-core = { path = "crates/nookkit-core" }
+nookkit-hash = { path = "crates/nookkit-hash" }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
 nookkit-msbt = { path = "crates/nookkit-msbt" }
 nookkit-rstb = { path = "crates/nookkit-rstb" }

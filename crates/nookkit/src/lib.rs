@@ -19,6 +19,7 @@ use nookkit_types::native::SymbolKind as NativeKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
+pub use nookkit_hash as hash;
 pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, RelPath, kind, layouts, pages};
 pub use nookkit_sys::Player;
 pub use nookkit_types as types;

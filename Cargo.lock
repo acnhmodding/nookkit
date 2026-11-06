@@ -73,6 +73,7 @@ dependencies = [
 name = "nookkit"
 version = "0.2.0"
 dependencies = [
+ "nookkit-hash",
  "nookkit-layouts",
  "nookkit-sys",
  "nookkit-types",
@@ -92,6 +93,13 @@ dependencies = [
  "nookkit-types",
  "skyline",
  "talc",
+]
+
+[[package]]
+name = "nookkit-hash"
+version = "0.2.0"
+dependencies = [
+ "crc32fast",
 ]
 
 [[package]]
