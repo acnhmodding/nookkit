@@ -1,14 +1,33 @@
-use crate::reader::{Reader, Result, fail};
+//! The game's SARC archives: the files inside one, read in place
 
-pub(crate) struct Member {
+use std::fmt;
+
+/// Why an archive could not be read
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Error(pub &'static str);
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for Error {}
+
+/// A file in an archive, as where its data sits in the archive
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Member {
+    /// `None` for a member stored without a name
     pub name: Option<String>,
-    pub offset: i64,
-    pub length: i64,
+    pub offset: usize,
+    pub length: usize,
 }
 
 impl Member {
     pub fn data<'a>(&self, archive: &'a [u8]) -> &'a [u8] {
-        &archive[self.offset as usize..(self.offset + self.length) as usize]
+        &archive[self.offset..self.offset + self.length]
     }
 
     pub fn is(&self, name: &str) -> bool {
@@ -16,49 +35,68 @@ impl Member {
     }
 }
 
-pub(crate) fn read(archive: &[u8]) -> Result<Vec<Member>> {
-    let sarc = Reader::new(archive);
-    let length = sarc.len();
-    if !sarc.magic(0, b"SARC")?
-        || sarc.u16(4)? != 0x14
-        || sarc.u16(6)? != 0xfeff
-        || sarc.u32(8)? as i64 != length
-        || sarc.u16(16)? != 0x100
-        || !sarc.magic(20, b"SFAT")?
-        || sarc.u16(24)? != 12
+const OUT_OF_BOUNDS: Error = Error("Resource data exceeds its bounds.");
+
+fn range(data: &[u8], at: usize, count: usize) -> Result<&[u8]> {
+    data.get(at..at.checked_add(count).ok_or(OUT_OF_BOUNDS)?)
+        .ok_or(OUT_OF_BOUNDS)
+}
+
+fn u16_at(data: &[u8], at: usize) -> Result<u16> {
+    Ok(u16::from_le_bytes(range(data, at, 2)?.try_into().unwrap()))
+}
+
+fn u32_at(data: &[u8], at: usize) -> Result<u32> {
+    Ok(u32::from_le_bytes(range(data, at, 4)?.try_into().unwrap()))
+}
+
+fn magic(data: &[u8], at: usize, magic: &[u8]) -> Result<bool> {
+    Ok(range(data, at, magic.len())? == magic)
+}
+
+/// Every member of a little-endian `archive`, in the order its node table lists them
+pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
+    let length = archive.len();
+    if !magic(archive, 0, b"SARC")?
+        || u16_at(archive, 4)? != 0x14
+        || u16_at(archive, 6)? != 0xfeff
+        || u32_at(archive, 8)? as usize != length
+        || u16_at(archive, 16)? != 0x100
+        || !magic(archive, 20, b"SFAT")?
+        || u16_at(archive, 24)? != 12
     {
-        return fail("Expected a little-endian SARC archive.");
+        return Err(Error("Expected a little-endian SARC archive."));
     }
 
-    let count = sarc.u16(26)? as i64;
+    let count = u16_at(archive, 26)? as usize;
     let names = 32 + count * 16;
-    let data = sarc.u32(12)? as i64;
+    let data = u32_at(archive, 12)? as usize;
     if names > length || data > length {
-        return fail("SARC nodes exceed the archive.");
+        return Err(Error("SARC nodes exceed the archive."));
     }
-    let has_names = names <= length - 8 && sarc.magic(names, b"SFNT")?;
+    let has_names = names + 8 <= length && magic(archive, names, b"SFNT")?;
 
-    let mut members = Vec::with_capacity(count as usize);
+    let mut members = Vec::with_capacity(count);
     for i in 0..count {
         let node = 32 + i * 16;
-        let attributes = sarc.u32(node + 4)?;
-        let start = data + sarc.u32(node + 8)? as i64;
-        let end = data + sarc.u32(node + 12)? as i64;
+        let attributes = u32_at(archive, node + 4)?;
+        let start = data + u32_at(archive, node + 8)? as usize;
+        let end = data + u32_at(archive, node + 12)? as usize;
         if end < start || end > length {
-            return fail("SARC member exceeds the archive.");
+            return Err(Error("SARC member exceeds the archive."));
         }
         let mut name = None;
         if attributes >> 24 != 0 {
-            let at = names + 8 + (attributes & 0xffffff) as i64 * 4;
+            let at = names + 8 + (attributes & 0xffffff) as usize * 4;
             let terminator = match has_names && at < data {
-                true => sarc.range(at, data - at)?.iter().position(|&b| b == 0),
+                true => range(archive, at, data - at)?.iter().position(|&b| b == 0),
                 false => None,
             };
             let Some(terminator) = terminator else {
-                return fail("SARC member name is invalid.");
+                return Err(Error("SARC member name is invalid."));
             };
             // ASCII as .NET decodes it, other bytes become ?
-            let bytes = sarc.range(at, terminator as i64)?;
+            let bytes = range(archive, at, terminator)?;
             name = Some(
                 bytes
                     .iter()

@@ -7,6 +7,7 @@ members = [
     "crates/nookkit-layouts",
     "crates/nookkit-msbt",
     "crates/nookkit-rstb",
+    "crates/nookkit-sarc",
     "crates/nookkit-sym",
     "crates/nookkit-sys",
     "crates/nookkit-types",
@@ -34,6 +35,7 @@ nookkit-hash = { path = "crates/nookkit-hash" }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
 nookkit-msbt = { path = "crates/nookkit-msbt" }
 nookkit-rstb = { path = "crates/nookkit-rstb" }
+nookkit-sarc = { path = "crates/nookkit-sarc" }
 nookkit-sym = { path = "crates/nookkit-sym" }
 nookkit-sys = { path = "crates/nookkit-sys" }
 nookkit-types = { path = "crates/nookkit-types" }

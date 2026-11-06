@@ -1,8 +1,10 @@
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
+use nookkit_sarc as sarc;
+
 use crate::reader::{Reader, Result, fail, read_file, to_int};
-use crate::{sarc, yaz0};
+use crate::yaz0;
 
 // A shader string: a 16-bit length, bytes and a terminator. A null pointer reads as ""
 fn string(data: Reader, at: i64) -> Result<String> {
@@ -456,10 +458,7 @@ pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
         let (Some(archive), None) = (archives.next(), archives.next()) else {
             return fail("Expected one BFSHA file in the shader archive.");
         };
-        let (start, end) = (
-            archive.offset as usize,
-            (archive.offset + archive.length) as usize,
-        );
+        let (start, end) = (archive.offset, archive.offset + archive.length);
         data.truncate(end);
         data.drain(..start);
     }

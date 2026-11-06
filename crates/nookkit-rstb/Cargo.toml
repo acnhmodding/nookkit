@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 crc32fast = { workspace = true }
 ruzstd = { workspace = true }
+nookkit-sarc = { workspace = true }

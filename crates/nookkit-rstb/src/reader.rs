@@ -16,6 +16,12 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl From<nookkit_sarc::Error> for Error {
+    fn from(error: nookkit_sarc::Error) -> Self {
+        Error(error.0.to_owned())
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
         Error(error.to_string())

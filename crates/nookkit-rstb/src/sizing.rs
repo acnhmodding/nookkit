@@ -1,11 +1,13 @@
 use std::fs::File;
 use std::io::Read;
 
+use nookkit_sarc as sarc;
+
 use crate::bfres::texture_animation_archive_size;
 use crate::geometry::GeometryAnalyzer;
 use crate::heap::{Request, high_water_mark, request};
 use crate::reader::{Result, align_up, fail, read_file};
-use crate::{physics, sarc, shader, zstd};
+use crate::{physics, shader, zstd};
 
 /// The game sizes the file itself: the table must have no entry for it
 pub const GAME_SIZED: i64 = -1;
@@ -39,7 +41,9 @@ pub fn sizing_memory(name: &str, length: u64, decompressed: u64) -> usize {
 
 /// Model archives may need the shader archive loaded, see [`SHADER_PEAK_MEMORY`]
 pub fn is_model_archive(name: &str) -> bool {
-    name.starts_with("Model/") && !name.starts_with("Model/Layout_") && name.ends_with(".Nin_NX_NVN")
+    name.starts_with("Model/")
+        && !name.starts_with("Model/Layout_")
+        && name.ends_with(".Nin_NX_NVN")
 }
 
 /// `None` for files that aren't table resources: plugins, NookKit's own data, the table itself and BYML

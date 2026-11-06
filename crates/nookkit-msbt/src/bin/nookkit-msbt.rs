@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use nookkit_msbt::msbt::Msbt;
-use nookkit_msbt::{Message, Patch, PatchSet, sarc, tags};
+use nookkit_msbt::{Message, Patch, PatchSet, tags};
 
 fn unzstd(path: &Path) -> Result<Vec<u8>, String> {
     let file = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -36,10 +36,11 @@ fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, M
     for name in names {
         let locale = &name[prefix.len()..name.len() - ".sarc.zs".len()];
         let archive_bytes = unzstd(&folder.join(&name))?;
-        let files = sarc::read(&archive_bytes).ok_or_else(|| format!("{name}: not a SARC"))?;
+        let members = nookkit_sarc::read(&archive_bytes).map_err(|e| format!("{name}: {e}"))?;
 
-        if let Some((_, data)) = files.iter().find(|(path, _)| *path == wanted) {
-            let msbt = Msbt::parse(data).ok_or_else(|| format!("{name}/{wanted}: not an MSBT"))?;
+        if let Some(member) = members.iter().find(|member| member.is(&wanted)) {
+            let msbt = Msbt::parse(member.data(&archive_bytes))
+                .ok_or_else(|| format!("{name}/{wanted}: not an MSBT"))?;
             out.insert(locale.to_owned(), msbt);
         }
     }

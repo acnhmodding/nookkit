@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
+use nookkit_sarc::{self as sarc, Member};
+
 use crate::bfres::{animation_bytes, is_bfres, runtime_pool_bytes, single_bfres, texture_count};
 use crate::heap::{Request, gpu_pool_parent_requests, high_water_mark, request};
 use crate::physics;
 use crate::reader::{Error, Reader, Result, align_up, fail};
-use crate::sarc::{self, Member};
 use crate::shader::{ProgramLayout, ShaderArchive, ShadingModel};
 
 #[rustfmt::skip]

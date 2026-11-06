@@ -3,7 +3,6 @@ mod geometry;
 mod heap;
 mod physics;
 mod reader;
-mod sarc;
 mod shader;
 pub mod sizing;
 pub mod table;

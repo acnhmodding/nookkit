@@ -1,6 +1,8 @@
+use nookkit_sarc as sarc;
+
+use crate::crc32;
 use crate::heap::{Request, high_water_mark, request};
 use crate::reader::{Reader, Result, fail, to_int};
-use crate::{crc32, sarc};
 
 // The phive holder directly follows the outer archive's SARC resource object
 // (0x58 bytes, 0x20-aligned), so its free block starts at 24 mod 32
