@@ -5,7 +5,7 @@ use nookkit_sarc::Member;
 use crate::bfres::{animation_bytes, is_bfres, runtime_pool_bytes, single_bfres, texture_count};
 use crate::heap::{Request, gpu_pool_parent_requests, high_water_mark, request};
 use crate::physics;
-use crate::reader::{Error, Reader, Result, align_up, fail};
+use crate::reader::{Reader, Result, align_up, fail};
 use crate::shader::{ProgramLayout, ShaderArchive, ShadingModel};
 
 #[rustfmt::skip]
@@ -587,7 +587,7 @@ fn assignments(
             .insert(name, d.name(d.pointer(value)?)?.to_owned())
             .is_some()
         {
-            return Err(Error("Duplicate shader assignment.".into()));
+            return fail("Duplicate shader assignment.");
         }
     }
     Ok(result)

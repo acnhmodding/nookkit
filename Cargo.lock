@@ -133,11 +133,15 @@ dependencies = [
  "crc32fast",
  "nookkit-sarc",
  "ruzstd",
+ "thiserror",
 ]
 
 [[package]]
 name = "nookkit-sarc"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "nookkit-sym"

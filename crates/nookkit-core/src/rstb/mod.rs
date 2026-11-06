@@ -368,7 +368,7 @@ fn base_table(log: &mut Log, folders: &[Folder]) -> Result<Table, String> {
 fn parse_table(bytes: &[u8]) -> Result<Table, String> {
     yaz0::decompress(bytes)
         .and_then(|data| Table::parse(&data))
-        .map_err(|error| error.0)
+        .map_err(|error| error.to_string())
 }
 
 // The game's romfs holds the copy the game loads when several folders replace a file. A file missing
@@ -432,7 +432,9 @@ fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), Strin
                     log.line(format!(
                         "{relative}: no traced size and larger than its entry, which is removed so the game sizes it"
                     ));
-                    table.set(name, GAME_SIZED).map_err(|error| error.0)?;
+                    table
+                        .set(name, GAME_SIZED)
+                        .map_err(|error| error.to_string())?;
                     removed += 1;
                 } else {
                     log.line(format!(

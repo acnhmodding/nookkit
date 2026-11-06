@@ -1,20 +1,21 @@
 //! The game's SARC archives: the files inside one, read in place
 
-use std::fmt;
-
 /// Why an archive could not be read
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Error(pub &'static str);
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum Error {
+    #[error("Resource data exceeds its bounds.")]
+    OutOfBounds,
+    #[error("Expected a little-endian SARC archive.")]
+    NotSarc,
+    #[error("SARC nodes exceed the archive.")]
+    NodesOutOfBounds,
+    #[error("SARC member exceeds the archive.")]
+    MemberOutOfBounds,
+    #[error("SARC member name is invalid.")]
+    InvalidName,
 }
 
-impl std::error::Error for Error {}
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// A file in an archive, as where its data sits in the archive
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,11 +36,9 @@ impl Member {
     }
 }
 
-const OUT_OF_BOUNDS: Error = Error("Resource data exceeds its bounds.");
-
 fn range(data: &[u8], at: usize, count: usize) -> Result<&[u8]> {
-    data.get(at..at.checked_add(count).ok_or(OUT_OF_BOUNDS)?)
-        .ok_or(OUT_OF_BOUNDS)
+    data.get(at..at.checked_add(count).ok_or(Error::OutOfBounds)?)
+        .ok_or(Error::OutOfBounds)
 }
 
 fn u16_at(data: &[u8], at: usize) -> Result<u16> {
@@ -65,14 +64,14 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
         || !magic(archive, 20, b"SFAT")?
         || u16_at(archive, 24)? != 12
     {
-        return Err(Error("Expected a little-endian SARC archive."));
+        return Err(Error::NotSarc);
     }
 
     let count = u16_at(archive, 26)? as usize;
     let names = 32 + count * 16;
     let data = u32_at(archive, 12)? as usize;
     if names > length || data > length {
-        return Err(Error("SARC nodes exceed the archive."));
+        return Err(Error::NodesOutOfBounds);
     }
     let has_names = names + 8 <= length && magic(archive, names, b"SFNT")?;
 
@@ -83,7 +82,7 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
         let start = data + u32_at(archive, node + 8)? as usize;
         let end = data + u32_at(archive, node + 12)? as usize;
         if end < start || end > length {
-            return Err(Error("SARC member exceeds the archive."));
+            return Err(Error::MemberOutOfBounds);
         }
         let mut name = None;
         if attributes >> 24 != 0 {
@@ -93,7 +92,7 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
                 false => None,
             };
             let Some(terminator) = terminator else {
-                return Err(Error("SARC member name is invalid."));
+                return Err(Error::InvalidName);
             };
             // ASCII as .NET decodes it, other bytes become ?
             let bytes = range(archive, at, terminator)?;
@@ -162,7 +161,8 @@ mod tests {
     #[test]
     fn rejects_invalid_archives() {
         let sarc = archive(&[("output.bfres", b"model")]);
-        assert!(read(&sarc[..sarc.len() - 1]).is_err());
-        assert!(read(b"Yaz0").is_err());
+        assert_eq!(read(&sarc[..sarc.len() - 1]), Err(Error::NotSarc));
+        assert_eq!(read(b"Yaz0"), Err(Error::NotSarc));
+        assert_eq!(read(b"SA"), Err(Error::OutOfBounds));
     }
 }

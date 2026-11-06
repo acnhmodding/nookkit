@@ -116,7 +116,7 @@ fn new_decoder(window: u64) -> Result<FrameDecoder> {
     let mut probe: Vec<u8> = Vec::new();
     probe
         .try_reserve_exact(2 * window as usize + (1 << 20))
-        .map_err(|_| Error("Out of memory for the Zstandard window.".into()))?;
+        .map_err(|_| Error::Message("Out of memory for the Zstandard window.".into()))?;
     drop(probe);
     let mut decoder = FrameDecoder::new();
     decoder.set_max_window_size(MAX_WINDOW);
@@ -124,7 +124,7 @@ fn new_decoder(window: u64) -> Result<FrameDecoder> {
 }
 
 fn decode_error(error: impl std::fmt::Display) -> Error {
-    Error(format!("Zstandard data is invalid: {error}"))
+    Error::Message(format!("Zstandard data is invalid: {error}"))
 }
 
 // For a frame without a declared size
@@ -163,17 +163,17 @@ fn total_length(data: &[u8], frames: &[Frame]) -> Result<u64> {
         };
         total
             .checked_add(size)
-            .ok_or_else(|| Error("Zstandard data is too large.".into()))
+            .ok_or_else(|| Error::Message("Zstandard data is too large.".into()))
     })
 }
 
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     let frames = frames(data)?;
     let length = usize::try_from(total_length(data, &frames)?)
-        .map_err(|_| Error("Zstandard data is too large.".into()))?;
+        .map_err(|_| Error::Message("Zstandard data is too large.".into()))?;
     let mut out = Vec::new();
     out.try_reserve_exact(length)
-        .map_err(|_| Error("Out of memory for Zstandard data.".into()))?;
+        .map_err(|_| Error::Message("Out of memory for Zstandard data.".into()))?;
     out.resize(length, 0);
     let window = frames.iter().map(|f| f.window).max().unwrap_or(0);
     let written = new_decoder(window)?

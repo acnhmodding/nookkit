@@ -1,35 +1,21 @@
-use std::fmt;
 use std::fs::File;
 use std::io::Read;
 
 /// Why a file could not be sized. Callers keep the game's own sizing for it (no table entry)
-#[derive(Debug)]
-pub struct Error(pub String);
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Message(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Sarc(#[from] nookkit_sarc::Error),
+}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<nookkit_sarc::Error> for Error {
-    fn from(error: nookkit_sarc::Error) -> Self {
-        Error(error.0.to_owned())
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
-        Error(error.to_string())
-    }
-}
-
 pub(crate) fn fail<T>(message: impl Into<String>) -> Result<T> {
-    Err(Error(message.into()))
+    Err(Error::Message(message.into()))
 }
 
 // Fails instead of aborting when the file does not fit in memory
@@ -37,7 +23,7 @@ pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut data = Vec::new();
     data.try_reserve_exact(file.metadata()?.len() as usize)
-        .map_err(|_| Error(format!("Out of memory reading {path}.")))?;
+        .map_err(|_| Error::Message(format!("Out of memory reading {path}.")))?;
     file.read_to_end(&mut data)?;
     Ok(data)
 }

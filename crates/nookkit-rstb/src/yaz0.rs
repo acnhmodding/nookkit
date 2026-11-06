@@ -16,12 +16,12 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     let size = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
     let mut out = Vec::new();
     out.try_reserve_exact(size)
-        .map_err(|_| Error("Out of memory for Yaz0 data.".into()))?;
+        .map_err(|_| Error::Message("Out of memory for Yaz0 data.".into()))?;
     let mut input = data[HEADER_BYTES..].iter().copied();
     let mut next = || {
         input
             .next()
-            .ok_or_else(|| Error("Yaz0 data is truncated.".into()))
+            .ok_or_else(|| Error::Message("Yaz0 data is truncated.".into()))
     };
     let (mut flags, mut flag_bits) = (0u8, 0);
     while out.len() < size {

@@ -7,3 +7,4 @@ edition = "2024"
 crc32fast = { workspace = true }
 ruzstd = { workspace = true }
 nookkit-sarc = { workspace = true }
+thiserror = { workspace = true }
