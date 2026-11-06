@@ -1,5 +1,3 @@
-use nookkit_sarc as sarc;
-
 use crate::crc32;
 use crate::heap::{Request, high_water_mark, request};
 use crate::reader::{Reader, Result, fail, to_int};
@@ -33,7 +31,7 @@ pub(crate) fn requests(phive: &[u8]) -> Result<Vec<Request>> {
         "output.bphfbc",
     ];
     let mut files: [Option<&[u8]>; 4] = [None; 4];
-    for member in sarc::read(phive)? {
+    for member in nookkit_sarc::read(phive)? {
         let index = NAMES.iter().position(|&name| member.is(name));
         match index {
             Some(i) if files[i].is_none() => files[i] = Some(member.data(phive)),

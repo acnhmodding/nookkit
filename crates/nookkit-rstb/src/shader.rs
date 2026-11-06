@@ -1,8 +1,6 @@
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
-use nookkit_sarc as sarc;
-
 use crate::reader::{Reader, Result, fail, read_file, to_int};
 use crate::yaz0;
 
@@ -451,7 +449,7 @@ pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
         data = yaz0::decompress(&data)?;
     }
     if !data.starts_with(b"FSHA") {
-        let members = sarc::read(&data)?;
+        let members = nookkit_sarc::read(&data)?;
         let mut archives = members
             .iter()
             .filter(|m| m.data(&data).starts_with(b"FSHA"));

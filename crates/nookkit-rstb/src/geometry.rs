@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use nookkit_sarc::{self as sarc, Member};
+use nookkit_sarc::Member;
 
 use crate::bfres::{animation_bytes, is_bfres, runtime_pool_bytes, single_bfres, texture_count};
 use crate::heap::{Request, gpu_pool_parent_requests, high_water_mark, request};
@@ -421,7 +421,7 @@ fn read_archive(archive: &[u8]) -> Option<(Member, Option<Member>)> {
     if let Some(bfres) = single_bfres(archive) {
         return Some((bfres, None));
     }
-    let mut members = sarc::read(archive).ok()?;
+    let mut members = nookkit_sarc::read(archive).ok()?;
     if members.len() != 2
         || !members[0].is("output.phive")
         || members[0].offset != 0x2000

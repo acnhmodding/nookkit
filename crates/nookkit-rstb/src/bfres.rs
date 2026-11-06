@@ -1,4 +1,4 @@
-use nookkit_sarc::{self as sarc, Member};
+use nookkit_sarc::Member;
 
 use crate::heap::{Request, request};
 use crate::reader::{Reader, Result, align_up, fail};
@@ -7,7 +7,7 @@ use crate::sizing::model_archive_load_bytes;
 // The canonical single-member ACNH model archive: one BFRES at 0x2000. Other members
 // (physics, shaders, nested archives) have independent allocations
 pub(crate) fn single_bfres(archive: &[u8]) -> Option<Member> {
-    let mut members = sarc::read(archive).ok()?;
+    let mut members = nookkit_sarc::read(archive).ok()?;
     if members.len() != 1 || members[0].offset != 0x2000 || !is_bfres(members[0].data(archive)) {
         return None;
     }

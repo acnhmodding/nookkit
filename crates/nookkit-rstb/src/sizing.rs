@@ -1,8 +1,6 @@
 use std::fs::File;
 use std::io::Read;
 
-use nookkit_sarc as sarc;
-
 use crate::bfres::texture_animation_archive_size;
 use crate::geometry::GeometryAnalyzer;
 use crate::heap::{Request, high_water_mark, request};
@@ -102,7 +100,7 @@ impl Sizer {
         if let Some(allocation) = texture_animation_archive_size(&archive) {
             return Ok(allocation as i64);
         }
-        if let Ok(members) = sarc::read(&archive) {
+        if let Ok(members) = nookkit_sarc::read(&archive) {
             let loaded = align_up(archive.len() as i64, 32);
             // Collision archives: PBC members are read in place, so only the archive load itself allocates
             if !members.is_empty()
