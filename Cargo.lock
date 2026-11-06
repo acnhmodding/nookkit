@@ -82,6 +82,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nookkit-bcsv"
+version = "0.2.0"
+dependencies = [
+ "nookkit-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nookkit-core"
 version = "0.2.0"
 dependencies = [
