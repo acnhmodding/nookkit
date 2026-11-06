@@ -2,9 +2,10 @@ use std::fs::File;
 use std::io::Read;
 
 use crate::bfres::texture_animation_archive_size;
+use crate::error::{Error, Result, fail};
 use crate::geometry::GeometryAnalyzer;
 use crate::heap::{Request, high_water_mark, request};
-use crate::reader::{Result, align_up, fail, read_file};
+use crate::reader::{align_up, read_file};
 use crate::{physics, shader, zstd};
 
 /// The game sizes the file itself: the table must have no entry for it
@@ -90,7 +91,7 @@ impl Sizer {
             }
         };
         if size > u32::MAX as i64 {
-            return fail(format!("{path} is too big!"));
+            return fail(Error::TooBig(path.to_owned()));
         }
         Ok(size)
     }

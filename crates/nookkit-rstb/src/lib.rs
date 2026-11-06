@@ -1,4 +1,5 @@
 mod bfres;
+pub mod error;
 mod geometry;
 mod heap;
 mod physics;
@@ -11,7 +12,7 @@ mod zstd;
 
 pub use zstd::declared_length;
 
-pub use reader::{Error, Result};
+pub use error::{Error, Result};
 
 /// Changes whenever calculated sizes may change, so cached sizes are recalculated
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

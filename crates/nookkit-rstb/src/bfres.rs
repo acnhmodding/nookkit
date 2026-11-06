@@ -1,7 +1,8 @@
 use nookkit_sarc::Member;
 
+use crate::error::{BfresError, Result, fail};
 use crate::heap::{Request, request};
-use crate::reader::{Reader, Result, align_up, fail};
+use crate::reader::{Reader, align_up};
 use crate::sizing::model_archive_load_bytes;
 
 // The canonical single-member ACNH model archive: one BFRES at 0x2000. Other members
@@ -57,7 +58,7 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
     let files = bfres.u16(0xec)? as i64;
     let array = bfres.pointer(0xb8)?;
     if (files == 0) != (array == 0) || (files == 0 && bfres.u64(0xc0)? != 0) {
-        return fail("External file arrays do not match their count.");
+        return fail(BfresError::ExternalFileCount);
     }
 
     let relocation = bfres.u32(24)? as i64;
@@ -66,7 +67,7 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
         let at = bfres.pointer(array + i * 16)?;
         let length = bfres.pointer(array + i * 16 + 8)?;
         if at + length > relocation {
-            return fail("External file overlaps the relocation table.");
+            return fail(BfresError::ExternalFileOverlap);
         }
         let bntx = bfres.slice(at, length)?;
         if bntx.len() < 0x58
@@ -77,13 +78,13 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
             || bntx.u32(28)? as i64 != length
             || !bntx.magic(32, b"NX  ")?
         {
-            return fail("External files must be BNTX v4.1 textures.");
+            return fail(BfresError::ExternalFileNotTexture);
         }
 
         let count = bntx.u32(36)? as i64;
         let infos = bntx.pointer(40)?;
         if count == 0 {
-            return fail("BNTX has no textures.");
+            return fail(BfresError::NoTextures);
         }
         bntx.range(infos, count * 8)?;
         for texture in 0..count {
@@ -106,7 +107,7 @@ pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
         let array = 0x58 + kind * 0x10;
         if (count == 0) != (bfres.u64(array)? == 0) || (count == 0) != (bfres.u64(array + 8)? == 0)
         {
-            return fail("Animation arrays do not match their count.");
+            return fail(BfresError::AnimationCount);
         }
         animations += count;
     }
@@ -122,7 +123,7 @@ pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
         for i in 0..count {
             let name = bfres.pointer(start + i * stride + 8)?;
             if name == 0 {
-                return fail("Animation has no name.");
+                return fail(BfresError::UnnamedAnimation);
             }
             name_bytes += normalized_animation_name_bytes(bfres.name(name)?);
         }

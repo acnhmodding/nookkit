@@ -2,7 +2,8 @@ use std::io::Read;
 
 use ruzstd::decoding::{BlockDecodingStrategy, FrameDecoder};
 
-use crate::reader::{Error, Reader, Result, fail};
+use crate::error::{Error, Result, ZstdError, fail};
+use crate::reader::Reader;
 
 const MAGIC: u32 = 0xfd2fb528;
 // ACNH resources use at most a few MiB
@@ -25,7 +26,7 @@ fn header(d: Reader, at: i64) -> Result<(i64, u64, Option<u64>)> {
     let mut at = at + 5;
     let single_segment = descriptor & 0x20 != 0;
     if descriptor & 0x08 != 0 {
-        return fail("Reserved Zstandard frame bit is set.");
+        return fail(ZstdError::ReservedFrameBit);
     }
     let mut window = 0;
     if !single_segment {
@@ -35,7 +36,7 @@ fn header(d: Reader, at: i64) -> Result<(i64, u64, Option<u64>)> {
         window = base + base / 8 * (byte & 7);
     }
     if descriptor & 3 != 0 {
-        return fail("Zstandard dictionaries are not supported.");
+        return fail(ZstdError::Dictionary);
     }
     let content_size = match (descriptor >> 6, single_segment) {
         (0, false) => None,
@@ -75,7 +76,7 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             continue;
         }
         if magic != MAGIC {
-            return fail("Expected a Zstandard frame.");
+            return fail(ZstdError::NotZstd);
         }
         let start = at;
         let (header_end, window, content_size) = header(d, at)?;
@@ -86,7 +87,7 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             at += 3 + match (header >> 1) & 3 {
                 0 | 2 => (header >> 3) as i64,
                 1 => 1,
-                _ => return fail("Reserved Zstandard block type."),
+                _ => return fail(ZstdError::ReservedBlockType),
             };
             if header & 1 != 0 {
                 break;
@@ -96,7 +97,7 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             at += 4;
         }
         if at > d.len() {
-            return fail("Truncated Zstandard frame.");
+            return fail(ZstdError::Truncated);
         }
         frames.push(Frame {
             start: start as usize,
@@ -111,12 +112,12 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
 // Fails instead of aborting when the window would not fit in memory
 fn new_decoder(window: u64) -> Result<FrameDecoder> {
     if window > MAX_WINDOW {
-        return fail("Zstandard window is too large.");
+        return fail(ZstdError::WindowTooLarge);
     }
     let mut probe: Vec<u8> = Vec::new();
     probe
         .try_reserve_exact(2 * window as usize + (1 << 20))
-        .map_err(|_| Error::Message("Out of memory for the Zstandard window.".into()))?;
+        .map_err(|_| Error::OutOfMemory("the Zstandard window"))?;
     drop(probe);
     let mut decoder = FrameDecoder::new();
     decoder.set_max_window_size(MAX_WINDOW);
@@ -124,7 +125,7 @@ fn new_decoder(window: u64) -> Result<FrameDecoder> {
 }
 
 fn decode_error(error: impl std::fmt::Display) -> Error {
-    Error::Message(format!("Zstandard data is invalid: {error}"))
+    ZstdError::Invalid(error.to_string()).into()
 }
 
 // For a frame without a declared size
@@ -163,24 +164,24 @@ fn total_length(data: &[u8], frames: &[Frame]) -> Result<u64> {
         };
         total
             .checked_add(size)
-            .ok_or_else(|| Error::Message("Zstandard data is too large.".into()))
+            .ok_or_else(|| Error::from(ZstdError::TooLarge))
     })
 }
 
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     let frames = frames(data)?;
     let length = usize::try_from(total_length(data, &frames)?)
-        .map_err(|_| Error::Message("Zstandard data is too large.".into()))?;
+        .map_err(|_| Error::from(ZstdError::TooLarge))?;
     let mut out = Vec::new();
     out.try_reserve_exact(length)
-        .map_err(|_| Error::Message("Out of memory for Zstandard data.".into()))?;
+        .map_err(|_| Error::OutOfMemory("Zstandard data"))?;
     out.resize(length, 0);
     let window = frames.iter().map(|f| f.window).max().unwrap_or(0);
     let written = new_decoder(window)?
         .decode_all(data, &mut out)
         .map_err(decode_error)?;
     if written != length {
-        return fail("Zstandard frames do not match their declared sizes.");
+        return fail(ZstdError::SizeMismatch);
     }
     Ok(out)
 }

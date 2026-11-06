@@ -1,6 +1,7 @@
 use crate::crc32;
+use crate::error::{PhysicsError, Result, fail};
 use crate::heap::{Request, high_water_mark, request};
-use crate::reader::{Reader, Result, fail, to_int};
+use crate::reader::{Reader, to_int};
 
 // The phive holder directly follows the outer archive's SARC resource object
 // (0x58 bytes, 0x20-aligned), so its free block starts at 24 mod 32
@@ -36,9 +37,8 @@ pub(crate) fn requests(phive: &[u8]) -> Result<Vec<Request>> {
         match index {
             Some(i) if files[i].is_none() => files[i] = Some(member.data(phive)),
             _ => {
-                return fail(format!(
-                    "Unsupported physics member {}",
-                    member.name.as_deref().unwrap_or("")
+                return fail(PhysicsError::UnsupportedMember(
+                    member.name.unwrap_or_default(),
                 ));
             }
         }
@@ -69,7 +69,7 @@ fn add_helper_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     let aamp = Aamp::new(file)?;
     let root = aamp.list(aamp.root)?;
     if root.objects == 0 || root.lists == 0 {
-        return fail("Helper bone parameters are missing.");
+        return fail(PhysicsError::MissingHelperBoneParameters);
     }
     let header = aamp.object(&root, 0);
     let int = |name| aamp.int(header, name, 0);
@@ -96,11 +96,11 @@ fn add_helper_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
         requests.push(array_request(curves, 0xa0));
         let settings = aamp.list(aamp.child_list(&root, 0))?;
         if settings.lists < 2 {
-            return fail("Helper bone curves are missing.");
+            return fail(PhysicsError::MissingHelperBoneCurves);
         }
         let curve_list = aamp.list(aamp.child_list(&settings, 1))?;
         if curve_list.objects < curves {
-            return fail("Helper bone curve count exceeds its parameters.");
+            return fail(PhysicsError::HelperBoneCurveCount);
         }
         for i in 0..curves {
             let keys = aamp.int(aamp.object(&curve_list, i), "key_num", 0)?;
@@ -143,7 +143,7 @@ fn add_fish_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     let aamp = Aamp::new(file)?;
     let root = aamp.list(aamp.root)?;
     if root.objects < 3 {
-        return fail("Fish bone parameters are missing.");
+        return fail(PhysicsError::MissingFishBoneParameters);
     }
     requests.push(request(0x30, 8));
     let bones = aamp.int(aamp.object(&root, 0), "mBoneNum", 2)?;
@@ -158,7 +158,7 @@ fn add_fish_bones(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
 fn add_cloth(requests: &mut Vec<Request>, file: Reader) -> Result<()> {
     requests.push(request(0xf8, 0x20));
     if !file.magic(0, b"Phive\0")? || file.u16(8)? != 0xfeff {
-        return fail("Cloth must be a little-endian Phive file.");
+        return fail(PhysicsError::NotLittleEndianCloth);
     }
     add_cloth_havok(
         requests,
@@ -211,7 +211,7 @@ fn add_cloth_havok(requests: &mut Vec<Request>, tag: &Tagfile) -> Result<()> {
             }
             let kind = tag.type_name(item)?;
             if !CLOTH_OPERATORS.contains(&kind) {
-                return fail(format!("Unverified cloth operator {kind}"));
+                return fail(PhysicsError::UnverifiedClothOperator(kind.to_owned()));
             }
             if kind != "hclSimulateOperator" {
                 continue;
@@ -224,7 +224,7 @@ fn add_cloth_havok(requests: &mut Vec<Request>, tag: &Tagfile) -> Result<()> {
             let mut entries = tag.array(tag.u32(configs_at + 8)?)?.0;
             if entries < 1 {
                 if simulation >= sim_cloth_datas {
-                    return fail("Simulate operator has no simulation data.");
+                    return fail(PhysicsError::NoSimulationData);
                 }
                 let sim_cloth_data = tag.object(
                     tag.u32(sim_cloth_datas_at + simulation * 8)?,
@@ -255,7 +255,7 @@ struct Aamp<'a> {
 impl<'a> Aamp<'a> {
     fn new(data: Reader<'a>) -> Result<Self> {
         if !data.magic(0, b"AAMP")? || data.u32(4)? != 2 {
-            return fail("Expected an AAMP v2 parameter file.");
+            return fail(PhysicsError::NotAamp);
         }
         Ok(Aamp {
             data,
@@ -294,7 +294,7 @@ impl<'a> Aamp<'a> {
             }
             let info = d.u32(at + 4)?;
             if info >> 24 != 2 {
-                return fail(format!("Physics parameter {name} is not an int."));
+                return fail(PhysicsError::NotInt(name.to_owned()));
             }
             return Ok(d.u32(at + (info & 0xffffff) as i64 * 4)? as i32 as i64);
         }
@@ -330,7 +330,7 @@ impl<'a> Tagfile<'a> {
             file.len().min((file.u32_be(0)? & 0x3fffffff) as i64),
         )?;
         let [root] = roots.as_slice() else {
-            return fail("Expected a Havok TAG0 tagfile.");
+            return fail(PhysicsError::NotTagfile);
         };
         if &root.tag != b"TAG0"
             || file
@@ -338,7 +338,7 @@ impl<'a> Tagfile<'a> {
                 .iter()
                 .any(|&b| b != 0)
         {
-            return fail("Expected a Havok TAG0 tagfile.");
+            return fail(PhysicsError::NotTagfile);
         }
         let (mut body, mut strings, mut names, mut index) = (None, None, None, None);
         for section in sections(file, root.start, root.end)? {
@@ -361,7 +361,7 @@ impl<'a> Tagfile<'a> {
         let (Some(data), Some(strings), Some(names), Some(index)) =
             (body.filter(|b| b.len() != 0), strings, names, index)
         else {
-            return fail("Havok tagfile is missing its data, types or items.");
+            return fail(PhysicsError::MissingTagfileSections);
         };
 
         // ASCII decoding, as .NET's Encoding.ASCII: other bytes become '?'
@@ -376,7 +376,7 @@ impl<'a> Tagfile<'a> {
         let mut position = 0;
         let count = to_int(varint(names, &mut position)?)?;
         if count < 0 {
-            return fail("Havok type count is negative.");
+            return fail(PhysicsError::NegativeTypeCount);
         }
         let mut types = Vec::new();
         if count > 0 {
@@ -386,7 +386,7 @@ impl<'a> Tagfile<'a> {
             let name = varint(names, &mut position)?;
             match usize::try_from(name).ok().and_then(|n| text.get(n)) {
                 Some(name) => types.push(Some(name.clone())),
-                None => return fail("Havok type name is out of range."),
+                None => return fail(PhysicsError::TypeNameOutOfRange),
             }
             let mut templates = varint(names, &mut position)?;
             while templates > 0 {
@@ -402,7 +402,7 @@ impl<'a> Tagfile<'a> {
             let (kind, offset, count) = (word(0) & 0xffffff, word(4), word(8));
             if kind as usize >= types.len() || offset as i64 > data.len() || count > i32::MAX as u32
             {
-                return fail("Havok item is out of range.");
+                return fail(PhysicsError::ItemOutOfRange);
             }
             items.push(Item {
                 kind: kind as usize,
@@ -420,7 +420,7 @@ impl<'a> Tagfile<'a> {
     fn item(&self, item: i64) -> Result<&Item> {
         match self.items.get(item as usize) {
             Some(found) => Ok(found),
-            None => fail("Havok item index is out of range."),
+            None => fail(PhysicsError::ItemIndexOutOfRange),
         }
     }
 
@@ -438,7 +438,7 @@ impl<'a> Tagfile<'a> {
 
     fn object(&self, item: i64, kind: &str) -> Result<i64> {
         if item == 0 || self.type_name(item)? != kind {
-            return fail(format!("Expected Havok object {kind}"));
+            return fail(PhysicsError::UnexpectedObject(kind.to_owned()));
         }
         Ok(self.item(item)?.offset)
     }
@@ -448,12 +448,12 @@ impl<'a> Tagfile<'a> {
         for item in self.items.iter().skip(1) {
             if self.types[item.kind].as_deref() == Some(kind) {
                 if found.is_some() {
-                    return fail(format!("Multiple {kind} objects."));
+                    return fail(PhysicsError::MultipleObjects(kind.to_owned()));
                 }
                 found = Some(item.offset);
             }
         }
-        found.map_or_else(|| fail(format!("Missing Havok object {kind}")), Ok)
+        found.map_or_else(|| fail(PhysicsError::MissingObject(kind.to_owned())), Ok)
     }
 }
 
@@ -462,7 +462,7 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
     while start < end {
         let size = (file.u32_be(start)? & 0x3fffffff) as i64;
         if size < 8 || size > end - start {
-            return fail("Invalid Havok section size.");
+            return fail(PhysicsError::InvalidSectionSize);
         }
         let tag = file.range(start + 4, 4)?.try_into().unwrap();
         sections.push(Section {
@@ -477,7 +477,7 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
 
 fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
     let Some(&first) = data.get(*at) else {
-        return fail("Truncated Havok varint.");
+        return fail(PhysicsError::TruncatedVarint);
     };
     let extra = match first {
         0x00..=0x7f => 0,
@@ -489,7 +489,7 @@ fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
         0xf8..=0xff => 8,
     };
     if data.len() - *at - 1 < extra {
-        return fail("Truncated Havok varint.");
+        return fail(PhysicsError::TruncatedVarint);
     }
     let mut value: i64 = match extra {
         0 => first as i64,
