@@ -2,6 +2,8 @@
 members = [
     "crates/nookkit",
     "crates/nookkit-core",
+    "crates/nookkit-bcsv",
+    "crates/nookkit-hash",
     "crates/nookkit-layouts",
     "crates/nookkit-msbt",
     "crates/nookkit-rstb",
@@ -26,7 +28,9 @@ crc32fast = "1.5.0"
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 
 nookkit = { path = "crates/nookkit" }
+nookkit-bcsv = { path = "crates/nookkit-bcsv" }
 nookkit-core = { path = "crates/nookkit-core" }
+nookkit-hash = { path = "crates/nookkit-hash" }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
 nookkit-msbt = { path = "crates/nookkit-msbt" }
 nookkit-rstb = { path = "crates/nookkit-rstb" }

@@ -7,10 +7,8 @@ use nookkit_msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
 use nookkit_types::sead::SafeString;
 
-// sead::FileDeviceMgr mounts the romfs, mods included, as "content", and the game reads messages only
-// once it has
+// The game reads messages only once "content" is mounted
 const FOLDER: &str = "content:/NookKit/Message";
-const ENTRY_DIRECTORY: u32 = 0;
 
 static PATCHES: OnceLock<PatchSet> = OnceLock::new();
 static LOCALE: OnceLock<String> = OnceLock::new();
@@ -18,45 +16,13 @@ static LOCALE: OnceLock<String> = OnceLock::new();
 // File handles (MessageArchive::findFile's {msbt*, count} entries) of patched files, by address
 static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 
-// nn::fs aborts the game on some failures, GetEntryType reports a missing folder instead
-fn folder_exists() -> bool {
-    let Ok(path) = std::ffi::CString::new(FOLDER) else {
-        return false;
-    };
-    let mut kind = u32::MAX;
-    unsafe {
-        skyline::nn::fs::GetEntryType(&mut kind, path.as_ptr() as _) == 0 && kind == ENTRY_DIRECTORY
-    }
-}
-
 /// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
-    if !folder_exists() {
-        return set;
-    }
+    let files = crate::content::json_files(FOLDER, "message patch");
 
-    let mut paths: Vec<_> = match std::fs::read_dir(FOLDER) {
-        Ok(dir) => dir.filter_map(|e| Some(e.ok()?.path())).collect(),
-        Err(_) => Vec::new(),
-    };
-    paths.retain(|p| p.extension().is_some_and(|e| e == "json"));
-    paths.sort();
-
-    for path in &paths {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let json = match std::fs::read_to_string(path) {
-            Ok(json) => json,
-            Err(e) => {
-                println!("[NookKit] message patch {name}: {e}");
-                continue;
-            }
-        };
-
-        match set.add(&name, &json) {
+    for (name, json) in &files {
+        match set.add(name, json) {
             Ok(replaced) => {
                 for label in replaced {
                     println!("[NookKit] message patch {name} replaces {label}");
@@ -70,7 +36,7 @@ fn load() -> PatchSet {
         println!(
             "[NookKit] {} patched messages from {} files",
             set.len(),
-            paths.len()
+            files.len()
         );
     }
     set

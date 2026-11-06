@@ -16,6 +16,7 @@ rodata_hash = 0xacfdd336a5d95bb0
 "Lp::UI::UIMgr::findMessage" = 0x3c4cd40
 "Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = 0x3c877b8
 "Lp::Utl::StateMachine::changeState" = 0x3dbb160
+"game::BcsvMgr::loadResource" = 0x375409c
 "game::MessageAttribute::read1" = 0x1a977e0
 "game::MessageAttribute::read2" = 0x1a97a90
 "game::MessageAttribute::read3" = 0x1a97d40
@@ -60,6 +61,7 @@ rodata_hash = 0xacfdd336a5d95bb0
 "game::UISys::Sequence::create" = 0x376890c
 "game::UISys::Sequence::getRuntimeTypeInfo" = 0x3769f70
 "operator_new" = 0x37aa260
+"sead::HeapMgr::findContainHeap" = 0x37cb610
 
 [vtable]
 "game::UI::ListBtnGroup::SelectableDelegate::vtable" = 0x4a29758
@@ -71,7 +73,9 @@ rodata_hash = 0xacfdd336a5d95bb0
 "sead::SafeStringBase<char>::vtable" = 0x47f9770
 
 [data]
+"game::BcsvMgr::sInstance" = 0x59e53d8
 "game::PlayerControlLockMgr::sInstance" = 0x4ca4ab8
 "game::ResourceMgr::sInstance" = 0x5a05848
 "game::System::sLanguageCodes" = 0x4812310
+"sead::HeapMgr::sInstance" = 0x59e7600
 "sead::HeapMgr::sRootHeaps" = 0x59e7550

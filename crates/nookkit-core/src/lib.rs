@@ -1,3 +1,5 @@
+mod bcsv;
+mod content;
 mod keys;
 mod lists;
 mod messages;
@@ -65,6 +67,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     keys::key_guide_add::install()?;
     keys::message_find::install()?;
     messages::install()?;
+    bcsv::install()?;
     rstb::install()
 }
 

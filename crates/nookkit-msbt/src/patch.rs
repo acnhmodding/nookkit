@@ -83,55 +83,38 @@ pub struct PatchSet {
 }
 
 impl PatchSet {
-    /// Adds the patch in `json`, named `source` in errors and warnings. Returns the labels it took
-    /// over from earlier patches
+    /// Adds the patches in `json`, one patch or an array of them, named `source` in errors and
+    /// warnings. Nothing is added unless every patch loads. Returns the labels it took over from
+    /// earlier patches
     pub fn add(&mut self, source: &str, json: &str) -> Result<Vec<String>, PatchError> {
         let error = |reason: String| PatchError {
             source: source.to_owned(),
             reason,
         };
 
-        let patch: Patch = serde_json::from_str(json).map_err(|e| error(e.to_string()))?;
-        let mut entries = Vec::with_capacity(patch.messages.len());
-
-        for message in patch.messages {
-            let mut text = BTreeMap::new();
-            for (locale, value) in message.text {
-                let units = tags::encode(&value).map_err(|e| {
-                    error(format!("{} {} [{locale}] {e}", patch.file, message.label))
-                })?;
-                text.insert(locale, units);
-            }
-
-            let attribute = match message.attributes {
-                None => None,
-                Some(Attributes::Like(label)) => Some(Attribute::Like(label)),
-                Some(Attributes::Hex(hex)) => {
-                    Some(Attribute::Bytes(tags::from_hex(&hex).ok_or_else(|| {
-                        error(format!(
-                            "{} {}: attributes {hex:?} isn't hex",
-                            patch.file, message.label
-                        ))
-                    })?))
-                }
-            };
-
-            entries.push((
-                message.label,
-                Entry {
-                    text,
-                    attribute,
-                    source: source.to_owned(),
-                },
-            ));
+        // Picked by the first character rather than an untagged enum, which would drop serde's
+        // line and column from errors
+        let patches: Vec<Patch> = if json.trim_start().starts_with('[') {
+            serde_json::from_str(json)
+        } else {
+            serde_json::from_str(json).map(|patch| vec![patch])
         }
+        .map_err(|e| error(e.to_string()))?;
 
-        let labels = self.files.entry(patch.file.clone()).or_default();
+        let encoded = patches
+            .into_iter()
+            .map(|patch| encode(source, patch))
+            .collect::<Result<Vec<_>, _>>()?;
+
         let mut replaced = Vec::new();
 
-        for (label, entry) in entries {
-            if let Some(old) = labels.insert(label.clone(), entry) {
-                replaced.push(format!("{} {label} from {}", patch.file, old.source));
+        for (file, entries) in encoded {
+            let labels = self.files.entry(file.clone()).or_default();
+
+            for (label, entry) in entries {
+                if let Some(old) = labels.insert(label.clone(), entry) {
+                    replaced.push(format!("{file} {label} from {}", old.source));
+                }
             }
         }
 
@@ -156,6 +139,49 @@ impl PatchSet {
     pub fn len(&self) -> usize {
         self.files.values().map(BTreeMap::len).sum()
     }
+}
+
+/// One patch's file and its messages, encoded
+fn encode(source: &str, patch: Patch) -> Result<(String, Vec<(String, Entry)>), PatchError> {
+    let error = |reason: String| PatchError {
+        source: source.to_owned(),
+        reason,
+    };
+
+    let mut entries = Vec::with_capacity(patch.messages.len());
+
+    for message in patch.messages {
+        let mut text = BTreeMap::new();
+        for (locale, value) in message.text {
+            let units = tags::encode(&value)
+                .map_err(|e| error(format!("{} {} [{locale}] {e}", patch.file, message.label)))?;
+            text.insert(locale, units);
+        }
+
+        let attribute = match message.attributes {
+            None => None,
+            Some(Attributes::Like(label)) => Some(Attribute::Like(label)),
+            Some(Attributes::Hex(hex)) => {
+                Some(Attribute::Bytes(tags::from_hex(&hex).ok_or_else(|| {
+                    error(format!(
+                        "{} {}: attributes {hex:?} isn't hex",
+                        patch.file, message.label
+                    ))
+                })?))
+            }
+        };
+
+        entries.push((
+            message.label,
+            Entry {
+                text,
+                attribute,
+                source: source.to_owned(),
+            },
+        ));
+    }
+
+    Ok((patch.file, entries))
 }
 
 #[cfg(test)]
@@ -204,6 +230,39 @@ mod tests {
             set.get("MenuDevice", "IslandSketch").unwrap().source,
             "b.json"
         );
+    }
+
+    #[test]
+    fn loads_an_array() {
+        let mut set = PatchSet::default();
+        let json = format!(
+            r#" [ {ISLAND_SKETCH},
+                {{ "file": "STR_NNpcName", "messages": [ {{ "label": "cat23", "text": {{ "default": "Mitzi" }} }} ] }} ]"#
+        );
+
+        assert!(set.add("a.json", &json).unwrap().is_empty());
+        assert!(set.get("MenuDevice", "IslandSketch").is_some());
+        assert_eq!(
+            set.get("STR_NNpcName", "cat23").unwrap().text_for("USen"),
+            Some(&tags::encode("Mitzi").unwrap()[..])
+        );
+        assert_eq!(set.len(), 2);
+
+        assert!(set.add("empty.json", "[]").unwrap().is_empty());
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn array_loads_all_or_nothing() {
+        let mut set = PatchSet::default();
+        let json = format!(
+            r#"[ {ISLAND_SKETCH}, {{ "file": "F", "messages": [ {{ "label": "L", "text": {{ "USen": "{{{{Nope}}}}" }} }} ] }} ]"#
+        );
+
+        let error = set.add("a.json", &json).unwrap_err();
+        assert_eq!(error.source, "a.json");
+        assert!(error.reason.starts_with("F L [USen]"), "{}", error.reason);
+        assert!(set.is_empty());
     }
 
     #[test]

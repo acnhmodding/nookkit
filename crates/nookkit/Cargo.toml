@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
+nookkit-hash = { workspace = true }
 nookkit-layouts = { workspace = true }
 nookkit-sys = { workspace = true }
 nookkit-types = { workspace = true }

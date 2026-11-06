@@ -9,6 +9,7 @@
 "Lp::UI::PartsCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
 "Lp::UI::UIMgr::findMessage" = "ptr, ptr, ptr -> i8"
 "Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
+"game::BcsvMgr::loadResource" = "ptr, ptr, ptr -> ptr"
 "game::MessageAttribute::read1" = "ptr, ptr, ptr, ptr -> i8"
 "game::MessageAttribute::read2" = "ptr, ptr, ptr, ptr -> i8"
 "game::MessageAttribute::read3" = "ptr, ptr, ptr, ptr -> i8"
@@ -40,3 +41,4 @@
 "game::UISys::ScrollBtnListCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::UISys::Sequence::create" = "ptr, ptr -> void"
 "game::UISys::Sequence::getRuntimeTypeInfo" = "ptr -> ptr"
+"sead::HeapMgr::findContainHeap" = "ptr, ptr -> ptr"

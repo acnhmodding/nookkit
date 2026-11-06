@@ -73,6 +73,7 @@ dependencies = [
 name = "nookkit"
 version = "0.2.0"
 dependencies = [
+ "nookkit-hash",
  "nookkit-layouts",
  "nookkit-sys",
  "nookkit-types",
@@ -81,10 +82,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nookkit-bcsv"
+version = "0.1.0"
+dependencies = [
+ "nookkit-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nookkit-core"
 version = "0.2.0"
 dependencies = [
  "crc32fast",
+ "nookkit-bcsv",
  "nookkit-msbt",
  "nookkit-rstb",
  "nookkit-sym",
@@ -92,6 +103,13 @@ dependencies = [
  "nookkit-types",
  "skyline",
  "talc",
+]
+
+[[package]]
+name = "nookkit-hash"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
 ]
 
 [[package]]
