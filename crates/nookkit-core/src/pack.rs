@@ -76,7 +76,20 @@ fn load_patches() -> PatchSet {
 }
 
 fn patches() -> Option<&'static PatchSet> {
-    Some(PATCHES.get_or_init(load_patches)).filter(|set| !set.is_empty())
+    let patches = PATCHES.get_or_init(load_patches);
+    if patches.is_empty() {
+        return None;
+    }
+    Some(patches)
+}
+
+/// The patched archive `request` loads, none when it isn't one
+fn patched_archive(request: *const LoadRequest<'static>) -> Option<&'static str> {
+    let patches = patches()?;
+    let request = unsafe { request.as_ref()? };
+    let path = unsafe { request.path.as_str()? };
+    let name = archive_name(path)?;
+    patches.archives().find(|archive| *archive == name)
 }
 
 /// "Pack/StaticParam.pack" names the archive "StaticParam"
@@ -157,16 +170,23 @@ fn patch_file(archive: &str, file: &str, game_file: &[u8]) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// The patched bytes of the file the game is caching, none when it keeps its own
+fn patched_insert(path: *const SafeString<'static>, data: *const u8, size: u32) -> Option<Vec<u8>> {
+    let path = unsafe { path.as_ref()? };
+    let file = unsafe { path.as_str()? };
+    let archive = cache_file(file)?;
+    if data.is_null() {
+        return None;
+    }
+    let game_file = unsafe { core::slice::from_raw_parts(data, size as usize) };
+    patch_file(archive, file, game_file)
+}
+
 // The game reads every file of an archive through this, once per archive it hasn't cached
 nookkit_sym::hook! {
     pub load = sym::game::FileCache::load;
     fn(cache: *mut c_void, request: *const LoadRequest<'static>) -> *mut c_void {
-        let archive = patches().and_then(|patches| {
-            let path = unsafe { request.as_ref()?.path.as_str()? };
-            let name = archive_name(path)?;
-            patches.archives().find(|archive| *archive == name)
-        });
-        let Some(archive) = archive else {
+        let Some(archive) = patched_archive(request) else {
             return unsafe { original(cache, request) };
         };
 
@@ -191,20 +211,10 @@ nookkit_sym::hook! {
 nookkit_sym::hook! {
     pub insert = sym::game::FileCache::insert;
     fn(cache: *mut c_void, request: *const LoadRequest<'static>, holder: *mut c_void, path: *const SafeString<'static>, data: *const u8, size: u32) -> *mut c_void {
-        let patched = unsafe { path.as_ref() }.and_then(|path| {
-            let file = unsafe { path.as_str()? };
-            let archive = cache_file(file)?;
-            if data.is_null() {
-                return None;
-            }
-            let game_file = unsafe { core::slice::from_raw_parts(data, size as usize) };
-            patch_file(archive, file, game_file)
-        });
-
-        match patched {
-            Some(bytes) => unsafe { original(cache, request, holder, path, bytes.as_ptr(), bytes.len() as u32) },
-            None => unsafe { original(cache, request, holder, path, data, size) },
-        }
+        let Some(bytes) = patched_insert(path, data, size) else {
+            return unsafe { original(cache, request, holder, path, data, size) };
+        };
+        unsafe { original(cache, request, holder, path, bytes.as_ptr(), bytes.len() as u32) }
     }
 }
 
