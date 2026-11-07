@@ -2,10 +2,11 @@ use std::fs::File;
 use std::io::Read;
 
 use crate::bfres::texture_animation_archive_size;
+use crate::error::{Error, Result, fail};
 use crate::geometry::GeometryAnalyzer;
 use crate::heap::{Request, high_water_mark, request};
-use crate::reader::{Result, align_up, fail, read_file};
-use crate::{physics, sarc, shader, zstd};
+use crate::reader::{align_up, read_file};
+use crate::{physics, shader, zstd};
 
 /// The game sizes the file itself: the table must have no entry for it
 pub const GAME_SIZED: i64 = -1;
@@ -39,7 +40,9 @@ pub fn sizing_memory(name: &str, length: u64, decompressed: u64) -> usize {
 
 /// Model archives may need the shader archive loaded, see [`SHADER_PEAK_MEMORY`]
 pub fn is_model_archive(name: &str) -> bool {
-    name.starts_with("Model/") && !name.starts_with("Model/Layout_") && name.ends_with(".Nin_NX_NVN")
+    name.starts_with("Model/")
+        && !name.starts_with("Model/Layout_")
+        && name.ends_with(".Nin_NX_NVN")
 }
 
 /// `None` for files that aren't table resources: plugins, NookKit's own data, the table itself and BYML
@@ -88,7 +91,7 @@ impl Sizer {
             }
         };
         if size > u32::MAX as i64 {
-            return fail(format!("{path} is too big!"));
+            return fail(Error::TooBig(path.to_owned()));
         }
         Ok(size)
     }
@@ -98,7 +101,7 @@ impl Sizer {
         if let Some(allocation) = texture_animation_archive_size(&archive) {
             return Ok(allocation as i64);
         }
-        if let Ok(members) = sarc::read(&archive) {
+        if let Ok(members) = nookkit_sarc::read(&archive) {
             let loaded = align_up(archive.len() as i64, 32);
             // Collision archives: PBC members are read in place, so only the archive load itself allocates
             if !members.is_empty()

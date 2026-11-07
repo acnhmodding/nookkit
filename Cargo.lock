@@ -122,6 +122,7 @@ version = "0.2.0"
 name = "nookkit-msbt"
 version = "0.2.0"
 dependencies = [
+ "nookkit-sarc",
  "ruzstd",
  "serde",
  "serde_json",
@@ -132,7 +133,16 @@ name = "nookkit-rstb"
 version = "0.2.0"
 dependencies = [
  "crc32fast",
+ "nookkit-sarc",
  "ruzstd",
+ "thiserror",
+]
+
+[[package]]
+name = "nookkit-sarc"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
-use crate::reader::{Result, align_up, fail};
+use crate::error::{HeapError, Result, fail};
+use crate::reader::align_up;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Request {
@@ -16,18 +17,16 @@ const HEADER_BYTES: i64 = 32;
 // start is the free block header address, not the first payload address
 pub(crate) fn high_water_mark(requests: &[Request], initial_free_block: i64) -> Result<i64> {
     if initial_free_block < 0 || initial_free_block & 7 != 0 {
-        return fail("The initial free block must be 8-aligned.");
+        return fail(HeapError::UnalignedFreeBlock);
     }
     let mut front = initial_free_block;
     for request in requests {
         if request.bytes < 0 {
-            return fail("Heap requests cannot be negative.");
+            return fail(HeapError::NegativeRequest);
         }
         let alignment = request.alignment;
         if !(8..=8192).contains(&alignment) || alignment & (alignment - 1) != 0 {
-            return fail(
-                "Only the native-verified positive alignments from 8 through 8192 are supported.",
-            );
+            return fail(HeapError::UnsupportedAlignment);
         }
         let address = align_up(front + HEADER_BYTES, alignment);
         front = address + align_up(request.bytes.max(8), 8);
@@ -51,14 +50,14 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
     for wanted in requests {
         let alignment = wanted.alignment;
         if wanted.bytes <= 0 {
-            return fail("GPU requests must be nonempty.");
+            return fail(HeapError::EmptyGpuRequest);
         }
         if alignment <= 0 || alignment & (alignment - 1) != 0 {
-            return fail("GPU alignment must be a positive power of two.");
+            return fail(HeapError::GpuAlignmentNotPowerOfTwo);
         }
         // Virtual heaps start at 0x100000, larger alignments need base-aware placement
         if alignment > 0x100000 {
-            return fail("GPU alignments above the native virtual base are unresolved.");
+            return fail(HeapError::GpuAlignmentTooLarge);
         }
         let mut best: Option<(usize, i64)> = None;
         for (i, pool) in pools.iter().enumerate() {
@@ -87,7 +86,7 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
                 parent.push(request(backing, align_up(alignment, 4096)));
                 pools.push(Pool::new(backing, entries));
                 let Some(offset) = pools.last().unwrap().try_place(wanted) else {
-                    return fail("New GPU pool cannot satisfy its initial request.");
+                    return fail(HeapError::GpuPoolTooSmall);
                 };
                 (pools.len() - 1, offset)
             }

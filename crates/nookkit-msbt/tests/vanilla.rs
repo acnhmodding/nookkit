@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::Path;
 
 use nookkit_msbt::msbt::Msbt;
-use nookkit_msbt::{sarc, tags};
+use nookkit_msbt::tags;
 
 #[test]
 fn every_message_round_trips() {
@@ -31,12 +31,13 @@ fn every_message_round_trips() {
             .read_to_end(&mut data)
             .unwrap();
 
-        for (name, file) in sarc::read(&data).unwrap() {
-            if !name.ends_with(".msbt") {
+        for member in nookkit_sarc::read(&data).unwrap() {
+            let Some(name) = member.name.as_deref().filter(|n| n.ends_with(".msbt")) else {
                 continue;
-            }
+            };
 
-            let msbt = Msbt::parse(file).unwrap_or_else(|| panic!("{name} isn't an MSBT"));
+            let msbt =
+                Msbt::parse(member.data(&data)).unwrap_or_else(|| panic!("{name} isn't an MSBT"));
 
             for (index, units) in msbt.texts.iter().enumerate() {
                 messages += 1;

@@ -1,4 +1,4 @@
-use crate::reader::{Error, Result, fail};
+use crate::error::{Error, Result, Yaz0Error, fail};
 
 const HEADER_BYTES: usize = 16;
 const WINDOW: usize = 0x1000;
@@ -11,17 +11,17 @@ pub fn is_yaz0(data: &[u8]) -> bool {
 
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     if data.len() < HEADER_BYTES || !is_yaz0(data) {
-        return fail("Expected Yaz0 data.");
+        return fail(Yaz0Error::NotYaz0);
     }
     let size = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
     let mut out = Vec::new();
     out.try_reserve_exact(size)
-        .map_err(|_| Error("Out of memory for Yaz0 data.".into()))?;
+        .map_err(|_| Error::OutOfMemory("Yaz0 data"))?;
     let mut input = data[HEADER_BYTES..].iter().copied();
     let mut next = || {
         input
             .next()
-            .ok_or_else(|| Error("Yaz0 data is truncated.".into()))
+            .ok_or_else(|| Error::from(Yaz0Error::Truncated))
     };
     let (mut flags, mut flag_bits) = (0u8, 0);
     while out.len() < size {
@@ -42,7 +42,7 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
             n => n + 2,
         };
         if distance > out.len() {
-            return fail("Yaz0 back-reference before the data start.");
+            return fail(Yaz0Error::BackReference);
         }
         let start = out.len() - distance;
         // A reference may overlap the bytes it produces, so it is copied byte by byte

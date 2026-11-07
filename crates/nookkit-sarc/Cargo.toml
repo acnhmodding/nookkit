@@ -1,0 +1,7 @@
+[package]
+name = "nookkit-sarc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror = { workspace = true }

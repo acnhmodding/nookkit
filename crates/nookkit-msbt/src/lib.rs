@@ -1,6 +1,5 @@
 pub mod msbt;
 pub mod patch;
-pub mod sarc;
 pub mod tags;
 
 pub use patch::{

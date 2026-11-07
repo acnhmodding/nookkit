@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::crc32;
-use crate::reader::{Reader, Result, fail};
+use crate::error::{Result, TableError, fail};
+use crate::reader::Reader;
 
 pub const PATH: &str = "System/Resource/ResourceSizeTable.srsizetable";
 
@@ -33,7 +34,7 @@ impl Table {
     pub fn parse(data: &[u8]) -> Result<Table> {
         let d = Reader::new(data);
         if !d.magic(0, b"RSTC")? {
-            return fail("Not a valid RSTC table.");
+            return fail(TableError::Invalid);
         }
         let unique_count = d.u32(4)? as i64;
         let collided_count = d.u32(8)? as i64;
@@ -51,7 +52,7 @@ impl Table {
         for _ in 0..unique_count {
             let crc = d.u32(at)?;
             if table.unique.insert(crc, entry(at + 4)?).is_some() {
-                return fail(format!("Duplicate table entry {crc:08X}."));
+                return fail(TableError::DuplicateEntry(crc));
             }
             at += 4 + ENTRY_BYTES as i64;
         }
@@ -59,7 +60,7 @@ impl Table {
             let bytes = d.range(at, COLLIDED_NAME_BYTES as i64)?;
             let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
             let Ok(name) = std::str::from_utf8(&bytes[..end]) else {
-                return fail("Collided table name is not text.");
+                return fail(TableError::CollidedNameNotText);
             };
             if !name.is_ascii()
                 || table
@@ -67,7 +68,7 @@ impl Table {
                     .insert(name.to_owned(), entry(at + COLLIDED_NAME_BYTES as i64)?)
                     .is_some()
             {
-                return fail(format!("Invalid or duplicate table entry {name}."));
+                return fail(TableError::InvalidCollidedEntry(name.to_owned()));
             }
             at += (COLLIDED_NAME_BYTES + ENTRY_BYTES) as i64;
         }
@@ -134,7 +135,7 @@ impl Table {
         }
         if self.collided.keys().any(|other| crc32(other) == crc) {
             if !name.is_ascii() || name.len() > COLLIDED_NAME_BYTES {
-                return fail(format!("{name} cannot be stored as a collided table name."));
+                return fail(TableError::UnstorableName(name.to_owned()));
             }
             self.collided
                 .insert(name.to_owned(), Entry { size, dlc: 0 });

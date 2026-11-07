@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
+use nookkit_sarc::Member;
+
 use crate::bfres::{animation_bytes, is_bfres, runtime_pool_bytes, single_bfres, texture_count};
+use crate::error::{GeometryError, Result, fail};
 use crate::heap::{Request, gpu_pool_parent_requests, high_water_mark, request};
 use crate::physics;
-use crate::reader::{Error, Reader, Result, align_up, fail};
-use crate::sarc::{self, Member};
+use crate::reader::{Reader, align_up};
 use crate::shader::{ProgramLayout, ShaderArchive, ShadingModel};
 
 #[rustfmt::skip]
@@ -152,9 +154,7 @@ impl GeometryAnalyzer {
     /// The archive's allocation, unsupported or malformed inputs fail, never giving a partial result
     pub fn allocation_bytes(&mut self, archive: &[u8]) -> Result<i64> {
         let Some((bfres, phive)) = read_archive(archive) else {
-            return fail(
-                "Expected a canonical BFRES v9 model archive, optionally with output.phive.",
-            );
+            return fail(GeometryError::NotModelArchive);
         };
         let physics_bytes = match phive {
             Some(phive) => physics::exp_heap_bytes(phive.data(archive))?,
@@ -176,7 +176,7 @@ type Layouts = HashMap<(usize, i64), ProgramLayout>;
 fn analyze(shaders: &ShaderArchive, layouts: &mut Layouts, d: Reader) -> Result<Analysis> {
     let model_count = d.u16(0xdc)? as i64;
     if model_count == 0 {
-        return fail("No geometry models to analyze.");
+        return fail(GeometryError::NoModels);
     }
     let textures = texture_count(d)?;
     let mut a = Analysis {
@@ -192,13 +192,12 @@ fn analyze(shaders: &ShaderArchive, layouts: &mut Layouts, d: Reader) -> Result<
         for &material in &material_offsets {
             let parsed = read_material(shaders, d, material)?;
             if parsed.candidates.is_empty() {
-                return fail(format!(
-                    "No compiled static candidate for material {}",
-                    d.name(d.pointer(material + 8)?)?
+                return fail(GeometryError::NoStaticCandidate(
+                    d.name(d.pointer(material + 8)?)?.to_owned(),
                 ));
             }
             if shaders.has_shader_option_bindings(parsed.model)? {
-                return fail("Additional shader-option command bindings are unresolved.");
+                return fail(GeometryError::UnresolvedCommandBindings);
             }
             if parsed
                 .model
@@ -206,7 +205,7 @@ fn analyze(shaders: &ShaderArchive, layouts: &mut Layouts, d: Reader) -> Result<
                 .iter()
                 .any(|o| o.name == "gsys_assign_variation")
             {
-                return fail("Assign-variation shader profiles are unresolved.");
+                return fail(GeometryError::UnresolvedAssignVariation);
             }
             let material_uniform = shaders.material_uniform_bytes(parsed.model)?;
             if material_uniform != 0 {
@@ -236,7 +235,7 @@ fn analyze(shaders: &ShaderArchive, layouts: &mut Layouts, d: Reader) -> Result<
                 || vertex_index >= vertex_offsets.len()
                 || d.pointer(shape + 0x10)? != vertex_offsets[vertex_index]
             {
-                return fail("Shape material or vertex reference is invalid.");
+                return fail(GeometryError::InvalidShapeReference);
             }
             let material = &materials[material_index];
             let vertex = vertex_offsets[vertex_index];
@@ -245,7 +244,7 @@ fn analyze(shaders: &ShaderArchive, layouts: &mut Layouts, d: Reader) -> Result<
             for mesh in entries(d, shape + 0x18, d.byte(shape + 0x5b)? as i64, 0x38)? {
                 // The loader aggregates all submeshes into one indexed draw
                 if d.u16(mesh + 0x34)? == 0 {
-                    return fail("Mesh has no submeshes.");
+                    return fail(GeometryError::NoSubmeshes);
                 }
                 a.mesh_draw_bytes += if d.u32(mesh + 0x30)? == 0 { 44 } else { 48 };
                 meshes += 1;
@@ -289,7 +288,7 @@ fn shape_passes(
         .iter()
         .filter(|o| o.name == "gsys_assign_type");
     let (Some(pass_option), None) = (pass_options.next(), pass_options.next()) else {
-        return fail("Missing render-pass shader option.");
+        return fail(GeometryError::MissingRenderPass);
     };
     for requested in 0..PASSES.len() {
         let mut pass = requested;
@@ -302,7 +301,7 @@ fn shape_passes(
             pass = PARENT_PASSES[pass];
         }
         if pass == PASSES.len() {
-            return fail("No render-pass fallback.");
+            return fail(GeometryError::NoRenderPassFallback);
         }
         options.insert(
             "gsys_assign_type".into(),
@@ -310,7 +309,7 @@ fn shape_passes(
         );
         let Some(index) = shaders.find_program(material.model, &material.candidates, &options)?
         else {
-            return fail("No compiled dynamic shader program.");
+            return fail(GeometryError::NoDynamicProgram);
         };
         let layout = match layouts.entry((material.model_index, index)) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
@@ -343,7 +342,7 @@ fn read_material<'s>(shaders: &'s ShaderArchive, d: Reader, at: i64) -> Result<M
     d.require_magic(at, b"FMAT")?;
     let assign = d.pointer(at + 0x20)?;
     if d.name(d.pointer(assign)?)? != shaders.name {
-        return fail("Material references a different shader archive.");
+        return fail(GeometryError::ForeignShaderArchive);
     }
     let model_name = d.name(d.pointer(assign + 8)?)?;
     let mut found = shaders
@@ -352,7 +351,7 @@ fn read_material<'s>(shaders: &'s ShaderArchive, d: Reader, at: i64) -> Result<M
         .enumerate()
         .filter(|(_, m)| m.name == model_name);
     let (Some((model_index, model)), None) = (found.next(), found.next()) else {
-        return fail(format!("Missing shading model {model_name}"));
+        return fail(GeometryError::MissingShadingModel(model_name.to_owned()));
     };
     let mut options = assignments(d, assign, 0x30, 0x38, d.u16(assign + 0x46)? as i64)?;
     let mut info = HashMap::new();
@@ -361,7 +360,7 @@ fn read_material<'s>(shaders: &'s ShaderArchive, d: Reader, at: i64) -> Result<M
         if d.byte(entry + 0x12)? == 2 && d.u16(entry + 0x10)? > 0 {
             let value = d.name(d.pointer(d.pointer(entry + 8)?)?)?;
             if info.insert(name, value).is_some() {
-                return fail("Duplicate material render info.");
+                return fail(GeometryError::DuplicateRenderInfo);
             }
         }
     }
@@ -371,14 +370,14 @@ fn read_material<'s>(shaders: &'s ShaderArchive, d: Reader, at: i64) -> Result<M
         "mask" => "1",
         "translucent" => "2",
         "custom" => "3",
-        _ => return fail("Unknown material render mode."),
+        _ => return fail(GeometryError::UnknownRenderMode),
     };
     let display_face = match value("gsys_render_state_display_face") {
         "back" => "2",
         "front" => "1",
         "both" => "0",
         "none" => "3",
-        _ => return fail("Unknown material culling mode."),
+        _ => return fail(GeometryError::UnknownCullingMode),
     };
     const FUNCTIONS: [&str; 8] = [
         "never", "less", "equal", "lequal", "greater", "nequal", "gequal", "always",
@@ -420,7 +419,7 @@ fn read_archive(archive: &[u8]) -> Option<(Member, Option<Member>)> {
     if let Some(bfres) = single_bfres(archive) {
         return Some((bfres, None));
     }
-    let mut members = sarc::read(archive).ok()?;
+    let mut members = nookkit_sarc::read(archive).ok()?;
     if members.len() != 2
         || !members[0].is("output.phive")
         || members[0].offset != 0x2000
@@ -485,7 +484,7 @@ fn vertex_key(
     let mut attributes = HashMap::new();
     for at in entries(d, vertex + 8, d.byte(vertex + 0x4c)? as i64, 16)? {
         if attributes.insert(d.name(d.pointer(at)?)?, at).is_some() {
-            return fail("Duplicate vertex attribute.");
+            return fail(GeometryError::DuplicateVertexAttribute);
         }
     }
     let mut buffers: Vec<u8> = Vec::new();
@@ -501,7 +500,7 @@ fn vertex_key(
         };
         let source = d.byte(at + 0xe)?;
         if source >= d.byte(vertex + 0x4d)? || *location >= 16 {
-            return fail("Vertex stream or location is out of range.");
+            return fail(GeometryError::VertexStreamOutOfRange);
         }
         let compressed = match buffers.iter().position(|&b| b == source) {
             Some(index) => index,
@@ -537,7 +536,7 @@ fn location_key(locations: &HashMap<String, u32>, names: &[&str]) -> Vec<u32> {
 // SDK instructions validated by a separate 237-case ARM64 harness
 fn vertex_command_bytes(streams: i64, attributes: i64) -> Result<i64> {
     if streams > 16 {
-        return fail("Too many resource vertex streams.");
+        return fail(GeometryError::TooManyVertexStreams);
     }
     Ok(if attributes == 0 {
         0
@@ -550,7 +549,7 @@ fn vertex_command_bytes(streams: i64, attributes: i64) -> Result<i64> {
 fn entries(d: Reader, field: i64, count: i64, stride: i64) -> Result<Vec<i64>> {
     let start = d.pointer(field)?;
     if start == 0 && count != 0 {
-        return fail("Missing allocation metadata array.");
+        return fail(GeometryError::MissingAllocationMetadata);
     }
     d.range(start, count * stride)?;
     Ok((0..count).map(|i| start + i * stride).collect())
@@ -562,7 +561,7 @@ fn dictionary_names(d: Reader, at: i64, count: i64) -> Result<Vec<String>> {
         return Ok(Vec::new());
     }
     if at == 0 || d.u32(at + 4)? as i64 != count {
-        return fail("Allocation dictionary count mismatch.");
+        return fail(GeometryError::AllocationCountMismatch);
     }
     d.range(at + 8, (count + 1) * 16)?;
     (0..count)
@@ -586,7 +585,7 @@ fn assignments(
             .insert(name, d.name(d.pointer(value)?)?.to_owned())
             .is_some()
         {
-            return Err(Error("Duplicate shader assignment.".into()));
+            return fail(GeometryError::DuplicateShaderAssignment);
         }
     }
     Ok(result)

@@ -1,8 +1,9 @@
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
-use crate::reader::{Reader, Result, fail, read_file, to_int};
-use crate::{sarc, yaz0};
+use crate::error::{Result, ShaderError, fail};
+use crate::reader::{Reader, read_file, to_int};
+use crate::yaz0;
 
 // A shader string: a 16-bit length, bytes and a terminator. A null pointer reads as ""
 fn string(data: Reader, at: i64) -> Result<String> {
@@ -11,7 +12,7 @@ fn string(data: Reader, at: i64) -> Result<String> {
     }
     let length = data.u16(at)? as i64;
     if data.byte(at + 2 + length)? != 0 {
-        return fail("Unterminated shader string.");
+        return fail(ShaderError::UnterminatedString);
     }
     Ok(String::from_utf8_lossy(data.range(at + 2, length)?).into_owned())
 }
@@ -23,7 +24,7 @@ fn dictionary(data: Reader, at: i64) -> Result<Vec<String>> {
     }
     let count = to_int(data.u32(at + 4)? as i64)?;
     if count > 65535 {
-        return fail("Shader dictionary is too large.");
+        return fail(ShaderError::DictionaryTooLarge);
     }
     data.range(at + 8, (count + 1) * 16)?;
     (0..count)
@@ -33,9 +34,8 @@ fn dictionary(data: Reader, at: i64) -> Result<Vec<String>> {
 
 fn signature(data: Reader, at: i64, expected: &[u8]) -> Result<()> {
     if !data.magic(at, expected)? {
-        return fail(format!(
-            "Expected {} shader section.",
-            String::from_utf8_lossy(expected)
+        return fail(ShaderError::MissingSection(
+            String::from_utf8_lossy(expected).into_owned(),
         ));
     }
     Ok(())
@@ -90,10 +90,10 @@ impl ShaderArchive {
         let data = Reader::new(&bytes);
         signature(data, 0, b"FSHA")?;
         if data.u32(8)? != 0x00080000 || data.u16(12)? != 0xfeff {
-            return fail("Only the ACNH Switch BFSHA v8 layout is supported.");
+            return fail(ShaderError::UnsupportedLayout);
         }
         if data.u32(28)? as i64 != data.len() {
-            return fail("Shader archive size mismatch.");
+            return fail(ShaderError::SizeMismatch);
         }
         let name = string(data, data.pointer(56)?)?;
         let array = data.pointer(72)?;
@@ -120,7 +120,7 @@ impl ShaderArchive {
         }
         match model.uniform_blocks.get(index) {
             Some(block) => Ok(block.size),
-            None => fail("Invalid material uniform block index."),
+            None => fail(ShaderError::InvalidUniformBlock),
         }
     }
 
@@ -200,7 +200,7 @@ impl ShaderArchive {
                 continue;
             }
             if found.is_some() {
-                return fail("Duplicate compiled shader key.");
+                return fail(ShaderError::DuplicateProgramKey);
             }
             found = Some(index);
         }
@@ -227,11 +227,11 @@ impl ShaderArchive {
         };
         for i in options {
             let Some(option) = model.options.get(i) else {
-                return fail("Shader option index is out of range.");
+                return fail(ShaderError::OptionOutOfRange);
             };
             let word = option.word - if dynamic { model.static_key_words } else { 0 };
             if word < 0 || word >= length {
-                return fail("Shader option references the wrong key region.");
+                return fail(ShaderError::OptionWrongRegion);
             }
             let mut selected = option.default_choice;
             if let Some(value) = choices.get(&option.name) {
@@ -240,14 +240,17 @@ impl ShaderArchive {
                     // The dynamic setter leaves its default for an unknown choice
                     // An unknown static value cannot establish a compiled candidate
                     None if !dynamic => {
-                        return fail(format!("Unknown shader choice {}={value}.", option.name));
+                        return fail(ShaderError::UnknownChoice {
+                            option: option.name.clone(),
+                            value: value.to_owned(),
+                        });
                     }
                     None => {}
                 }
             }
             let bits = (selected as u32).wrapping_shl(option.shift);
             if bits & !option.mask != 0 {
-                return fail("Shader choice exceeds its mask.");
+                return fail(ShaderError::ChoiceExceedsMask);
             }
             let word = &mut words[word as usize];
             *word = (*word & !option.mask) | bits;
@@ -257,7 +260,7 @@ impl ShaderArchive {
 
     pub fn program_layout(&self, model: &ShadingModel, index: i64) -> Result<ProgramLayout> {
         if index < 0 || index >= model.program_count {
-            return fail("Shader program index is out of range.");
+            return fail(ShaderError::ProgramOutOfRange);
         }
         let program = model.program_array + index * 0x40;
         let mask = self.data().u32(program + 0x30)?;
@@ -295,7 +298,7 @@ impl ShaderArchive {
             return Ok(locations);
         }
         if at == 0 {
-            return fail("Missing compiled resource locations.");
+            return fail(ShaderError::MissingResourceLocations);
         }
         self.data().range(at, names.len() as i64 * 24)?;
         for (i, name) in names.iter().enumerate() {
@@ -306,7 +309,7 @@ impl ShaderArchive {
                 | (self.data().u32(entry + 4)? & 255) << 16
                 | 0xff000000;
             if locations.iter().any(|(existing, _)| existing == name) {
-                return fail("Duplicate shader resource name.");
+                return fail(ShaderError::DuplicateResourceName);
             }
             locations.push((name.clone(), packed));
         }
@@ -329,7 +332,7 @@ impl ShadingModel {
         let bnsh_size = to_int(data.u32(bnsh_base + 28)? as i64)?;
         data.range(bnsh_base, bnsh_size)?;
         if bnsh_size < 32 {
-            return fail("Invalid BNSH file size.");
+            return fail(ShaderError::InvalidBnshSize);
         }
         let mut options = read_options(
             data,
@@ -421,7 +424,7 @@ fn read_options(
             || shift > 31
             || mask == 0
         {
-            return fail("Invalid shader option bit packing.");
+            return fail(ShaderError::InvalidOptionPacking);
         }
         options.push(ShaderOption {
             name,
@@ -449,17 +452,14 @@ pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
         data = yaz0::decompress(&data)?;
     }
     if !data.starts_with(b"FSHA") {
-        let members = sarc::read(&data)?;
+        let members = nookkit_sarc::read(&data)?;
         let mut archives = members
             .iter()
             .filter(|m| m.data(&data).starts_with(b"FSHA"));
         let (Some(archive), None) = (archives.next(), archives.next()) else {
-            return fail("Expected one BFSHA file in the shader archive.");
+            return fail(ShaderError::NotOneArchive);
         };
-        let (start, end) = (
-            archive.offset as usize,
-            (archive.offset + archive.length) as usize,
-        );
+        let (start, end) = (archive.offset, archive.offset + archive.length);
         data.truncate(end);
         data.drain(..start);
     }
