@@ -14,34 +14,25 @@ fn folder_exists(folder: &str) -> bool {
     }
 }
 
-/// The `.json` files in `folder` in name order, as (file name, text). A file that can't be read is
-/// reported as a `what` and skipped
-pub fn json_files(folder: &str, what: &str) -> Vec<(String, String)> {
-    if !folder_exists(folder) {
-        return Vec::new();
+/// The `.json` files in `folder` in name order, as (file name, text), none when there's no
+/// folder. Each is read once reached, so one text is in memory at a time
+pub fn json_files(
+    folder: &str,
+) -> std::io::Result<impl Iterator<Item = (String, std::io::Result<String>)>> {
+    let mut paths = Vec::new();
+    if folder_exists(folder) {
+        for entry in std::fs::read_dir(folder)? {
+            paths.push(entry?.path());
+        }
     }
-
-    let mut paths: Vec<_> = match std::fs::read_dir(folder) {
-        Ok(dir) => dir.filter_map(|e| Some(e.ok()?.path())).collect(),
-        Err(_) => Vec::new(),
-    };
     paths.retain(|p| p.extension().is_some_and(|e| e == "json"));
     paths.sort();
 
-    paths
-        .iter()
-        .filter_map(|path| {
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            match std::fs::read_to_string(path) {
-                Ok(json) => Some((name, json)),
-                Err(e) => {
-                    println!("[NookKit] {what} {name}: {e}");
-                    None
-                }
-            }
-        })
-        .collect()
+    Ok(paths.into_iter().map(|path| {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        (name, std::fs::read_to_string(&path))
+    }))
 }

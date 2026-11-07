@@ -1,22 +1,52 @@
-use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use nookkit_bcsv::{PatchSet, Table};
+use nookkit_bcsv::{PatchSet, Plan, Table, WriteError};
 use nookkit_sym::sym;
 use nookkit_types::bcsv::BcsvMgr;
-use nookkit_types::sead::{DirectResource, Heap, SafeString, VftDirectResource, VftHeap};
+use nookkit_types::native;
+use nookkit_types::sead::{DirectResource, Heap, HeapMgr, SafeString, VftDirectResource, VftHeap};
 
 const FOLDER: &str = "content:/NookKit/Bcsv";
 
 static PATCHES: OnceLock<PatchSet> = OnceLock::new();
 
+#[derive(Debug, thiserror::Error)]
+enum BcsvError {
+    #[error(transparent)]
+    Native(#[from] native::Error),
+    #[error("sead has no heap manager")]
+    NoHeapMgr,
+    #[error("no heap holds the table")]
+    NoHeap,
+    #[error("no memory for the {size} byte patched table")]
+    OutOfMemory { size: usize },
+    #[error(transparent)]
+    Write(#[from] WriteError),
+}
+
 /// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
-    let files = crate::content::json_files(FOLDER, "bcsv patch");
+    let files = match crate::content::json_files(FOLDER) {
+        Ok(files) => files,
+        Err(e) => {
+            println!("[NookKit] bcsv patches: {e}");
+            return set;
+        }
+    };
 
-    for (name, json) in &files {
-        if let Err(e) = set.add(name, json) {
+    let mut read = 0;
+    for (name, json) in files {
+        let json = match json {
+            Ok(json) => json,
+            Err(e) => {
+                println!("[NookKit] bcsv patch {name}: {e}");
+                continue;
+            }
+        };
+        read += 1;
+
+        if let Err(e) = set.add(&name, &json) {
             println!("[NookKit] bcsv patch {e}");
         }
     }
@@ -25,7 +55,7 @@ fn load() -> PatchSet {
         println!(
             "[NookKit] {} patched tables from {} files",
             set.files().count(),
-            files.len()
+            read
         );
     }
     set
@@ -41,73 +71,56 @@ fn table_name(path: &str) -> &str {
     name.strip_suffix(".bcsv").unwrap_or(name)
 }
 
-/// The table in `resource` with every patch for `file` applied, `None` when nothing changed
-fn patched(patches: &PatchSet, file: &str, resource: &DirectResource) -> Option<Vec<u8>> {
-    let Some(mut table) = Table::parse(unsafe { resource.data() }) else {
-        println!("[NookKit] bcsv patch: {file} isn't a table");
-        return None;
-    };
-
-    let applied = patches.apply(file, &mut table);
-    for error in &applied.errors {
-        println!("[NookKit] bcsv patch {error}");
+/// The heap that holds the resource's data, the one its destructor frees an owned buffer from
+unsafe fn data_heap(resource: &DirectResource) -> Result<*mut Heap, BcsvError> {
+    let mgr = unsafe { HeapMgr::instance()?.as_mut() }.ok_or(BcsvError::NoHeapMgr)?;
+    let heap = unsafe { mgr.find_contain_heap(resource.raw_data)? };
+    if heap.is_null() {
+        return Err(BcsvError::NoHeap);
     }
-    if applied.added + applied.replaced == 0 {
-        return None;
-    }
-
-    println!(
-        "[NookKit] {file}: {} rows replaced, {} added",
-        applied.replaced, applied.added
-    );
-    Some(table.to_bytes())
+    Ok(heap)
 }
 
-/// Swaps the resource's data for `bytes`, in the heap that holds its data, the one its destructor
-/// frees an owned buffer from
-unsafe fn replace_data(resource: &mut DirectResource, bytes: &[u8]) -> bool {
-    let find_heap: unsafe extern "C" fn(*const c_void, *const c_void) -> *mut Heap = unsafe {
-        let Ok(address) = nookkit_sym::fun_addr(&sym::sead::HeapMgr::findContainHeap) else {
-            return false;
-        };
-        core::mem::transmute(address)
-    };
-    let Ok(instance) = nookkit_sym::data::<*const c_void>(&sym::sead::HeapMgr::sInstance) else {
-        return false;
-    };
+struct Patched {
+    heap: *mut Heap,
+    data: *mut u8,
+    size: usize,
+}
 
-    unsafe {
-        let mgr = *instance;
-        if mgr.is_null() {
-            return false;
-        }
-        let heap = find_heap(mgr, resource.raw_data.cast());
-        if heap.is_null() {
-            return false;
-        }
+impl Patched {
+    /// Writes the table to the heap that holds the resource's data, since the game leaves
+    /// `malloc` too little memory for a copy of a large table
+    unsafe fn write(resource: &DirectResource, plan: &Plan) -> Result<Self, BcsvError> {
+        let heap = unsafe { data_heap(resource)? };
+        let size = plan.size();
 
-        let alignment = resource.get_load_data_alignment();
-        let data = (*heap).try_alloc(bytes.len(), alignment).cast::<u8>();
-        if data.is_null() {
-            return false;
+        unsafe {
+            let alignment = resource.get_load_data_alignment();
+            let data = (*heap).try_alloc(size, alignment).cast::<u8>();
+            if data.is_null() {
+                return Err(BcsvError::OutOfMemory { size });
+            }
+            if let Err(e) = plan.write(core::slice::from_raw_parts_mut(data, size)) {
+                (*heap).free(data.cast());
+                return Err(e.into());
+            }
+            Ok(Self { heap, data, size })
         }
-        core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len());
-
-        if resource.setting_flag & 1 != 0 {
-            (*heap).free(resource.raw_data.cast());
-        }
-        resource.raw_data = data;
-        resource.raw_size = bytes.len() as u32;
-        resource.buffer_size = bytes.len() as u32;
-        resource.setting_flag |= 1;
     }
-    true
+
+    /// Gives the table to the resource, once nothing reads its old data
+    unsafe fn hand_to(self, resource: &mut DirectResource) {
+        if resource.owns_data() {
+            unsafe { (*self.heap).free(resource.raw_data.cast()) };
+        }
+        resource.set_owned_data(self.data, self.size as u32);
+    }
 }
 
 // Every table reads its rows from the resource this returns, right after
 nookkit_sym::hook! {
     pub load_resource = sym::game::BcsvMgr::loadResource;
-    fn(mgr: *mut c_void, name: *const SafeString<'static>, heap: *mut Heap) -> *mut DirectResource {
+    fn(mgr: *mut BcsvMgr, name: *const SafeString<'static>, heap: *mut Heap) -> *mut DirectResource {
         let resource = unsafe { original(mgr, name, heap) };
 
         let Some(resource_ref) = (unsafe { resource.as_mut() }) else {
@@ -122,10 +135,32 @@ nookkit_sym::hook! {
             return resource;
         };
 
-        if let Some(bytes) = patched(patches, file, resource_ref)
-            && !unsafe { replace_data(resource_ref, &bytes) }
-        {
-            println!("[NookKit] bcsv patch: no memory for the patched {file}");
+        // Not borrowed from the resource, whose data is replaced once the table is dropped
+        let data = unsafe { core::slice::from_raw_parts(resource_ref.raw_data, resource_ref.raw_size as usize) };
+        let Some(table) = Table::parse(data) else {
+            println!("[NookKit] bcsv patch: {file} isn't a table");
+            return resource;
+        };
+
+        let plan = patches.plan(file, &table);
+        for skipped in &plan.skipped {
+            println!("[NookKit] bcsv patch {skipped}");
+        }
+        if plan.is_empty() {
+            return resource;
+        }
+
+        let (replaced, added) = (plan.replaced, plan.added);
+        let patched = unsafe { Patched::write(resource_ref, &plan) };
+        drop(plan);
+        drop(table);
+
+        match patched {
+            Ok(patched) => {
+                unsafe { patched.hand_to(resource_ref) };
+                println!("[NookKit] {file}: {replaced} rows replaced, {added} added");
+            }
+            Err(e) => println!("[NookKit] bcsv patch {file}: {e}"),
         }
         resource
     }

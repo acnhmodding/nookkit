@@ -1,5 +1,8 @@
+pub mod error;
 pub mod patch;
+mod read;
 pub mod table;
 
-pub use patch::{Applied, Hash, Patch, PatchError, PatchSet, Value};
+pub use error::{CellError, ReadError, Skipped, WriteError};
+pub use patch::{PatchSet, Plan};
 pub use table::{Column, Table};

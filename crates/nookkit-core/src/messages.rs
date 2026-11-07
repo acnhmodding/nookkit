@@ -19,10 +19,26 @@ static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 /// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
-    let files = crate::content::json_files(FOLDER, "message patch");
+    let files = match crate::content::json_files(FOLDER) {
+        Ok(files) => files,
+        Err(e) => {
+            println!("[NookKit] message patches: {e}");
+            return set;
+        }
+    };
 
-    for (name, json) in &files {
-        match set.add(name, json) {
+    let mut read = 0;
+    for (name, json) in files {
+        let json = match json {
+            Ok(json) => json,
+            Err(e) => {
+                println!("[NookKit] message patch {name}: {e}");
+                continue;
+            }
+        };
+        read += 1;
+
+        match set.add(&name, &json) {
             Ok(replaced) => {
                 for label in replaced {
                     println!("[NookKit] message patch {name} replaces {label}");
@@ -36,7 +52,7 @@ fn load() -> PatchSet {
         println!(
             "[NookKit] {} patched messages from {} files",
             set.len(),
-            files.len()
+            read
         );
     }
     set

@@ -19,18 +19,17 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     for file in set.files() {
         let path = Path::new(romfs).join("Bcsv").join(format!("{file}.bcsv"));
         let data = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut table =
-            Table::parse(&data).ok_or_else(|| format!("{}: not a BCSV", path.display()))?;
+        let table = Table::parse(&data).ok_or_else(|| format!("{}: not a BCSV", path.display()))?;
 
-        let applied = set.apply(file, &mut table);
-        for e in &applied.errors {
+        let plan = set.plan(file, &table);
+        for e in &plan.skipped {
             eprintln!("{e}");
         }
-        failed |= !applied.errors.is_empty();
+        failed |= !plan.skipped.is_empty();
 
         eprintln!(
             "{file}: {} rows replaced, {} added",
-            applied.replaced, applied.added
+            plan.replaced, plan.added
         );
     }
 
