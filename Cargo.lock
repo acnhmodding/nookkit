@@ -107,6 +107,7 @@ version = "0.2.0"
 dependencies = [
  "crc32fast",
  "nookkit-bcsv",
+ "nookkit-byml",
  "nookkit-msbt",
  "nookkit-rstb",
  "nookkit-sym",

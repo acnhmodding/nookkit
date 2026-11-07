@@ -3,6 +3,7 @@ mod content;
 mod keys;
 mod lists;
 mod messages;
+mod pack;
 mod pages;
 mod rstb;
 mod seqs;
@@ -68,6 +69,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     keys::message_find::install()?;
     messages::install()?;
     bcsv::install()?;
+    pack::install()?;
     rstb::install()
 }
 
