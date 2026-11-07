@@ -1,3 +1,5 @@
+use crate::error::WriteError;
+
 /// A column: its name's CRC32 and where its cell sits in a row. The cell runs to the next column or
 /// the end of the row
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7,72 +9,145 @@ pub struct Column {
     pub size: usize,
 }
 
-/// A BCSV table as raw rows, read and written without knowing its column types
-#[derive(Debug, Clone)]
-pub struct Table {
-    /// Everything before the rows, written back as read apart from the row count
-    head: Vec<u8>,
-    pub columns: Vec<Column>,
-    pub row_size: usize,
-    pub rows: Vec<Vec<u8>>,
+/// What every table starts with, `FileHeader` in nookkit-types
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Header {
+    row_count: u32,
+    row_size: u32,
+    field_count: u16,
+    /// An `ExtHeader` follows, before the fields
+    has_ext_header: bool,
+    lang: u8,
 }
 
-const ROW_COUNT: usize = 0x0;
-const EXT_HEADER: usize = 0xc;
-const COLUMN_INFO: usize = 8;
+/// `ExtHeader`, written back as read
+const EXT_HEADER_SIZE: usize = 0x10;
+const EXT_MAGIC: &[u8] = b"VSCB";
 
-impl Table {
-    pub fn parse(data: &[u8]) -> Option<Self> {
-        let u32_at = |at: usize| Some(u32::from_le_bytes(data.get(at..at + 4)?.try_into().ok()?));
+/// A column's hash and offset in a row
+#[derive(Debug, Clone, Copy)]
+struct FieldInfo {
+    hash: u32,
+    offset: u32,
+}
 
-        let row_count = u32_at(ROW_COUNT)? as usize;
-        let row_size = u32_at(0x4)? as usize;
-        let column_count = u16::from_le_bytes(data.get(0x8..0xa)?.try_into().ok()?) as usize;
-        let has_ext_header = *data.get(0xa)? != 0;
+impl FieldInfo {
+    fn read(bytes: &mut Bytes) -> Option<Self> {
+        Some(Self {
+            hash: bytes.u32()?,
+            offset: bytes.u32()?,
+        })
+    }
+}
 
-        let columns_at = if has_ext_header {
-            if data.get(0xc..0x10)? != b"VSCB" {
-                return None;
-            }
-            EXT_HEADER + 0x10
-        } else {
-            EXT_HEADER
-        };
+impl Header {
+    const SIZE: usize = 0xc;
 
-        let mut columns = (0..column_count)
-            .map(|i| {
-                let at = columns_at + i * COLUMN_INFO;
-                Some((u32_at(at)?, u32_at(at + 4)? as usize))
-            })
+    fn read(bytes: &mut Bytes) -> Option<Self> {
+        Some(Self {
+            row_count: bytes.u32()?,
+            row_size: bytes.u32()?,
+            field_count: bytes.u16()?,
+            has_ext_header: bytes.u8()? != 0,
+            lang: bytes.u8()?,
+        })
+    }
+
+    fn to_bytes(self) -> [u8; Self::SIZE] {
+        let mut out = [0; Self::SIZE];
+        let (row_count, rest) = out.split_at_mut(4);
+        let (row_size, rest) = rest.split_at_mut(4);
+        let (field_count, rest) = rest.split_at_mut(2);
+        row_count.copy_from_slice(&self.row_count.to_le_bytes());
+        row_size.copy_from_slice(&self.row_size.to_le_bytes());
+        field_count.copy_from_slice(&self.field_count.to_le_bytes());
+        rest.copy_from_slice(&[self.has_ext_header as u8, self.lang]);
+        out
+    }
+}
+
+/// Little endian values read in order
+struct Bytes<'a>(&'a [u8]);
+
+impl<'a> Bytes<'a> {
+    fn array<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let (array, rest) = self.0.split_first_chunk::<N>()?;
+        self.0 = rest;
+        Some(*array)
+    }
+
+    fn u8(&mut self) -> Option<u8> {
+        self.array().map(u8::from_le_bytes)
+    }
+
+    fn u16(&mut self) -> Option<u16> {
+        self.array().map(u16::from_le_bytes)
+    }
+
+    fn u32(&mut self) -> Option<u32> {
+        self.array().map(u32::from_le_bytes)
+    }
+
+    fn take(&mut self, len: usize) -> Option<&'a [u8]> {
+        let (taken, rest) = self.0.split_at_checked(len)?;
+        self.0 = rest;
+        Some(taken)
+    }
+}
+
+/// A BCSV table read in place, without knowing its column types
+#[derive(Debug, Clone)]
+pub struct Table<'a> {
+    header: Header,
+    /// The ext header and fields, written back as read
+    head: &'a [u8],
+    rows: &'a [u8],
+    pub columns: Vec<Column>,
+    pub row_size: usize,
+    pub row_count: usize,
+}
+
+impl<'a> Table<'a> {
+    pub fn parse(data: &'a [u8]) -> Option<Self> {
+        let mut bytes = Bytes(data);
+        let header = Header::read(&mut bytes)?;
+        let row_count = header.row_count as usize;
+        let row_size = header.row_size as usize;
+
+        let head = bytes.0;
+        if header.has_ext_header && !bytes.take(EXT_HEADER_SIZE)?.starts_with(EXT_MAGIC) {
+            return None;
+        }
+        let mut fields = (0..header.field_count)
+            .map(|_| FieldInfo::read(&mut bytes))
             .collect::<Option<Vec<_>>>()?;
-
-        let rows_at = columns_at + column_count * COLUMN_INFO;
-        let rows = data
-            .get(rows_at..rows_at.checked_add(row_count.checked_mul(row_size)?)?)?
-            .chunks(row_size.max(1))
-            .take(row_count)
-            .map(<[u8]>::to_vec)
-            .collect();
+        let head = &head[..head.len() - bytes.0.len()];
+        let rows = bytes.take(row_count.checked_mul(row_size)?)?;
 
         // Cell sizes come from the offsets, which the files list in order
-        columns.push((0, row_size));
-        let columns = columns
+        fields.push(FieldInfo {
+            hash: 0,
+            offset: header.row_size,
+        });
+        let columns = fields
             .windows(2)
             .map(|pair| {
-                let ((hash, offset), (_, next)) = (pair[0], pair[1]);
+                let (field, next) = (pair[0], pair[1]);
                 Some(Column {
-                    hash,
-                    offset,
-                    size: next.checked_sub(offset)?,
+                    hash: field.hash,
+                    offset: field.offset as usize,
+                    size: next.offset.checked_sub(field.offset)? as usize,
                 })
             })
             .collect::<Option<Vec<_>>>()?;
 
         Some(Self {
-            head: data[..rows_at].to_vec(),
+            header,
+            head,
+            rows,
             columns,
             row_size,
-            rows,
+            row_count,
         })
     }
 
@@ -80,24 +155,69 @@ impl Table {
         self.columns.iter().find(|c| c.hash == hash).copied()
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = self.head.clone();
-        out[ROW_COUNT..ROW_COUNT + 4].copy_from_slice(&(self.rows.len() as u32).to_le_bytes());
+    pub fn row(&self, index: usize) -> Option<&'a [u8]> {
+        if index >= self.row_count {
+            return None;
+        }
+        self.rows.get(index * self.row_size..)?.get(..self.row_size)
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = &'a [u8]> + '_ {
+        (0..self.row_count).filter_map(|index| self.row(index))
+    }
+
+    pub fn size(&self, rows: usize) -> usize {
+        self.row_at(rows).next_multiple_of(4)
+    }
+
+    pub fn row_at(&self, index: usize) -> usize {
+        Header::SIZE + self.head.len() + index * self.row_size
+    }
+
+    /// Writes the table with `rows` rows, at least its own, to `out`, which is [`Self::size`]
+    /// bytes. The rows past the table's own are zeros apart from the offset a row starts with
+    pub fn write(&self, rows: usize, out: &mut [u8]) -> Result<(), WriteError> {
+        let count = self.row_count;
+        if rows < count {
+            return Err(WriteError::TooFewRows { rows, count });
+        }
+        let size = self.size(rows);
+        if out.len() != size {
+            return Err(WriteError::BufferSize {
+                len: out.len(),
+                size,
+            });
+        }
+
+        let header = Header {
+            row_count: rows as u32,
+            ..self.header
+        };
+        let (out_header, rest) = out.split_at_mut(Header::SIZE);
+        let (out_head, rest) = rest.split_at_mut(self.head.len());
+        let (out_rows, rest) = rest.split_at_mut(self.rows.len());
+        out_header.copy_from_slice(&header.to_bytes());
+        out_head.copy_from_slice(self.head);
+        out_rows.copy_from_slice(self.rows);
+        rest.fill(0);
 
         // A row's first four bytes hold its offset in the file unless a column starts there
         let row_offsets = self.columns.iter().all(|c| c.offset >= 4) && self.row_size >= 4;
-
-        for row in &self.rows {
-            let at = out.len() as u32;
-            out.extend_from_slice(row);
-            if row_offsets {
-                let start = out.len() - row.len();
-                out[start..start + 4].copy_from_slice(&at.to_le_bytes());
+        if row_offsets {
+            for index in count..rows {
+                let at = self.row_at(index);
+                if let Some(offset) = out[at..].first_chunk_mut::<4>() {
+                    *offset = (at as u32).to_le_bytes();
+                }
             }
         }
+        Ok(())
+    }
 
-        out.resize(out.len().next_multiple_of(4), 0);
-        out
+    pub fn to_bytes(&self, rows: usize) -> Result<Vec<u8>, WriteError> {
+        let mut out = vec![0; self.size(rows)];
+        self.write(rows, &mut out)?;
+        Ok(out)
     }
 }
 
@@ -122,7 +242,8 @@ mod tests {
 
     #[test]
     fn reads_columns_and_rows() {
-        let table = Table::parse(&small()).unwrap();
+        let data = small();
+        let table = Table::parse(&data).unwrap();
         assert_eq!(
             table.columns,
             vec![
@@ -138,18 +259,37 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(table.rows.len(), 1);
-        assert_eq!(table.to_bytes(), small());
+        assert_eq!(table.row_count, 1);
+        assert_eq!(table.row(0), Some(&data[0x1c..]));
+        assert_eq!(table.row(1), None);
+        assert_eq!(table.to_bytes(1).unwrap(), data);
     }
 
     #[test]
     fn new_rows_get_their_offset() {
-        let mut table = Table::parse(&small()).unwrap();
-        table.rows.push(vec![0; 12]);
+        let data = small();
+        let table = Table::parse(&data).unwrap();
 
-        let data = table.to_bytes();
+        let data = table.to_bytes(2).unwrap();
+        assert_eq!(data.len(), 0x34);
         assert_eq!(data[0], 2);
         assert_eq!(&data[0x28..0x2c], &0x28u32.to_le_bytes());
+        assert_eq!(&data[0x2c..], &[0; 8]);
+    }
+
+    #[test]
+    fn checks_what_it_writes_to() {
+        let data = small();
+        let table = Table::parse(&data).unwrap();
+
+        assert_eq!(
+            table.to_bytes(0),
+            Err(WriteError::TooFewRows { rows: 0, count: 1 })
+        );
+        assert_eq!(
+            table.write(1, &mut [0; 4]),
+            Err(WriteError::BufferSize { len: 4, size: 0x28 })
+        );
     }
 
     #[test]

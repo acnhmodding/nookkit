@@ -36,7 +36,7 @@ pub struct DirectResource {
     pub raw_size: u32,
     pub buffer_size: u32,
 
-    /// Bit 0: owns `raw_data`
+    /// [`DirectResource::OWNS_DATA`] and others
     pub setting_flag: u32,
 }
 
@@ -48,6 +48,21 @@ crate::derive_base!(DirectResource => Resource);
 unsafe impl VftDirectResource for DirectResource {}
 
 impl DirectResource {
+    /// Set when the destructor frees `raw_data`, from the heap that holds it
+    pub const OWNS_DATA: u32 = 1 << 0;
+
+    pub fn owns_data(&self) -> bool {
+        self.setting_flag & Self::OWNS_DATA != 0
+    }
+
+    /// Hands over `size` bytes at `data` for the destructor to free
+    pub fn set_owned_data(&mut self, data: *mut u8, size: u32) {
+        self.raw_data = data;
+        self.raw_size = size;
+        self.buffer_size = size;
+        self.setting_flag |= Self::OWNS_DATA;
+    }
+
     pub unsafe fn data(&self) -> &[u8] {
         if self.raw_data.is_null() {
             return &[];

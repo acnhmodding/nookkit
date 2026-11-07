@@ -23,7 +23,7 @@ fn every_table_round_trips() {
         let name = path.file_name().unwrap().to_string_lossy();
 
         match Table::parse(&data) {
-            Some(table) if table.to_bytes() == data => {}
+            Some(table) if table.to_bytes(table.row_count).as_deref() == Ok(&data[..]) => {}
             Some(_) => failures.push(format!("{name}: written differently")),
             None => failures.push(format!("{name}: doesn't read")),
         }

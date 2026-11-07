@@ -18,4 +18,5 @@ nookkit-bcsv = { workspace = true }
 nookkit-msbt = { workspace = true }
 nookkit-rstb = { workspace = true }
 crc32fast = { workspace = true }
+thiserror = { workspace = true }
 talc = { version = "4.4", default-features = false }
