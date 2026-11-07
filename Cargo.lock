@@ -92,6 +92,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nookkit-byml"
+version = "0.1.0"
+dependencies = [
+ "nookkit-sarc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "nookkit-core"
 version = "0.2.0"
 dependencies = [
