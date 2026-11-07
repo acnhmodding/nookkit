@@ -1,6 +1,6 @@
 use core::ffi::c_void;
-use std::collections::BTreeMap;
-use std::sync::{Mutex, OnceLock};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use nookkit_byml::PatchSet;
 use nookkit_sym::sym;
@@ -11,8 +11,27 @@ const FOLDER: &str = "content:/NookKit/Pack";
 const EXTENSION: &str = ".pack";
 
 static PATCHES: OnceLock<PatchSet> = OnceLock::new();
-// The patched archive each thread is loading, since `insert` only gets the file's own path
-static LOADING: Mutex<BTreeMap<usize, &'static str>> = Mutex::new(BTreeMap::new());
+// What each thread is loading, since `insert` only gets the file's own path
+static LOADING: Mutex<BTreeMap<usize, Loading>> = Mutex::new(BTreeMap::new());
+// The archives whose patches were checked against the files the game cached
+static CHECKED: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
+
+/// A patched archive being loaded, and what the game cached from it so far
+struct Loading {
+    archive: &'static str,
+    cached: usize,
+    patched: BTreeSet<String>,
+}
+
+impl Loading {
+    fn new(archive: &'static str) -> Self {
+        Self {
+            archive,
+            cached: 0,
+            patched: BTreeSet::new(),
+        }
+    }
+}
 
 /// Every patch, a broken one is reported and skipped
 fn load_patches() -> PatchSet {
@@ -70,19 +89,43 @@ fn current_thread() -> usize {
     unsafe { skyline::nn::os::GetCurrentThread() as usize }
 }
 
-/// Marks this thread as loading `archive`, returning what it was loading before
-fn set_loading(archive: Option<&'static str>) -> Option<&'static str> {
-    let mut loading = LOADING.lock().unwrap_or_else(|e| e.into_inner());
-    let thread = current_thread();
-    match archive {
-        Some(archive) => loading.insert(thread, archive),
-        None => loading.remove(&thread),
-    }
+fn loading() -> MutexGuard<'static, BTreeMap<usize, Loading>> {
+    LOADING.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn loading() -> Option<&'static str> {
-    let loading = LOADING.lock().unwrap_or_else(|e| e.into_inner());
-    loading.get(&current_thread()).copied()
+/// Notes `file` as cached from the archive this thread is loading, returning the archive
+fn cache_file(file: &str) -> Option<&'static str> {
+    let mut loading = loading();
+    let loading = loading.get_mut(&current_thread())?;
+    loading.cached += 1;
+    if patches()?.get(loading.archive, file).is_some() {
+        loading.patched.insert(file.to_owned());
+    }
+    Some(loading.archive)
+}
+
+/// Reports the patches of a file the archive doesn't have, once per archive. JSON only
+/// replaces files, a new one goes in the romfs as a loose file
+fn check_missing(loaded: &Loading) {
+    // Nothing was cached when the game already had the archive
+    if loaded.cached == 0 {
+        return;
+    }
+    let mut checked = CHECKED.lock().unwrap_or_else(|e| e.into_inner());
+    if !checked.insert(loaded.archive) {
+        return;
+    }
+    let Some(patches) = patches() else {
+        return;
+    };
+    for (file, entry) in patches.files(loaded.archive) {
+        if !loaded.patched.contains(file) {
+            println!(
+                "[NookKit] pack patch {} on {}/{file}: not in the archive, add a new file as a loose file",
+                entry.patch, loaded.archive
+            );
+        }
+    }
 }
 
 /// The patched file, none when no patch takes it or it doesn't apply
@@ -127,9 +170,19 @@ nookkit_sym::hook! {
             return unsafe { original(cache, request) };
         };
 
-        let previous = set_loading(Some(archive));
+        let thread = current_thread();
+        let previous = loading().insert(thread, Loading::new(archive));
         let node = unsafe { original(cache, request) };
-        set_loading(previous);
+
+        let mut loading = loading();
+        let loaded = match previous {
+            Some(previous) => loading.insert(thread, previous),
+            None => loading.remove(&thread),
+        };
+        drop(loading);
+        if let Some(loaded) = loaded {
+            check_missing(&loaded);
+        }
         node
     }
 }
@@ -138,8 +191,9 @@ nookkit_sym::hook! {
 nookkit_sym::hook! {
     pub insert = sym::game::FileCache::insert;
     fn(cache: *mut c_void, request: *const LoadRequest<'static>, holder: *mut c_void, path: *const SafeString<'static>, data: *const u8, size: u32) -> *mut c_void {
-        let patched = loading().and_then(|archive| {
-            let file = unsafe { path.as_ref()?.as_str()? };
+        let patched = unsafe { path.as_ref() }.and_then(|path| {
+            let file = unsafe { path.as_str()? };
+            let archive = cache_file(file)?;
             if data.is_null() {
                 return None;
             }
