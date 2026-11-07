@@ -10,6 +10,8 @@
 "Lp::UI::UIMgr::findMessage" = "ptr, ptr, ptr -> i8"
 "Lp::UI::UniteBtnCtrl::getRuntimeTypeInfo" = "ptr -> ptr"
 "game::BcsvMgr::loadResource" = "ptr, ptr, ptr -> ptr"
+"game::FileCache::insert" = "ptr, ptr, ptr, ptr, ptr, i32 -> ptr"
+"game::FileCache::load" = "ptr, ptr -> ptr"
 "game::MessageAttribute::read1" = "ptr, ptr, ptr, ptr -> i8"
 "game::MessageAttribute::read2" = "ptr, ptr, ptr, ptr -> i8"
 "game::MessageAttribute::read3" = "ptr, ptr, ptr, ptr -> i8"
