@@ -15,6 +15,7 @@ nookkit-sys = { workspace = true }
 nookkit-sym = { workspace = true, features = ["skyline"] }
 nookkit-types = { workspace = true }
 nookkit-bcsv = { workspace = true }
+nookkit-byml = { workspace = true }
 nookkit-msbt = { workspace = true }
 nookkit-rstb = { workspace = true }
 crc32fast = { workspace = true }
