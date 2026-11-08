@@ -23,11 +23,15 @@ panic = "abort"
 lto = true
 
 [workspace.dependencies]
-skyline = "0.6.0"
+skyline = { version = "0.6.0", default-features = false, features = ["std"] }
 native-vtable = { git = "https://github.com/crackheadakira/vtable-rs" }
-thiserror = "2"
-crc32fast = "1.5.0"
+thiserror = { version = "2", default-features = false }
+# std turns on the runtime check for the CPU's CRC32 instructions
+crc32fast = { version = "1.5.0", default-features = false, features = ["std"] }
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+talc = { version = "4.4", default-features = false }
 
 nookkit = { path = "crates/nookkit" }
 nookkit-bcsv = { path = "crates/nookkit-bcsv" }
