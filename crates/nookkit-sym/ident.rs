@@ -80,6 +80,7 @@ pub fn ident(segment: &str) -> String {
     while out.ends_with('_') && out.len() > 1 {
         out.pop();
     }
+
     if out.starts_with(|c: char| c.is_ascii_digit()) {
         out.insert(0, '_');
     }

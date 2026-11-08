@@ -54,6 +54,7 @@ pub struct Atr1Header {
 impl MsgStdBinary {
     pub unsafe fn block(&self, index: i32) -> Option<&MsgBlock> {
         let index = u16::try_from(index).ok()?;
+
         if index >= self.block_count || self.blocks.is_null() {
             return None;
         }

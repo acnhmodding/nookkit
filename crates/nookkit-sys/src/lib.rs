@@ -216,6 +216,7 @@ impl Str {
         }
 
         let bytes = unsafe { core::slice::from_raw_parts(self.ptr, self.len) };
+
         core::str::from_utf8(bytes).ok()
     }
 }

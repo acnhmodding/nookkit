@@ -27,6 +27,7 @@ pub unsafe fn lock_menu(player: u8) -> NativeResult<bool> {
         }
 
         let mgr = *data::<*mut c_void>(&sym::game::PlayerControlLockMgr::sInstance)?;
+
         if mgr.is_null() {
             return Ok(false);
         }

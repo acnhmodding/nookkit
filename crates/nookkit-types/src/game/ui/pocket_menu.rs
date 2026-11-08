@@ -153,11 +153,13 @@ impl CommandSelectSeq {
     /// Selects the record at `index`, `false` past the records
     pub fn choose(&mut self, index: usize) -> bool {
         let count = self.count as usize;
+
         if index >= count || count > COMMAND_RECORDS {
             return false;
         }
 
         self.selected_button = (count - 1 - index) as u8;
+
         true
     }
 

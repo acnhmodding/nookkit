@@ -57,10 +57,12 @@ fn segments(name: &str) -> Vec<&str> {
             }
             _ => {}
         }
+
         i += 1;
     }
 
     out.push(&name[start..]);
+
     out
 }
 
@@ -81,15 +83,18 @@ fn abi_type(token: &str) -> Option<&'static str> {
 /// `"ptr, i32 -> i8"` to `crate::Sig<(Ptr, I32,), I8>`
 fn signature(text: &str) -> Result<String, String> {
     let (args, ret) = text.split_once("->").ok_or("missing `->`")?;
+
     let args: Vec<_> = args
         .split(',')
         .map(str::trim)
         .filter(|a| !a.is_empty())
         .map(|a| abi_type(a).ok_or(format!("unknown ABI type `{a}`")))
         .collect::<Result<_, _>>()?;
+
     let ret = abi_type(ret.trim()).ok_or(format!("unknown ABI type `{}`", ret.trim()))?;
 
     let args: String = args.iter().map(|a| format!("{a}, ")).collect();
+
     Ok(format!("crate::Sig<({args}), {ret}>"))
 }
 
@@ -98,6 +103,7 @@ fn signatures(text: &str) -> HashMap<String, String> {
 
     for (index, raw) in text.lines().enumerate() {
         let line = parse::strip_comment(raw).trim();
+
         if line.is_empty() || line.starts_with('[') {
             continue;
         }
@@ -111,6 +117,7 @@ fn signatures(text: &str) -> HashMap<String, String> {
                     index + 1
                 )
             });
+
         let sig = sig.trim_matches('"');
         let ty = signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
 
@@ -131,6 +138,7 @@ fn emit(module: &Module, out: &mut String, depth: usize) {
     for (name, item) in &module.items {
         writeln!(out, "{pad}pub const {name}: {item};").unwrap();
     }
+
     for (name, child) in &module.modules {
         writeln!(out, "{pad}pub mod {name} {{").unwrap();
         emit(child, out, depth + 1);
@@ -143,8 +151,10 @@ fn main() {
     println!("cargo::rerun-if-changed={SIGNATURES}");
 
     let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+
     let file = parse::parse(&fs::read_to_string(dir.join(SYMBOLS)).expect("read the symbol file"))
         .unwrap_or_else(|e| panic!("{SYMBOLS}: {e}"));
+
     // Without it every hook's signature check would silently pass
     let sigs = signatures(
         &fs::read_to_string(dir.join(SIGNATURES))
@@ -173,6 +183,7 @@ fn main() {
         let module = path
             .iter()
             .fold(&mut root, |m, p| m.modules.entry(p.clone()).or_default());
+
         let item = match kind {
             Kind::Fn => match sigs.get(name) {
                 Some(sig) => format!("crate::Fn<{sig}> = crate::Fn::new({name:?})"),
@@ -181,6 +192,7 @@ fn main() {
             Kind::Vtable => format!("crate::Vtable = crate::Vtable::new({name:?})"),
             Kind::Data => format!("crate::Data = crate::Data::new({name:?})"),
         };
+
         module.items.insert(last.clone(), item);
     }
 

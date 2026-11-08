@@ -31,6 +31,7 @@ pub const SHADER_RESIDENT_MEMORY: usize = 42 << 20;
 /// The heap memory sizing `name` needs, from its on-disk and decompressed lengths
 pub fn sizing_memory(name: &str, length: u64, decompressed: u64) -> usize {
     let input = (length + decompressed) as usize;
+
     if is_model_archive(name) {
         4 * input + (4 << 20)
     } else {
@@ -55,6 +56,7 @@ pub fn table_name(relative: &str) -> Option<&str> {
     {
         return None;
     }
+
     Some(relative.strip_suffix(".zs").unwrap_or(relative))
 }
 
@@ -90,19 +92,24 @@ impl Sizer {
                 None => UNSUPPORTED,
             }
         };
+
         if size > u32::MAX as i64 {
             return fail(Error::TooBig(path.to_owned()));
         }
+
         Ok(size)
     }
 
     fn model_archive_size(&mut self, path: &str) -> Result<i64> {
         let archive = read_resource(path)?;
+
         if let Some(allocation) = texture_animation_archive_size(&archive) {
             return Ok(allocation as i64);
         }
+
         if let Ok(members) = nookkit_sarc::read(&archive) {
             let loaded = align_up(archive.len() as i64, 32);
+
             // Collision archives: PBC members are read in place, so only the archive load itself allocates
             if !members.is_empty()
                 && members
@@ -111,6 +118,7 @@ impl Sizer {
             {
                 return model_archive_load_bytes(loaded, &[], &[]);
             }
+
             // Physics-only archives: the member hook adds the helper-bone, cloth or fish-bone requests
             // Other members (such as cloth wind) are not modelled, so the game's fallback is kept
             if let [phive] = members.as_slice()
@@ -121,20 +129,24 @@ impl Sizer {
                     .unwrap_or(GAME_SIZED));
             }
         }
+
         // Geometry needs the shared shader archive, without it the game's fallback is kept
         let Some(analyzer) = self.geometry() else {
             return Ok(GAME_SIZED);
         };
+
         Ok(analyzer.allocation_bytes(&archive).unwrap_or(GAME_SIZED))
     }
 
     fn geometry(&mut self) -> Option<&mut GeometryAnalyzer> {
         let path = &self.shader_path;
+
         let loaded = self.geometry.get_or_insert_with(|| {
             shader::load(path)
                 .map(GeometryAnalyzer::new)
                 .map_err(|e| e.to_string())
         });
+
         loaded.as_mut().ok()
     }
 
@@ -154,17 +166,21 @@ fn load_bytes_for(path: &str, name: &str) -> Option<fn(i64) -> Result<i64>> {
     if name.starts_with("Layout/") || name.starts_with("Font/") {
         return Some(|data| archive_load_bytes(data, 0x2000));
     }
+
     if name.starts_with("Model/Layout_") {
         return Some(|data| Ok(data + 9264));
     }
+
     if name.starts_with("Message/") {
         return Some(|data| archive_load_bytes(data, 0x100));
     }
+
     if path.ends_with(".bars") {
         return Some(|data| {
             load_bytes(&[request(0x30, 32), request(data, 0x80), request(0xa8, 8)])
         });
     }
+
     // Traced for bfevfl (factory 0x71048837E8), bcsv, byml and asb use the same budget in every vanilla entry
     if [".bcsv", ".bfevfl", ".byml", ".asb"]
         .iter()
@@ -172,6 +188,7 @@ fn load_bytes_for(path: &str, name: &str) -> Option<fn(i64) -> Result<i64>> {
     {
         return Some(|data| load_bytes(&[request(0x38, 32), request(data, 32)]));
     }
+
     None
 }
 
@@ -205,9 +222,11 @@ pub(crate) fn model_archive_load_bytes(
 
 fn read_resource(path: &str) -> Result<Vec<u8>> {
     let data = read_file(path)?;
+
     if zstd::is_zstd(&data) {
         return zstd::decompress(&data);
     }
+
     Ok(data)
 }
 
@@ -216,8 +235,10 @@ fn resource_length(path: &str) -> Result<i64> {
     let length = file.metadata()?.len() as i64;
     let mut magic = Vec::with_capacity(4);
     file.take(4).read_to_end(&mut magic)?;
+
     if !zstd::is_zstd(&magic) {
         return Ok(length);
     }
+
     Ok(zstd::decompressed_length(&read_file(path)?)? as i64)
 }

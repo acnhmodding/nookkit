@@ -40,6 +40,7 @@ macro_rules! hook {
                 let f: unsafe extern "C" fn($($ty),*) $(-> $ret)? = unsafe {
                     ::core::mem::transmute(ORIGINAL.load(::core::sync::atomic::Ordering::Acquire))
                 };
+
                 unsafe { f($($arg),*) }
             }
 

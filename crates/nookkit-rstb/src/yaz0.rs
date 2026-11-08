@@ -13,49 +13,64 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     if data.len() < HEADER_BYTES || !is_yaz0(data) {
         return fail(Yaz0Error::NotYaz0);
     }
+
     let size = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
     let mut out = Vec::new();
+
     out.try_reserve_exact(size)
         .map_err(|_| Error::OutOfMemory("Yaz0 data"))?;
+
     let mut input = data[HEADER_BYTES..].iter().copied();
+
     let mut next = || {
         input
             .next()
             .ok_or_else(|| Error::from(Yaz0Error::Truncated))
     };
+
     let (mut flags, mut flag_bits) = (0u8, 0);
+
     while out.len() < size {
         if flag_bits == 0 {
             (flags, flag_bits) = (next()?, 8);
         }
+
         flag_bits -= 1;
         let literal = flags & 0x80 != 0;
         flags <<= 1;
+
         if literal {
             out.push(next()?);
             continue;
         }
+
         let (first, second) = (next()? as usize, next()? as usize);
         let distance = ((first & 0xf) << 8 | second) + 1;
+
         let length = match first >> 4 {
             0 => next()? as usize + 0x12,
             n => n + 2,
         };
+
         if distance > out.len() {
             return fail(Yaz0Error::BackReference);
         }
+
         let start = out.len() - distance;
+
         // A reference may overlap the bytes it produces, so it is copied byte by byte
         for i in start..start + length.min(size - out.len()) {
             out.push(out[i]);
         }
     }
+
     Ok(out)
 }
 
 pub fn compress(data: &[u8]) -> Vec<u8> {
     let mut encoder = Encoder::new(data.len());
     encoder.encode(data);
+
     encoder.finish(data.len())
 }
 
@@ -70,6 +85,7 @@ impl Encoder {
         let mut out = Vec::with_capacity(capacity + HEADER_BYTES);
         out.resize(HEADER_BYTES, 0);
         out[..4].copy_from_slice(b"Yaz0");
+
         Encoder {
             out,
             flag_at: 0,
@@ -83,9 +99,11 @@ impl Encoder {
             self.out.push(0);
             self.flag_bits = 0;
         }
+
         if literal {
             self.out[self.flag_at] |= 0x80 >> self.flag_bits;
         }
+
         self.flag_bits += 1;
     }
 
@@ -97,6 +115,7 @@ impl Encoder {
     fn reference(&mut self, distance: usize, length: usize) {
         self.chunk(false);
         let back = distance - 1;
+
         if length >= 0x12 {
             self.out
                 .extend_from_slice(&[(back >> 8) as u8, back as u8, (length - 0x12) as u8]);
@@ -109,13 +128,16 @@ impl Encoder {
     fn encode(&mut self, data: &[u8]) {
         const HASH_BITS: u32 = 15;
         const MAX_CHAIN: usize = 128;
+
         let hash = |at: usize| {
             ((u32::from_le_bytes([data[at], data[at + 1], data[at + 2], 0])
                 .wrapping_mul(2654435761))
                 >> (32 - HASH_BITS)) as usize
         };
+
         let mut head = vec![usize::MAX; 1 << HASH_BITS];
         let mut previous = vec![usize::MAX; WINDOW];
+
         let insert = |at: usize, head: &mut [usize], previous: &mut [usize]| {
             if at + MIN_MATCH <= data.len() {
                 let h = hash(at);
@@ -123,38 +145,50 @@ impl Encoder {
                 head[h] = at;
             }
         };
+
         let mut at = 0;
+
         while at < data.len() {
             let (mut best_length, mut best_distance) = (0, 0);
+
             if at + MIN_MATCH <= data.len() {
                 let limit = (data.len() - at).min(MAX_MATCH);
                 let mut candidate = head[hash(at)];
                 let mut chain = 0;
+
                 while candidate != usize::MAX && at - candidate <= WINDOW && chain < MAX_CHAIN {
                     let length = data[candidate..]
                         .iter()
                         .zip(&data[at..at + limit])
                         .take_while(|(a, b)| a == b)
                         .count();
+
                     if length > best_length {
                         (best_length, best_distance) = (length, at - candidate);
+
                         if length == limit {
                             break;
                         }
                     }
+
                     let next = previous[candidate % WINDOW];
+
                     if next == usize::MAX || next >= candidate {
                         break;
                     }
+
                     candidate = next;
                     chain += 1;
                 }
             }
+
             if best_length >= MIN_MATCH {
                 self.reference(best_distance, best_length);
+
                 for i in at..at + best_length {
                     insert(i, &mut head, &mut previous);
                 }
+
                 at += best_length;
             } else {
                 self.literal(data[at]);
@@ -166,6 +200,7 @@ impl Encoder {
 
     fn finish(mut self, decompressed: usize) -> Vec<u8> {
         self.out[4..8].copy_from_slice(&(decompressed as u32).to_be_bytes());
+
         self.out
     }
 }
@@ -178,6 +213,7 @@ mod tests {
         let mut data: Vec<u8> = (0..=255).collect();
         data.extend(b"abc".repeat(40));
         data.extend([7; 1000]);
+
         data
     }
 

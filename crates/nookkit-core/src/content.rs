@@ -8,7 +8,9 @@ fn folder_exists(folder: &str) -> bool {
     let Ok(path) = CString::new(folder) else {
         return false;
     };
+
     let mut kind = u32::MAX;
+
     unsafe {
         skyline::nn::fs::GetEntryType(&raw mut kind, path.as_ptr().cast()) == 0
             && kind == ENTRY_DIRECTORY
@@ -34,6 +36,7 @@ pub fn json_files(
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
+
         (name, std::fs::read_to_string(&path))
     }))
 }

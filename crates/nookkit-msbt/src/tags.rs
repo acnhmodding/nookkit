@@ -57,6 +57,7 @@ pub fn encode(text: &str) -> Result<Vec<u16>, TagError> {
     }
 
     out.push(0);
+
     Ok(out)
 }
 
@@ -70,6 +71,7 @@ impl<'a> Attrs<'a> {
 
         loop {
             s = s.trim_start();
+
             if s.is_empty() {
                 return Ok(Self { pairs });
             }
@@ -77,12 +79,14 @@ impl<'a> Attrs<'a> {
             let Some(eq) = s.find('=') else {
                 return fail(at, format!("expected key=\"value\" in {s:?}"));
             };
+
             let key = s[..eq].trim();
             s = s[eq + 1..].trim_start();
 
             let value = if let Some(quoted) = s.strip_prefix('"') {
                 let mut value = String::new();
                 let mut chars = quoted.char_indices();
+
                 let end = loop {
                     match chars.next() {
                         Some((i, '"')) => break i,
@@ -94,6 +98,7 @@ impl<'a> Attrs<'a> {
                         None => return fail(at, format!("unterminated value for {key}")),
                     }
                 };
+
                 s = &quoted[end + 1..];
                 value
             } else {
@@ -116,6 +121,7 @@ impl<'a> Attrs<'a> {
 
     fn take_u16(&mut self, key: &str, at: usize) -> Result<u16, TagError> {
         let value = self.take(key, at)?;
+
         match value.strip_prefix("0x") {
             Some(hex) => u16::from_str_radix(hex, 16),
             None => value.parse(),
@@ -220,6 +226,7 @@ pub(crate) fn from_hex(hex: &str) -> Option<Vec<u8>> {
     if !hex.len().is_multiple_of(2) {
         return None;
     }
+
     (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
@@ -235,12 +242,15 @@ pub(crate) fn to_hex(bytes: &[u8]) -> String {
 
 fn quoted(out: &mut String, value: &str) {
     out.push('"');
+
     for c in value.chars() {
         if c == '"' || c == '\\' {
             out.push('\\');
         }
+
         out.push(c);
     }
+
     out.push('"');
 }
 
@@ -256,10 +266,12 @@ fn ruby(params: &[u8]) -> Option<(u16, String)> {
     if value.len() != len || !len.is_multiple_of(2) {
         return None;
     }
+
     let units: Vec<u16> = value
         .chunks_exact(2)
         .map(|b| u16::from_le_bytes([b[0], b[1]]))
         .collect();
+
     let value = String::from_utf16(&units).ok()?;
 
     // Only when it reads back the same, a reading holding a NUL or "}}" stays raw
@@ -284,11 +296,13 @@ fn decode_tag(out: &mut String, group: u16, kind: u16, params: &[u8]) {
         Some(tag) => out.push_str(&tag),
         None => {
             let _ = write!(out, "{{{{Tag group=\"{group}\" type=\"{kind}\"");
+
             if !params.is_empty() {
                 let _ = write!(out, " data=\"{}\"", to_hex(params));
             }
         }
     }
+
     out.push_str("}}");
 }
 
@@ -296,6 +310,7 @@ fn flush(out: &mut String, plain: &mut Vec<u16>) -> Option<()> {
     let text = String::from_utf16(plain).ok()?;
     out.push_str(&text.replace("{{", "{{{{"));
     plain.clear();
+
     Some(())
 }
 
@@ -310,19 +325,23 @@ pub fn decode(units: &[u16]) -> Option<String> {
         match units[i] {
             OPEN => {
                 flush(&mut out, &mut plain)?;
+
                 let (group, kind, size) = (
                     *units.get(i + 1)?,
                     *units.get(i + 2)?,
                     *units.get(i + 3)? as usize,
                 );
+
                 if !size.is_multiple_of(2) {
                     return None;
                 }
+
                 let params: Vec<u8> = units
                     .get(i + 4..i + 4 + size / 2)?
                     .iter()
                     .flat_map(|u| u.to_le_bytes())
                     .collect();
+
                 decode_tag(&mut out, group, kind, &params);
                 i += 4 + size / 2;
             }
@@ -341,6 +360,7 @@ pub fn decode(units: &[u16]) -> Option<String> {
     }
 
     flush(&mut out, &mut plain)?;
+
     Some(out)
 }
 
@@ -379,6 +399,7 @@ mod tests {
     #[test]
     fn raw_tags() {
         round_trip("{{Tag group=\"10\" type=\"2\"}}");
+
         round_trip(
             "{{Tag group=\"115\" type=\"0\" data=\"00cd\"}}x{{/Tag group=\"10\" type=\"5\"}}",
         );

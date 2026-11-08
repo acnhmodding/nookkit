@@ -54,6 +54,7 @@ impl<'de> Visitor<'de> for Patches<'_> {
         })? {
             self.read.push(patch);
         }
+
         Ok(())
     }
 
@@ -63,7 +64,9 @@ impl<'de> Visitor<'de> for Patches<'_> {
             name: self.name,
         }
         .visit_map(map)?;
+
         self.read.push(patch);
+
         Ok(())
     }
 }
@@ -111,6 +114,7 @@ impl<'de> Visitor<'de> for PatchSeed<'_> {
         source.cells.shrink_to_fit();
         source.ends.shrink_to_fit();
         source.bytes.shrink_to_fit();
+
         Ok((file, source))
     }
 }
@@ -140,6 +144,7 @@ impl<'de> Visitor<'de> for RowsSeed<'_> {
             name: self.name.to_owned(),
             ..Source::default()
         };
+
         while seq
             .next_element_seed(RowSeed {
                 keys: &mut *self.keys,
@@ -147,6 +152,7 @@ impl<'de> Visitor<'de> for RowsSeed<'_> {
             })?
             .is_some()
         {}
+
         Ok(source)
     }
 }
@@ -178,10 +184,13 @@ impl<'de> Visitor<'de> for RowSeed<'_> {
                 key,
                 source: &mut *self.source,
             })?;
+
             self.source.cells.push(cell);
         }
+
         let end = self.source.cells.len() as u32;
         self.source.ends.push(end);
+
         Ok(())
     }
 }
@@ -280,17 +289,22 @@ impl<'de> Visitor<'de> for CellSeed<'_> {
             let pair = std::str::from_utf8(pair).ok().filter(|p| p.len() == 2)?;
             u8::from_str_radix(pair, 16).ok()
         });
+
         for byte in pairs {
             let Some(byte) = byte else {
                 self.source.bytes.truncate(at as usize);
+
                 return Err(E::custom(Invalid::Hex {
                     key: self.key(),
                     text: text.to_owned(),
                 }));
             };
+
             self.source.bytes.push(byte);
         }
+
         self.source.end_blob(at);
+
         Ok(Cell::new(self.key, BYTES, at))
     }
 
@@ -298,7 +312,9 @@ impl<'de> Visitor<'de> for CellSeed<'_> {
         let Some(kind) = map.next_key::<HashKind>()? else {
             return Err(de::Error::custom(Invalid::HashKind { key: self.key() }));
         };
+
         let text = map.next_value::<String>()?;
+
         if map.next_key::<HashKind>()?.is_some() {
             return Err(de::Error::custom(Invalid::HashStrings { key: self.key() }));
         }
@@ -307,6 +323,7 @@ impl<'de> Visitor<'de> for CellSeed<'_> {
             HashKind::Crc32 => crc32(&text),
             HashKind::Mmh3 => mmh3(&text),
         };
+
         Ok(Cell::new(self.key, HASH, hash))
     }
 }

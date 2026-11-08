@@ -41,6 +41,7 @@ fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, M
         if let Some(member) = members.iter().find(|member| member.is(&wanted)) {
             let msbt = Msbt::parse(member.data(&archive_bytes))
                 .ok_or_else(|| format!("{name}/{wanted}: not an MSBT"))?;
+
             out.insert(locale.to_owned(), msbt);
         }
     }
@@ -63,12 +64,14 @@ fn dump(romfs: &str, archive: &str, file: &str, only: &[String]) -> Result<(), S
     labels.dedup();
 
     let mut messages = Vec::new();
+
     for label in labels {
         if !only.is_empty() && !only.contains(label) {
             continue;
         }
 
         let mut text = BTreeMap::new();
+
         for (locale, msbt) in &locales {
             if let Some(units) = msbt.text(label) {
                 let decoded = tags::decode(units)
@@ -95,6 +98,7 @@ fn dump(romfs: &str, archive: &str, file: &str, only: &[String]) -> Result<(), S
         "{}",
         serde_json::to_string_pretty(&patch).map_err(|e| e.to_string())?
     );
+
     Ok(())
 }
 
@@ -123,6 +127,7 @@ fn check(paths: &[String]) -> Result<(), String> {
     }
 
     eprintln!("{} labels in {} patches", set.len(), paths.len());
+
     Ok(())
 }
 

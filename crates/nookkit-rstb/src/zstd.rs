@@ -25,19 +25,24 @@ fn header(d: Reader, at: i64) -> Result<(i64, u64, Option<u64>)> {
     let descriptor = d.byte(at + 4)?;
     let mut at = at + 5;
     let single_segment = descriptor & 0x20 != 0;
+
     if descriptor & 0x08 != 0 {
         return fail(ZstdError::ReservedFrameBit);
     }
+
     let mut window = 0;
+
     if !single_segment {
         let byte = d.byte(at)? as u64;
         at += 1;
         let base = 1u64 << (10 + (byte >> 3));
         window = base + base / 8 * (byte & 7);
     }
+
     if descriptor & 3 != 0 {
         return fail(ZstdError::Dictionary);
     }
+
     let content_size = match (descriptor >> 6, single_segment) {
         (0, false) => None,
         (0, true) => Some(d.byte(at)? as u64),
@@ -45,15 +50,18 @@ fn header(d: Reader, at: i64) -> Result<(i64, u64, Option<u64>)> {
         (2, _) => Some(d.u32(at)? as u64),
         _ => Some(d.u64(at)?),
     };
+
     at += match descriptor >> 6 {
         0 => single_segment as i64,
         1 => 2,
         2 => 4,
         _ => 8,
     };
+
     if single_segment {
         window = content_size.unwrap_or(0);
     }
+
     Ok((at, window, content_size))
 }
 
@@ -62,6 +70,7 @@ pub fn declared_length(prefix: &[u8]) -> Option<u64> {
     if !is_zstd(prefix) {
         return None;
     }
+
     header(Reader::new(prefix), 0).ok()?.2
 }
 
@@ -69,36 +78,46 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     let d = Reader::new(data);
     let mut frames = Vec::new();
     let mut at = 0i64;
+
     while at < d.len() {
         let magic = d.u32(at)?;
+
         if magic & 0xffff_fff0 == 0x184d_2a50 {
             at += 8 + d.u32(at + 4)? as i64;
             continue;
         }
+
         if magic != MAGIC {
             return fail(ZstdError::NotZstd);
         }
+
         let start = at;
         let (header_end, window, content_size) = header(d, at)?;
         at = header_end;
+
         loop {
             let header = d.range(at, 3)?;
             let header = u32::from_le_bytes([header[0], header[1], header[2], 0]);
+
             at += 3 + match (header >> 1) & 3 {
                 0 | 2 => (header >> 3) as i64,
                 1 => 1,
                 _ => return fail(ZstdError::ReservedBlockType),
             };
+
             if header & 1 != 0 {
                 break;
             }
         }
+
         if d.byte(start + 4)? & 0x04 != 0 {
             at += 4;
         }
+
         if at > d.len() {
             return fail(ZstdError::Truncated);
         }
+
         frames.push(Frame {
             start: start as usize,
             end: at as usize,
@@ -106,6 +125,7 @@ fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             content_size,
         });
     }
+
     Ok(frames)
 }
 
@@ -114,13 +134,17 @@ fn new_decoder(window: u64) -> Result<FrameDecoder> {
     if window > MAX_WINDOW {
         return fail(ZstdError::WindowTooLarge);
     }
+
     let mut probe: Vec<u8> = Vec::new();
+
     probe
         .try_reserve_exact(2 * window as usize + (1 << 20))
         .map_err(|_| Error::OutOfMemory("the Zstandard window"))?;
+
     drop(probe);
     let mut decoder = FrameDecoder::new();
     decoder.set_max_window_size(MAX_WINDOW);
+
     Ok(decoder)
 }
 
@@ -135,17 +159,22 @@ fn count_frame(frame: &[u8], window: u64) -> Result<u64> {
     decoder.init(&mut input).map_err(decode_error)?;
     let mut scratch = vec![0u8; 0x10000];
     let mut total = 0u64;
+
     loop {
         decoder
             .decode_blocks(&mut input, BlockDecodingStrategy::UptoBytes(1 << 20))
             .map_err(decode_error)?;
+
         loop {
             let read = decoder.read(&mut scratch)?;
+
             if read == 0 {
                 break;
             }
+
             total += read as u64;
         }
+
         if decoder.is_finished() && decoder.can_collect() == 0 {
             return Ok(total);
         }
@@ -162,6 +191,7 @@ fn total_length(data: &[u8], frames: &[Frame]) -> Result<u64> {
             Some(size) => size,
             None => count_frame(&data[frame.start..frame.end], frame.window)?,
         };
+
         total
             .checked_add(size)
             .ok_or_else(|| Error::from(ZstdError::TooLarge))
@@ -170,19 +200,26 @@ fn total_length(data: &[u8], frames: &[Frame]) -> Result<u64> {
 
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     let frames = frames(data)?;
+
     let length = usize::try_from(total_length(data, &frames)?)
         .map_err(|_| Error::from(ZstdError::TooLarge))?;
+
     let mut out = Vec::new();
+
     out.try_reserve_exact(length)
         .map_err(|_| Error::OutOfMemory("Zstandard data"))?;
+
     out.resize(length, 0);
     let window = frames.iter().map(|f| f.window).max().unwrap_or(0);
+
     let written = new_decoder(window)?
         .decode_all(data, &mut out)
         .map_err(decode_error)?;
+
     if written != length {
         return fail(ZstdError::SizeMismatch);
     }
+
     Ok(out)
 }
 

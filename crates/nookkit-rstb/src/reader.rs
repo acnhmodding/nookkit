@@ -7,9 +7,12 @@ use crate::error::{BfresError, Error, Result, fail};
 pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut data = Vec::new();
+
     data.try_reserve_exact(file.metadata()?.len() as usize)
         .map_err(|_| Error::FileOutOfMemory(path.to_owned()))?;
+
     file.read_to_end(&mut data)?;
+
     Ok(data)
 }
 
@@ -22,6 +25,7 @@ pub(crate) fn to_int(value: i64) -> Result<i64> {
     if value < i32::MIN as i64 || value > i32::MAX as i64 {
         return fail(Error::Overflow);
     }
+
     Ok(value)
 }
 
@@ -43,6 +47,7 @@ impl<'a> Reader<'a> {
         if at < 0 || count < 0 || at > self.len() - count {
             return fail(Error::OutOfBounds { at, count });
         }
+
         Ok(&self.data[at as usize..(at + count) as usize])
     }
 
@@ -89,15 +94,18 @@ impl<'a> Reader<'a> {
         if !self.magic(at, magic)? {
             return fail(Error::Magic(String::from_utf8_lossy(magic).into_owned()));
         }
+
         Ok(())
     }
 
     /// A relocated 64-bit offset into this data (BFRES, BNTX), zero is a null pointer
     pub fn pointer(&self, at: i64) -> Result<i64> {
         let value = self.u64(at)?;
+
         if value > self.len() as u64 {
             return fail(Error::PointerOutOfBounds { at, value });
         }
+
         Ok(value as i64)
     }
 
@@ -106,14 +114,19 @@ impl<'a> Reader<'a> {
         if at == 0 {
             return Ok("");
         }
+
         let length = self.u16(at)? as i64;
+
         if self.byte(at + 2 + length)? != 0 {
             return fail(BfresError::UnterminatedString);
         }
+
         let bytes = self.range(at + 2, length)?;
+
         if bytes.contains(&0) {
             return fail(BfresError::EmbeddedTerminator);
         }
+
         std::str::from_utf8(bytes).or_else(|_| fail(BfresError::InvalidUtf8))
     }
 }

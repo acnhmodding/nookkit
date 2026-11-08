@@ -45,9 +45,11 @@ impl Format {
             [b'B', b'Y', a, b, ..] => (Endian::Big, u16::from_be_bytes([*a, *b])),
             _ => return Err(ParseError::Magic),
         };
+
         if !(1..=4).contains(&version) {
             return Err(ParseError::Version(version));
         }
+
         Ok(Self { endian, version })
     }
 
@@ -135,10 +137,12 @@ impl Header {
 
     fn read(data: &[u8]) -> Result<Self, ParseError> {
         let format = Format::read(data)?;
+
         let bytes = Bytes {
             data,
             endian: format.endian,
         };
+
         Ok(Self {
             format,
             keys: bytes.u32(4)?,
@@ -174,6 +178,7 @@ impl ContainerHeader {
     fn write(self, out: &mut Out) -> Result<(), WriteError> {
         out.u8(self.ty);
         out.u24(count(self.count)?);
+
         Ok(())
     }
 }
@@ -222,9 +227,11 @@ impl<'a> Bytes<'a> {
         let slice = self.slice(offset, N)?;
         let mut array = [0; N];
         array.copy_from_slice(slice);
+
         if self.endian == Endian::Big {
             array.reverse();
         }
+
         Ok(array)
     }
 
@@ -234,6 +241,7 @@ impl<'a> Bytes<'a> {
 
     fn u24(self, offset: usize) -> Result<u32, ParseError> {
         let [a, b, c] = self.array(offset)?;
+
         Ok(u32::from_le_bytes([a, b, c, 0]))
     }
 
@@ -252,25 +260,33 @@ fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
     if offset == 0 {
         return Ok(Vec::new());
     }
+
     let offset = offset as usize;
     let header = ContainerHeader::read(bytes, offset)?;
+
     if header.ty != STRING_TABLE {
         return Err(ParseError::NotStringTable { offset });
     }
+
     bytes.slice(offset + 4, (header.count + 1) * 4)?;
 
     let mut strings = Vec::with_capacity(header.count);
+
     for index in 0..header.count {
         let start = offset + bytes.u32(offset + 4 + index * 4)? as usize;
         let end = offset + bytes.u32(offset + 8 + index * 4)? as usize;
         let text = bytes.slice(start, end.saturating_sub(start))?;
+
         let Some(nul) = text.iter().position(|&b| b == 0) else {
             return Err(ParseError::NotStringTable { offset });
         };
+
         let text =
             std::str::from_utf8(&text[..nul]).map_err(|_| ParseError::Utf8 { offset: start })?;
+
         strings.push(text.to_owned());
     }
+
     Ok(strings)
 }
 
@@ -284,6 +300,7 @@ impl Reader<'_> {
     /// The node of type `ty` with `value`, found in the container at `parent`
     fn node(&self, ty: u8, value: u32, parent: usize, depth: usize) -> Result<Node, ParseError> {
         let offset = value as usize;
+
         Ok(match ty {
             STRING => Node::String(
                 self.strings
@@ -311,7 +328,9 @@ impl Reader<'_> {
         if depth >= MAX_DEPTH {
             return Err(ParseError::TooDeep);
         }
+
         let header = ContainerHeader::read(self.bytes, offset)?;
+
         if header.ty != ty {
             return Err(ParseError::Header {
                 offset,
@@ -319,23 +338,28 @@ impl Reader<'_> {
                 found: header.ty,
             });
         }
+
         let count = header.count;
 
         if ty == ARRAY {
             let types = self.bytes.slice(offset + 4, count)?;
             let values = array_values(offset, count);
             let mut items = Vec::with_capacity(count);
+
             for (index, &item) in types.iter().enumerate() {
                 let value = self.bytes.u32(values + index * 4)?;
                 items.push(self.node(item, value, offset, depth + 1)?);
             }
+
             return Ok(Node::Array(items));
         }
 
         self.bytes.slice(offset + 4, count * DictEntry::SIZE)?;
         let mut dict = BTreeMap::new();
+
         for index in 0..count {
             let entry = DictEntry::read(self.bytes, offset + 4 + index * DictEntry::SIZE)?;
+
             let key = self
                 .keys
                 .get(entry.key as usize)
@@ -343,9 +367,11 @@ impl Reader<'_> {
                     offset,
                     index: entry.key,
                 })?;
+
             let node = self.node(entry.ty, entry.value, offset, depth + 1)?;
             dict.insert(key.clone(), node);
         }
+
         Ok(Node::Dict(dict))
     }
 }
@@ -354,6 +380,7 @@ impl Byml {
     pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
         let header = Header::read(data)?;
         let format = header.format;
+
         if header.root == 0 {
             return Ok(Self {
                 format,
@@ -365,16 +392,20 @@ impl Byml {
             data,
             endian: format.endian,
         };
+
         let reader = Reader {
             bytes,
             keys: read_table(bytes, header.keys)?,
             strings: read_table(bytes, header.strings)?,
         };
+
         let root = header.root as usize;
         let ty = bytes.u8(root)?;
+
         if !matches!(ty, ARRAY | DICT) {
             return Err(ParseError::Root);
         }
+
         Ok(Self {
             format,
             root: reader.container(ty, root, 0)?,
@@ -397,6 +428,7 @@ impl Byml {
             buf: vec![0; Header::SIZE],
             endian: self.format.endian,
         };
+
         let mut header = Header {
             format: self.format,
             keys: write_table(&mut out, &keys)?,
@@ -409,7 +441,9 @@ impl Byml {
             header.root = writer.value(&self.root)?;
             out = writer.out;
         }
+
         header.write(&mut out);
+
         Ok(out.buf)
     }
 }
@@ -425,6 +459,7 @@ fn collect<'n>(
                 text: text.to_owned(),
             });
         }
+
         Ok(())
     };
 
@@ -454,6 +489,7 @@ fn count(count: usize) -> Result<u32, WriteError> {
     if count > MAX_COUNT {
         return Err(WriteError::TooMany { count });
     }
+
     Ok(count as u32)
 }
 
@@ -466,7 +502,9 @@ fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
     if table.is_empty() {
         return Ok(0);
     }
+
     let start = out.pos()?;
+
     ContainerHeader {
         ty: STRING_TABLE,
         count: table.len(),
@@ -474,16 +512,21 @@ fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
     .write(out)?;
 
     let mut at = 4 + (table.len() + 1) * 4;
+
     for text in table {
         out.u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
         at += text.len() + 1;
     }
+
     out.u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
+
     for text in table {
         out.buf.extend_from_slice(text.as_bytes());
         out.u8(0);
     }
+
     out.align();
+
     Ok(start)
 }
 
@@ -502,6 +545,7 @@ impl Out {
         if self.endian == Endian::Big {
             le.reverse();
         }
+
         le
     }
 
@@ -554,49 +598,62 @@ impl<'n> Writer<'n> {
             Node::String(text) => index(&self.strings, text),
             Node::Binary(data) => {
                 let at = self.out.pos()?;
+
                 self.out
                     .u32(u32::try_from(data.len()).map_err(|_| WriteError::TooLarge)?);
+
                 self.out.buf.extend_from_slice(data);
                 self.out.align();
                 at
             }
             Node::Array(items) => {
                 let at = self.out.pos()?;
+
                 ContainerHeader {
                     ty: ARRAY,
                     count: items.len(),
                 }
                 .write(&mut self.out)?;
+
                 for item in items {
                     self.out.u8(item.ty());
                 }
+
                 self.out.align();
                 let values = self.out.buf.len();
                 self.out.buf.resize(values + items.len() * 4, 0);
+
                 for (index, item) in items.iter().enumerate() {
                     let value = self.value(item)?;
                     self.out.set_u32(values + index * 4, value);
                 }
+
                 at
             }
             Node::Dict(dict) => {
                 let at = self.out.pos()?;
+
                 ContainerHeader {
                     ty: DICT,
                     count: dict.len(),
                 }
                 .write(&mut self.out)?;
+
                 let entries = self.out.buf.len();
+
                 for (key, item) in dict {
                     self.out.u24(index(&self.keys, key));
                     self.out.u8(item.ty());
                     self.out.u32(0);
                 }
+
                 for (index, item) in dict.values().enumerate() {
                     let value = self.value(item)?;
+
                     self.out
                         .set_u32(entries + index * DictEntry::SIZE + 4, value);
                 }
+
                 at
             }
             Node::Bool(value) => *value as u32,
@@ -612,6 +669,7 @@ impl<'n> Writer<'n> {
     fn u64(&mut self, value: u64) -> Result<u32, WriteError> {
         let at = self.out.pos()?;
         self.out.u64(value);
+
         Ok(at)
     }
 }
@@ -625,6 +683,7 @@ mod tests {
         inner.insert("b".to_owned(), Node::Int64(-5_000_000_000));
         inner.insert("a".to_owned(), Node::Binary(vec![1, 2, 3]));
         let mut root = BTreeMap::new();
+
         root.insert(
             "list".to_owned(),
             Node::Array(vec![
@@ -637,8 +696,10 @@ mod tests {
                 Node::Dict(inner),
             ]),
         );
+
         root.insert("name".to_owned(), Node::String("abc".into()));
         root.insert("n".to_owned(), Node::Int(-3));
+
         Byml {
             format: Format { endian, version: 4 },
             root: Node::Dict(root),
@@ -664,6 +725,7 @@ mod tests {
             data: &data,
             endian: Endian::Little,
         };
+
         let keys = read_table(bytes, 0x10).unwrap();
         assert_eq!(keys, ["a", "b", "list", "n", "name"]);
         let strings = read_table(bytes, bytes.u32(8).unwrap()).unwrap();
@@ -679,6 +741,7 @@ mod tests {
             },
             root: Node::Null,
         };
+
         let data = byml.to_bytes().unwrap();
         assert_eq!(data, b"YB\x02\x00\0\0\0\0\0\0\0\0\0\0\0\0");
         assert_eq!(Byml::parse(&data).unwrap(), byml);
@@ -687,6 +750,7 @@ mod tests {
     #[test]
     fn refuses_what_the_game_wont_read() {
         assert_eq!(Byml::parse(b"XX\x04\x00"), Err(ParseError::Magic));
+
         assert_eq!(
             Byml::parse(b"BY\x00\x05\0\0\0\0\0\0\0\0\0\0\0\0"),
             Err(ParseError::Version(5))
@@ -696,12 +760,14 @@ mod tests {
             root: Node::Int(1),
             ..document(Endian::Little)
         };
+
         assert_eq!(byml.to_bytes(), Err(WriteError::Root));
 
         let byml = Byml {
             root: Node::Array(vec![Node::String("a\0b".into())]),
             ..document(Endian::Little)
         };
+
         assert_eq!(
             byml.to_bytes(),
             Err(WriteError::Nul {

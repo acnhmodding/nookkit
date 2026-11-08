@@ -94,6 +94,7 @@ mod tests {
     fn shipped_file_covers_the_manifests() {
         let file = parse(include_str!("../../../offsets/3.0.3.toml")).unwrap();
         assert_eq!(file.game_version, "3.0.3");
+
         for manifest in [
             include_str!("../../nookkit-core/symbols.txt"),
             include_str!("../../nookkit-types/symbols.txt"),
@@ -106,8 +107,10 @@ mod tests {
     fn manifest_reports_missing_and_malformed() {
         let file =
             parse("game_version = \"3.0.3\"\nrodata_hash = 0x1\n[fn]\n\"A::b\" = 0x10\n").unwrap();
+
         let text = "# core\nfn\tA::b\nfn\tA::c\nvtable\tB::vtable\nbogus line\n";
         let missing = missing(&file, text);
+
         assert_eq!(
             missing,
             vec![

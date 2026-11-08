@@ -10,10 +10,13 @@ fn string(data: Reader, at: i64) -> Result<String> {
     if at == 0 {
         return Ok(String::new());
     }
+
     let length = data.u16(at)? as i64;
+
     if data.byte(at + 2 + length)? != 0 {
         return fail(ShaderError::UnterminatedString);
     }
+
     Ok(String::from_utf8_lossy(data.range(at + 2, length)?).into_owned())
 }
 
@@ -22,11 +25,15 @@ fn dictionary(data: Reader, at: i64) -> Result<Vec<String>> {
     if at == 0 {
         return Ok(Vec::new());
     }
+
     let count = to_int(data.u32(at + 4)? as i64)?;
+
     if count > 65535 {
         return fail(ShaderError::DictionaryTooLarge);
     }
+
     data.range(at + 8, (count + 1) * 16)?;
+
     (0..count)
         .map(|i| string(data, data.pointer(at + 32 + i * 16)?))
         .collect()
@@ -38,6 +45,7 @@ fn signature(data: Reader, at: i64, expected: &[u8]) -> Result<()> {
             String::from_utf8_lossy(expected).into_owned(),
         ));
     }
+
     Ok(())
 }
 
@@ -89,19 +97,24 @@ impl ShaderArchive {
     pub fn parse(bytes: Vec<u8>) -> Result<Self> {
         let data = Reader::new(&bytes);
         signature(data, 0, b"FSHA")?;
+
         if data.u32(8)? != 0x00080000 || data.u16(12)? != 0xfeff {
             return fail(ShaderError::UnsupportedLayout);
         }
+
         if data.u32(28)? as i64 != data.len() {
             return fail(ShaderError::SizeMismatch);
         }
+
         let name = string(data, data.pointer(56)?)?;
         let array = data.pointer(72)?;
         let count = data.u16(120)? as i64;
         data.range(array, count * 256)?;
+
         let models = (0..count)
             .map(|i| ShadingModel::parse(data, array + i * 256))
             .collect::<Result<_>>()?;
+
         Ok(ShaderArchive {
             bytes,
             name,
@@ -115,9 +128,11 @@ impl ShaderArchive {
 
     pub fn material_uniform_bytes(&self, model: &ShadingModel) -> Result<i64> {
         let index = self.data().byte(model.offset + 0xf0)? as usize;
+
         if index == 255 {
             return Ok(0);
         }
+
         match model.uniform_blocks.get(index) {
             Some(block) => Ok(block.size),
             None => fail(ShaderError::InvalidUniformBlock),
@@ -128,11 +143,13 @@ impl ShaderArchive {
         let array = self.data().pointer(model.offset + 8)?;
         let count = self.data().u16(model.offset + 0xe4)? as i64;
         self.data().range(array, count * 0x28)?;
+
         for i in 0..count {
             if self.data().byte(array + i * 0x28 + 0x1c)? & 1 != 0 {
                 return Ok(true);
             }
         }
+
         Ok(model
             .uniform_blocks
             .iter()
@@ -142,11 +159,13 @@ impl ShaderArchive {
     pub fn shader_object_work_bytes(&self, model: &ShadingModel) -> Result<i64> {
         let statics = model.static_key_words * 4;
         let options = (self.data().u16(model.offset + 0xe4)? as i64 + 31) / 32 * 4;
+
         Ok(aligned_blocks(&[statics, statics, options, 0x48]))
     }
 
     pub fn selector_work_bytes(&self, model: &ShadingModel) -> i64 {
         let dynamics = (model.key_words - model.static_key_words) * 4;
+
         aligned_blocks(&[dynamics, dynamics, dynamics])
     }
 
@@ -159,6 +178,7 @@ impl ShaderArchive {
             Some(statics) => statics,
             None => {
                 let mut statics: HashMap<Vec<u32>, Vec<i64>> = HashMap::new();
+
                 for i in 0..model.program_count {
                     let words = (0..model.static_key_words)
                         .map(|j| {
@@ -166,6 +186,7 @@ impl ShaderArchive {
                                 .u32(model.key_table + (i * model.key_words + j) * 4)
                         })
                         .collect::<Result<Vec<_>>>()?;
+
                     statics.entry(words).or_default().push(i);
                 }
 
@@ -188,20 +209,25 @@ impl ShaderArchive {
         let mut found = None;
         for &index in candidates {
             let mut matches = true;
+
             for (j, &word) in words.iter().enumerate() {
                 let at = model.key_table
                     + (index * model.key_words + model.static_key_words + j as i64) * 4;
+
                 if self.data().u32(at)? != word {
                     matches = false;
                     break;
                 }
             }
+
             if !matches {
                 continue;
             }
+
             if found.is_some() {
                 return fail(ShaderError::DuplicateProgramKey);
             }
+
             found = Some(index);
         }
         Ok(found)
@@ -229,11 +255,15 @@ impl ShaderArchive {
             let Some(option) = model.options.get(i) else {
                 return fail(ShaderError::OptionOutOfRange);
             };
+
             let word = option.word - if dynamic { model.static_key_words } else { 0 };
+
             if word < 0 || word >= length {
                 return fail(ShaderError::OptionWrongRegion);
             }
+
             let mut selected = option.default_choice;
+
             if let Some(value) = choices.get(&option.name) {
                 match option.choices.iter().position(|c| c == value) {
                     Some(found) => selected = found as i64,
@@ -248,10 +278,13 @@ impl ShaderArchive {
                     None => {}
                 }
             }
+
             let bits = (selected as u32).wrapping_shl(option.shift);
+
             if bits & !option.mask != 0 {
                 return fail(ShaderError::ChoiceExceedsMask);
             }
+
             let word = &mut words[word as usize];
             *word = (*word & !option.mask) | bits;
         }
@@ -262,8 +295,10 @@ impl ShaderArchive {
         if index < 0 || index >= model.program_count {
             return fail(ShaderError::ProgramOutOfRange);
         }
+
         let program = model.program_array + index * 0x40;
         let mask = self.data().u32(program + 0x30)?;
+
         let attributes = model
             .attributes
             .iter()
@@ -272,12 +307,15 @@ impl ShaderArchive {
             .filter(|(i, (_, location))| mask & 1u32.wrapping_shl(*i as u32) != 0 && *location >= 0)
             .map(|(_, attribute)| attribute.clone())
             .collect();
+
         let block_names: Vec<String> = model
             .uniform_blocks
             .iter()
             .map(|b| b.name.clone())
             .collect();
+
         let storage_names = dictionary(self.data(), self.data().pointer(model.offset + 0x78)?)?;
+
         Ok(ProgramLayout {
             attributes,
             samplers: self.locations(self.data().pointer(program)?, &model.sampler_names)?,
@@ -294,25 +332,33 @@ impl ShaderArchive {
 
     fn locations(&self, at: i64, names: &[String]) -> Result<Vec<(String, u32)>> {
         let mut locations: Vec<(String, u32)> = Vec::with_capacity(names.len());
+
         if names.is_empty() {
             return Ok(locations);
         }
+
         if at == 0 {
             return fail(ShaderError::MissingResourceLocations);
         }
+
         self.data().range(at, names.len() as i64 * 24)?;
+
         for (i, name) in names.iter().enumerate() {
             let entry = at + i as i64 * 24;
+
             // The game packs source stages 0, 2, 1, and an absent compute slot
             let packed = (self.data().u32(entry)? & 255)
                 | (self.data().u32(entry + 8)? & 255) << 8
                 | (self.data().u32(entry + 4)? & 255) << 16
                 | 0xff000000;
+
             if locations.iter().any(|(existing, _)| existing == name) {
                 return fail(ShaderError::DuplicateResourceName);
             }
+
             locations.push((name.clone(), packed));
         }
+
         Ok(locations)
     }
 }
@@ -331,9 +377,11 @@ impl ShadingModel {
         signature(data, bnsh_base, b"BNSH")?;
         let bnsh_size = to_int(data.u32(bnsh_base + 28)? as i64)?;
         data.range(bnsh_base, bnsh_size)?;
+
         if bnsh_size < 32 {
             return fail(ShaderError::InvalidBnshSize);
         }
+
         let mut options = read_options(
             data,
             data.pointer(at + 8)?,
@@ -341,6 +389,7 @@ impl ShadingModel {
             0,
             key_words,
         )?;
+
         options.extend(read_options(
             data,
             data.pointer(at + 24)?,
@@ -350,6 +399,7 @@ impl ShadingModel {
         )?);
 
         let attribute_array = data.pointer(at + 40)?;
+
         let attributes = dictionary(data, data.pointer(at + 48)?)?
             .into_iter()
             .enumerate()
@@ -360,23 +410,29 @@ impl ShadingModel {
                 ))
             })
             .collect::<Result<_>>()?;
+
         let sampler_names = dictionary(data, data.pointer(at + 64)?)?;
 
         let block_array = data.pointer(at + 88)?;
         let mut uniform_blocks = Vec::new();
+
         for name in dictionary(data, data.pointer(at + 96)?)? {
             let b = block_array + uniform_blocks.len() as i64 * 32;
             let size = data.u16(b + 26)? as i64;
             let defaults = data.pointer(b + 16)?;
             let uniform_array = data.pointer(b)?;
+
             // Uniform offsets are not needed, but the game's reflection reads them
             for i in 0..dictionary(data, data.pointer(b + 8)?)?.len() as i64 {
                 data.u16(uniform_array + i * 16 + 12)?;
             }
+
             let kind = data.byte(b + 25)?;
+
             if defaults != 0 {
                 data.range(defaults, size)?;
             }
+
             uniform_blocks.push(UniformBlock { name, kind, size });
         }
 
@@ -413,10 +469,13 @@ fn read_options(
         let default_choice = data.byte(at + 25)? as i64;
         let mut word = data.byte(at + 30)? as i64;
         let shift = data.byte(at + 31)? as u32;
+
         if dynamic_base > 0 {
             word = word - data.byte(at + 29)? as i64 + dynamic_base;
         }
+
         let mask = data.u32(at + 32)?;
+
         if choices.len() != data.byte(at + 24)? as usize
             || default_choice >= choices.len() as i64
             || word < 0
@@ -426,6 +485,7 @@ fn read_options(
         {
             return fail(ShaderError::InvalidOptionPacking);
         }
+
         options.push(ShaderOption {
             name,
             choices,
@@ -448,9 +508,11 @@ fn aligned_blocks(sizes: &[i64]) -> i64 {
 // Loads the shader archive file: a BFSHA, optionally inside a SARC, optionally Yaz0-compressed
 pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
     let mut data = read_file(path)?;
+
     if yaz0::is_yaz0(&data) {
         data = yaz0::decompress(&data)?;
     }
+
     if !data.starts_with(b"FSHA") {
         let members = nookkit_sarc::read(&data)?;
         let mut archives = members
@@ -463,5 +525,6 @@ pub(crate) fn load(path: &str) -> Result<ShaderArchive> {
         data.truncate(end);
         data.drain(..start);
     }
+
     ShaderArchive::parse(data)
 }

@@ -10,6 +10,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
 
     for path in paths {
         let json = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+
         if let Err(e) = set.add(path, &json) {
             eprintln!("{e}");
             failed = true;
@@ -22,9 +23,11 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
         let table = Table::parse(&data).ok_or_else(|| format!("{}: not a BCSV", path.display()))?;
 
         let plan = set.plan(file, &table);
+
         for e in &plan.skipped {
             eprintln!("{e}");
         }
+
         failed |= !plan.skipped.is_empty();
 
         eprintln!(
@@ -36,6 +39,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     if failed {
         return Err("some patches don't apply".into());
     }
+
     Ok(())
 }
 

@@ -42,6 +42,7 @@ fn report(context: &str, result: NativeResult) {
 
 fn start() -> Result<(), nookkit_sym::SymError> {
     let symbols = nookkit_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
+
     println!(
         "[NookKit] {} symbols for {}",
         symbols.len(),
@@ -70,6 +71,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     messages::install()?;
     bcsv::install()?;
     pack::install()?;
+
     rstb::install()
 }
 

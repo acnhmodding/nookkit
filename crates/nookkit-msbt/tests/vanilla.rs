@@ -26,6 +26,7 @@ fn every_message_round_trips() {
     for path in &archives {
         let compressed = std::fs::read(path).unwrap();
         let mut data = Vec::new();
+
         ruzstd::decoding::StreamingDecoder::new(compressed.as_slice())
             .unwrap()
             .read_to_end(&mut data)

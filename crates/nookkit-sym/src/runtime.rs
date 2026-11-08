@@ -20,6 +20,7 @@ fn running_fingerprint() -> u64 {
     }
 
     let window = unsafe { core::slice::from_raw_parts(start as *const u8, FINGERPRINT_LEN) };
+
     fingerprint(window)
 }
 
@@ -98,6 +99,7 @@ macro_rules! hook {
                 let f: unsafe extern "C" fn($($ty),*) $(-> $ret)? = unsafe {
                     ::core::mem::transmute(ORIGINAL.load(::core::sync::atomic::Ordering::Acquire))
                 };
+
                 unsafe { f($($arg),*) }
             }
 

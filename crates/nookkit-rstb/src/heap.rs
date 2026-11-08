@@ -19,18 +19,24 @@ pub(crate) fn high_water_mark(requests: &[Request], initial_free_block: i64) -> 
     if initial_free_block < 0 || initial_free_block & 7 != 0 {
         return fail(HeapError::UnalignedFreeBlock);
     }
+
     let mut front = initial_free_block;
+
     for request in requests {
         if request.bytes < 0 {
             return fail(HeapError::NegativeRequest);
         }
+
         let alignment = request.alignment;
+
         if !(8..=8192).contains(&alignment) || alignment & (alignment - 1) != 0 {
             return fail(HeapError::UnsupportedAlignment);
         }
+
         let address = align_up(front + HEADER_BYTES, alignment);
         front = address + align_up(request.bytes.max(8), 8);
     }
+
     Ok(front)
 }
 
@@ -46,24 +52,32 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
         MINIMUM_POOL_BYTES,
         entries(MINIMUM_POOL_BYTES, 0),
     )];
+
     let mut parent = Vec::new();
+
     for wanted in requests {
         let alignment = wanted.alignment;
+
         if wanted.bytes <= 0 {
             return fail(HeapError::EmptyGpuRequest);
         }
+
         if alignment <= 0 || alignment & (alignment - 1) != 0 {
             return fail(HeapError::GpuAlignmentNotPowerOfTwo);
         }
+
         // Virtual heaps start at 0x100000, larger alignments need base-aware placement
         if alignment > 0x100000 {
             return fail(HeapError::GpuAlignmentTooLarge);
         }
+
         let mut best: Option<(usize, i64)> = None;
+
         for (i, pool) in pools.iter().enumerate() {
             let Some(candidate) = pool.try_place(wanted) else {
                 continue;
             };
+
             // Native selection maximizes request/free-size (single-precision)
             let better = match best {
                 None => true,
@@ -72,10 +86,12 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
                         > wanted.bytes as f32 / pools[b].free as f32
                 }
             };
+
             if better {
                 best = Some((i, candidate));
             }
         }
+
         let (index, offset) = match best {
             Some(found) => found,
             None => {
@@ -85,6 +101,7 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
                 parent.push(request(0x240 + entries * 0x20, 8));
                 parent.push(request(backing, align_up(alignment, 4096)));
                 let pool = Pool::new(backing, entries);
+
                 let Some(offset) = pool.try_place(wanted) else {
                     return fail(HeapError::GpuPoolTooSmall);
                 };
@@ -93,8 +110,10 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
                 (pools.len() - 1, offset)
             }
         };
+
         pools[index].add(offset, wanted.bytes);
     }
+
     Ok(parent)
 }
 
@@ -127,17 +146,23 @@ impl Pool {
         if self.allocated.len() >= self.capacity {
             return None;
         }
+
         let size = request.bytes.max(8);
         let alignment = request.alignment.max(8);
         let mut offset = 0;
+
         for &(start, bytes) in &self.allocated {
             offset = align_up(offset, alignment);
+
             if size <= start - offset {
                 return Some(offset);
             }
+
             offset = start + bytes;
         }
+
         offset = align_up(offset, alignment);
+
         (size <= self.length - offset).then_some(offset)
     }
 

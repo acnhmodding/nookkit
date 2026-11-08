@@ -14,6 +14,7 @@ fn every_table_round_trips() {
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|e| e == "bcsv"))
         .collect();
+
     paths.sort();
 
     let mut failures = Vec::new();

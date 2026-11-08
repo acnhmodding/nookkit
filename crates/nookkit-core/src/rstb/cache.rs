@@ -22,15 +22,19 @@ impl Cache {
     // Empty when missing, unreadable or from another epoch
     pub fn load(path: &str, epoch: String) -> Cache {
         let mut earlier = BTreeMap::new();
+
         let text = platform::read_optional(path)
             .ok()
             .flatten()
             .and_then(|bytes| String::from_utf8(bytes).ok())
             .unwrap_or_default();
+
         let mut lines = text.lines();
+
         if lines.next() == Some(epoch.as_str()) {
             for line in lines {
                 let mut fields = line.splitn(4, '\t');
+
                 let (Some(length), Some(stamp), Some(size), Some(relative)) =
                     (fields.next(), fields.next(), fields.next(), fields.next())
                 else {
@@ -51,6 +55,7 @@ impl Cache {
                 );
             }
         }
+
         Cache {
             epoch,
             earlier,
@@ -81,10 +86,13 @@ impl Cache {
         if self.current == self.earlier && platform::file_exists(path) {
             return Ok(());
         }
+
         let mut text = format!("{}\n", self.epoch);
+
         for (relative, s) in &self.current {
             text += &format!("{}\t{}\t{}\t{relative}\n", s.length, s.stamp, s.size);
         }
+
         platform::write(path, text.as_bytes())
     }
 }

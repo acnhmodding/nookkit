@@ -10,20 +10,25 @@ fn read(path: &Path) -> Result<Vec<u8>, String> {
 /// Prints a BYML file, or a file in a pack, as patch JSON
 fn json(path: &str, member: Option<&str>) -> Result<(), String> {
     let data = read(Path::new(path))?;
+
     let (name, byml) = match member {
         Some(member) => {
             let members = nookkit_sarc::read(&data).map_err(|e| format!("{path}: {e}"))?;
+
             let found = members
                 .iter()
                 .find(|m| m.is(member))
                 .ok_or_else(|| format!("{path}: no {member}"))?;
+
             (member, Byml::parse(found.data(&data)))
         }
         None => (path, Byml::parse(&data)),
     };
+
     let byml = byml.map_err(|e| format!("{name}: {e}"))?;
     let json = serde_json::to_string_pretty(&byml.root).map_err(|e| format!("{name}: {e}"))?;
     println!("{json}");
+
     Ok(())
 }
 
@@ -34,6 +39,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
 
     for path in paths {
         let json = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+
         match set.add(path, &json) {
             Ok(replaced) => {
                 for e in replaced {
@@ -51,6 +57,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
         let path = Path::new(romfs)
             .join("Pack")
             .join(format!("{archive}.pack"));
+
         let data = read(&path)?;
         let members = nookkit_sarc::read(&data).map_err(|e| format!("{}: {e}", path.display()))?;
 
@@ -60,7 +67,9 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
                 failed = true;
                 continue;
             };
+
             let original = member.data(&data);
+
             match entry.apply(original) {
                 Ok(patched) => eprintln!(
                     "{archive}/{file}: {} bytes, was {}",
@@ -78,6 +87,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     if failed {
         return Err("some patches don't apply".into());
     }
+
     Ok(())
 }
 

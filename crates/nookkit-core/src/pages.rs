@@ -166,6 +166,7 @@ pub struct Dispatch(());
 
 pub fn dispatching() -> Dispatch {
     DEPTH.fetch_add(1, Ordering::AcqRel);
+
     Dispatch(())
 }
 
@@ -280,6 +281,7 @@ unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> Nat
                 list.bind_buttons(builder)?;
 
                 let name = list.name().and_then(|n| n.to_str().ok()).unwrap_or("?");
+
                 println!(
                     "[NookKit] bound list {name} ({} buttons)",
                     list.button_count()
@@ -308,6 +310,7 @@ unsafe fn built(page: *mut ViewPage) {
     let layout = unsafe { page_ref.layout() }
         .and_then(|s| s.to_str().ok())
         .unwrap_or("");
+
     let class = unsafe { page_ref.class() }
         .and_then(|s| s.to_str().ok())
         .unwrap_or("");

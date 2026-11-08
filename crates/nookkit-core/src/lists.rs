@@ -149,6 +149,7 @@ impl ListState {
     pub unsafe fn set_items(&self, count: u32, selected: u32, player: Player) -> NativeResult {
         unsafe {
             (*self.group.get()).selected = selected as i32;
+
             self.list()
                 .set_content(&default_content(count as i32, selected as i32), player.0)?;
         }

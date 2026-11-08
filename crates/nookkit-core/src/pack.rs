@@ -36,6 +36,7 @@ impl Loading {
 /// Every patch, a broken one is reported and skipped
 fn load_patches() -> PatchSet {
     let mut set = PatchSet::default();
+
     let files = match crate::content::json_files(FOLDER) {
         Ok(files) => files,
         Err(e) => {
@@ -45,6 +46,7 @@ fn load_patches() -> PatchSet {
     };
 
     let mut read = 0;
+
     for (name, json) in files {
         let json = match json {
             Ok(json) => json,
@@ -53,6 +55,7 @@ fn load_patches() -> PatchSet {
                 continue;
             }
         };
+
         read += 1;
 
         match set.add(&name, &json) {
@@ -72,14 +75,17 @@ fn load_patches() -> PatchSet {
             read
         );
     }
+
     set
 }
 
 fn patches() -> Option<&'static PatchSet> {
     let patches = PATCHES.get_or_init(load_patches);
+
     if patches.is_empty() {
         return None;
     }
+
     Some(patches)
 }
 
@@ -89,12 +95,14 @@ fn patched_archive(request: *const LoadRequest<'static>) -> Option<&'static str>
     let request = unsafe { request.as_ref()? };
     let path = unsafe { request.path.as_str()? };
     let name = archive_name(path)?;
+
     patches.archives().find(|archive| *archive == name)
 }
 
 /// "Pack/StaticParam.pack" names the archive "StaticParam"
 fn archive_name(path: &str) -> Option<&str> {
     let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
+
     name.strip_suffix(EXTENSION)
 }
 
@@ -113,9 +121,11 @@ fn cache_file(file: &str) -> Option<&'static str> {
     let mut loading = loading();
     let loading = loading.get_mut(&current_thread())?;
     loading.cached += 1;
+
     if patches()?.get(loading.archive, file).is_some() {
         loading.patched.insert(file.to_owned());
     }
+
     Some(loading.archive)
 }
 
@@ -126,15 +136,19 @@ fn check_missing(loaded: &Loading) {
     if loaded.cached == 0 {
         return;
     }
+
     let mut checked = CHECKED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+
     if !checked.insert(loaded.archive) {
         return;
     }
+
     let Some(patches) = patches() else {
         return;
     };
+
     for (file, entry) in patches.files(loaded.archive) {
         if !loaded.patched.contains(file) {
             println!(
@@ -148,6 +162,7 @@ fn check_missing(loaded: &Loading) {
 /// The patched file, none when no patch takes it or it doesn't apply
 fn patch_file(archive: &str, file: &str, game_file: &[u8]) -> Option<Vec<u8>> {
     let entry = patches()?.get(archive, file)?;
+
     let bytes = match entry.apply(game_file) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -155,22 +170,27 @@ fn patch_file(archive: &str, file: &str, game_file: &[u8]) -> Option<Vec<u8>> {
                 "[NookKit] pack patch {} on {archive}/{file}: {e}",
                 entry.patch
             );
+
             return None;
         }
     };
+
     if u32::try_from(bytes.len()).is_err() {
         println!(
             "[NookKit] pack patch {} on {archive}/{file}: too large",
             entry.patch
         );
+
         return None;
     }
+
     println!(
         "[NookKit] {archive}/{file}: from {}, {} bytes, was {}",
         entry.patch,
         bytes.len(),
         game_file.len()
     );
+
     Some(bytes)
 }
 
@@ -179,10 +199,13 @@ fn patched_insert(path: *const SafeString<'static>, data: *const u8, size: u32) 
     let path = unsafe { path.as_ref()? };
     let file = unsafe { path.as_str()? };
     let archive = cache_file(file)?;
+
     if data.is_null() {
         return None;
     }
+
     let game_file = unsafe { core::slice::from_raw_parts(data, size as usize) };
+
     patch_file(archive, file, game_file)
 }
 
@@ -199,14 +222,18 @@ nookkit_sym::hook! {
         let node = unsafe { original(cache, request) };
 
         let mut loading = loading();
+
         let loaded = match previous {
             Some(previous) => loading.insert(thread, previous),
             None => loading.remove(&thread),
         };
+
         drop(loading);
+
         if let Some(loaded) = loaded {
             check_missing(&loaded);
         }
+
         node
     }
 }
@@ -218,11 +245,13 @@ nookkit_sym::hook! {
         let Some(bytes) = patched_insert(path, data, size) else {
             return unsafe { original(cache, request, holder, path, data, size) };
         };
+
         unsafe { original(cache, request, holder, path, bytes.as_ptr(), bytes.len() as u32) }
     }
 }
 
 pub fn install() -> Result<(), nookkit_sym::SymError> {
     load::install()?;
+
     insert::install()
 }

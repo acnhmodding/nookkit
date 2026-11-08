@@ -158,6 +158,7 @@ impl PlayerLock {
     pub fn release(self) -> Result {
         let result = check(unsafe { (self.ui.table.release_player)(self.player) });
         core::mem::forget(self);
+
         result
     }
 }
@@ -174,6 +175,7 @@ static TABLE: AtomicPtr<NookKitV2> = AtomicPtr::new(core::ptr::null_mut());
 
 fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
     let table = unsafe { TABLE.load(Ordering::Acquire).as_ref() }?;
+
     let kind = match kind {
         NativeKind::Fn => SymbolKind::FN,
         NativeKind::Vtable => SymbolKind::VTABLE,
@@ -188,6 +190,7 @@ fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
 /// Fails with [`UiError::UnsupportedBuild`] on any other game build
 pub fn connect(name: &'static str) -> Result<Ui> {
     let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV2>();
+
     if table.is_null() {
         return Err(UiError::FrameworkMissing);
     }

@@ -152,9 +152,11 @@ fn encode(source: &str, patch: Patch) -> Result<(String, Vec<(String, Entry)>), 
 
     for message in patch.messages {
         let mut text = BTreeMap::new();
+
         for (locale, value) in message.text {
             let units = tags::encode(&value)
                 .map_err(|e| error(format!("{} {} [{locale}] {e}", patch.file, message.label)))?;
+
             text.insert(locale, units);
         }
 
@@ -203,14 +205,17 @@ mod tests {
         assert!(set.add("a.json", ISLAND_SKETCH).unwrap().is_empty());
 
         let entry = set.get("MenuDevice", "IslandSketch").unwrap();
+
         assert_eq!(
             entry.text_for("USen"),
             Some(&tags::encode("Island Sketch").unwrap()[..])
         );
+
         assert_eq!(
             entry.text_for("JPja"),
             Some(&tags::encode("Island").unwrap()[..])
         );
+
         assert_eq!(entry.attribute, Some(Attribute::Like("0002".into())));
         assert_eq!(set.file("MenuDevice"), Some("MenuDevice"));
         assert!(set.get("MenuDevice", "0002").is_none());
@@ -226,6 +231,7 @@ mod tests {
             replaced,
             vec!["MenuDevice IslandSketch from a.json".to_owned()]
         );
+
         assert_eq!(
             set.get("MenuDevice", "IslandSketch").unwrap().source,
             "b.json"
@@ -235,6 +241,7 @@ mod tests {
     #[test]
     fn loads_an_array() {
         let mut set = PatchSet::default();
+
         let json = format!(
             r#" [ {ISLAND_SKETCH},
                 {{ "file": "STR_NNpcName", "messages": [ {{ "label": "cat23", "text": {{ "default": "Mitzi" }} }} ] }} ]"#
@@ -242,10 +249,12 @@ mod tests {
 
         assert!(set.add("a.json", &json).unwrap().is_empty());
         assert!(set.get("MenuDevice", "IslandSketch").is_some());
+
         assert_eq!(
             set.get("STR_NNpcName", "cat23").unwrap().text_for("USen"),
             Some(&tags::encode("Mitzi").unwrap()[..])
         );
+
         assert_eq!(set.len(), 2);
 
         assert!(set.add("empty.json", "[]").unwrap().is_empty());
@@ -255,6 +264,7 @@ mod tests {
     #[test]
     fn array_loads_all_or_nothing() {
         let mut set = PatchSet::default();
+
         let json = format!(
             r#"[ {ISLAND_SKETCH}, {{ "file": "F", "messages": [ {{ "label": "L", "text": {{ "USen": "{{{{Nope}}}}" }} }} ] }} ]"#
         );
@@ -269,6 +279,7 @@ mod tests {
     fn rejects_bad_patches() {
         let mut set = PatchSet::default();
         assert!(set.add("x", "{}").is_err());
+
         assert!(
             set.add(
                 "x",
@@ -276,6 +287,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             set.add(
                 "x",
@@ -283,10 +295,12 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             set.add("x", r#"{"file":"F","extra":1,"messages":[]}"#)
                 .is_err()
         );
+
         assert!(set.is_empty());
     }
 }

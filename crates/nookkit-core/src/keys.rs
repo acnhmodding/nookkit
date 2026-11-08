@@ -373,12 +373,14 @@ nookkit_sym::hook! {
 
 unsafe fn literal_text(dst: *mut WideBuffer, label: *const SafeString<'static>) -> Option<bool> {
     let label = unsafe { label.as_ref()?.as_c_str()? }.to_bytes();
+
     let id = core::str::from_utf8(label.strip_prefix(SENTINEL.as_bytes())?)
         .ok()?
         .parse::<u32>()
         .ok()?;
 
     let texts = TEXTS.lock().ok()?;
+
     let Some(text) = texts.get(&id) else {
         return Some(false);
     };

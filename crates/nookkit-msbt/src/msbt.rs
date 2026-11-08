@@ -43,9 +43,11 @@ impl Msbt {
 
         let lbl = sections.get(b"LBL1")?;
         let mut labels = BTreeMap::new();
+
         for bucket in 0..u32_at(lbl, 0)? as usize {
             let count = u32_at(lbl, 4 + bucket * 8)?;
             let mut at = u32_at(lbl, 8 + bucket * 8)? as usize;
+
             for _ in 0..count {
                 let len = *lbl.get(at)? as usize;
                 let name = std::str::from_utf8(lbl.get(at + 1..at + 1 + len)?).ok()?;
@@ -56,14 +58,18 @@ impl Msbt {
 
         let txt = sections.get(b"TXT2")?;
         let count = u32_at(txt, 0)? as usize;
+
         let mut offsets = (0..count)
             .map(|i| u32_at(txt, 4 + i * 4).map(|o| o as usize))
             .collect::<Option<Vec<_>>>()?;
+
         offsets.push(txt.len());
+
         let texts = offsets
             .windows(2)
             .map(|w| {
                 let bytes = txt.get(w[0]..w[1])?;
+
                 Some(
                     bytes
                         .chunks_exact(2)
@@ -76,12 +82,14 @@ impl Msbt {
         let (attributes, attribute_size) = match sections.get(b"ATR1") {
             Some(atr) => {
                 let size = u32_at(atr, 4)?;
+
                 let entries = (0..u32_at(atr, 0)? as usize)
                     .map(|i| {
                         let at = 8 + i * size as usize;
                         atr.get(at..at + size as usize).map(<[u8]>::to_vec)
                     })
                     .collect::<Option<Vec<_>>>()?;
+
                 (entries, size)
             }
             None => (Vec::new(), 0),

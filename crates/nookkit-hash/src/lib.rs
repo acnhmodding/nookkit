@@ -20,16 +20,19 @@ pub fn mmh3(text: &str) -> u32 {
             .iter()
             .rev()
             .fold(0u32, |k, &b| (k << 8) | u32::from(b));
+
         h ^= k.wrapping_mul(C1).rotate_left(15).wrapping_mul(C2);
         h = h.rotate_left(13).wrapping_mul(5).wrapping_add(0xe654_6b64);
     }
 
     let tail = blocks.remainder();
+
     if !tail.is_empty() {
         let k = tail
             .iter()
             .rev()
             .fold(0u32, |k, &b| (k << 8) | u32::from(b));
+
         h ^= k.wrapping_mul(C1).rotate_left(15).wrapping_mul(C2);
     }
 
@@ -38,6 +41,7 @@ pub fn mmh3(text: &str) -> u32 {
     h = h.wrapping_mul(0x85eb_ca6b);
     h ^= h >> 13;
     h = h.wrapping_mul(0xc2b2_ae35);
+
     h ^ (h >> 16)
 }
 

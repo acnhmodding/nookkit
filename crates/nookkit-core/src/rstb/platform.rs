@@ -23,6 +23,7 @@ pub fn file_exists(path: &str) -> bool {
     };
 
     let mut entry_type = 0;
+
     unsafe {
         nn::fs::GetEntryType(&raw mut entry_type, path.as_ptr().cast()) == 0
             && entry_type == ENTRY_FILE
@@ -37,6 +38,7 @@ pub fn read_optional(path: &str) -> Result<Option<Vec<u8>>, RstbError> {
     if !file_exists(path) {
         return Ok(None);
     }
+
     read(path).map(Some)
 }
 
@@ -48,21 +50,25 @@ pub fn write(path: &str, data: &[u8]) -> Result<(), RstbError> {
             .create(true)
             .truncate(false)
             .open(path)?;
+
         file.set_len(data.len() as u64)?;
         file.write_all(data)?;
         file.flush()
     })();
+
     result.map_err(io("writing", path))
 }
 
 // Written completely at `temporary` first, so an interrupted write never leaves a partial file
 pub fn replace(path: &str, temporary: &str, data: &[u8]) -> Result<(), RstbError> {
     write(temporary, data)?;
+
     rename(temporary, path)
 }
 
 fn rename(from: &str, to: &str) -> Result<(), RstbError> {
     remove(to)?;
+
     fs::rename(from, to).map_err(io("moving", &format!("{from} to {to}")))
 }
 
@@ -70,11 +76,13 @@ pub fn remove(path: &str) -> Result<(), RstbError> {
     if !file_exists(path) {
         return Ok(());
     }
+
     fs::remove_file(path).map_err(io("deleting", path))
 }
 
 pub fn create_dirs(path: &str) -> Result<(), RstbError> {
     let root = path.find(":/").map_or(0, |at| at + 2);
+
     for (at, _) in path
         .match_indices('/')
         .filter(|&(at, _)| at > root)
@@ -83,9 +91,11 @@ pub fn create_dirs(path: &str) -> Result<(), RstbError> {
         // Existing directories fail to be created, the final check covers real failures
         let _ = fs::create_dir(&path[..at]);
     }
+
     if fs::read_dir(path).is_err() {
         return Err(RstbError::CreateDir(path.to_owned()));
     }
+
     Ok(())
 }
 
@@ -99,9 +109,11 @@ pub fn dirs(root: &str) -> Result<Vec<String>, RstbError> {
     };
 
     let mut out = Vec::new();
+
     for entry in entries {
         let entry = entry.map_err(io("listing", root))?;
         let name = entry.file_name().to_string_lossy().into_owned();
+
         if entry
             .metadata()
             .map_err(io("reading", &format!("{root}/{name}")))?
@@ -110,7 +122,9 @@ pub fn dirs(root: &str) -> Result<Vec<String>, RstbError> {
             out.push(name);
         }
     }
+
     out.sort();
+
     Ok(out)
 }
 
@@ -122,31 +136,41 @@ pub fn files(root: &str) -> Result<Vec<(String, u64)>, RstbError> {
         } else {
             format!("{root}/{relative}")
         };
+
         let entries = fs::read_dir(&dir).map_err(io("listing", &dir))?;
+
         for entry in entries {
             let entry = entry.map_err(io("listing", &dir))?;
             let name = entry.file_name().to_string_lossy().into_owned();
+
             let path = if relative.is_empty() {
                 name
             } else {
                 format!("{relative}/{name}")
             };
+
             let metadata = entry
                 .metadata()
                 .map_err(io("reading", &format!("{dir}/{path}")))?;
+
             if metadata.is_dir() {
                 walk(root, &path, out)?;
             } else {
                 out.push((path, metadata.len()));
             }
         }
+
         Ok(())
     }
+
     let mut out = Vec::new();
+
     if fs::read_dir(root).is_ok() {
         walk(root, "", &mut out)?;
     }
+
     out.sort();
+
     Ok(out)
 }
 
@@ -154,10 +178,13 @@ pub fn files(root: &str) -> Result<Vec<(String, u64)>, RstbError> {
 pub fn lengths(path: &str) -> (u64, u64) {
     let length = fs::metadata(path).map_or(0, |m| m.len());
     let mut prefix = [0u8; 18];
+
     let read = fs::File::open(path)
         .and_then(|mut file| file.read(&mut prefix))
         .unwrap_or(0);
+
     let prefix = &prefix[..read];
+
     let yaz0 = || {
         let size = prefix.strip_prefix(b"Yaz0")?.get(..4)?;
         Some(u32::from_be_bytes(size.try_into().ok()?) as u64)
@@ -166,6 +193,7 @@ pub fn lengths(path: &str) -> (u64, u64) {
     let decompressed = nookkit_rstb::declared_length(prefix)
         .or_else(yaz0)
         .unwrap_or(length);
+
     (length, decompressed)
 }
 
@@ -173,20 +201,25 @@ pub fn lengths(path: &str) -> (u64, u64) {
 // file system has none
 pub fn stamp(path: &str) -> Result<String, RstbError> {
     let mut times = nn::fs::FileTimeStamp::new();
+
     if let Some(c) = c_path(path)
         && unsafe { nn::fs::GetFileTimeStampForDebug(&raw mut times, c.as_ptr().cast()) } == 0
         && times.modify.time != 0
     {
         return Ok(format!("t{:x}-{:x}", times.create.time, times.modify.time));
     }
+
     let mut file = fs::File::open(path).map_err(io("reading", path))?;
     let mut hasher = crc32fast::Hasher::new();
     let mut buffer = vec![0u8; 0x10000];
+
     loop {
         let read = file.read(&mut buffer).map_err(io("reading", path))?;
+
         if read == 0 {
             return Ok(format!("c{:08x}", hasher.finalize()));
         }
+
         hasher.update(&buffer[..read]);
     }
 }

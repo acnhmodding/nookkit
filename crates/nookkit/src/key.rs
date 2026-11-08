@@ -130,14 +130,17 @@ impl KeyBuilder {
 
     pub fn build(self) -> Result<KeyBinding> {
         let ui = self.page.ui();
+
         let mut flags = if self.consume {
             KeyFlags::CONSUME
         } else {
             KeyFlags::NONE
         };
+
         if self.player.is_none() {
             flags = flags | KeyFlags::SEQ_PLAYER;
         }
+
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {

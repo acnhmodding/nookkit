@@ -9,15 +9,18 @@ use crate::sizing::model_archive_load_bytes;
 // (physics, shaders, nested archives) have independent allocations
 pub(crate) fn single_bfres(archive: &[u8]) -> Option<Member> {
     let mut members = nookkit_sarc::read(archive).ok()?;
+
     if members.len() != 1 || members[0].offset != 0x2000 || !is_bfres(members[0].data(archive)) {
         return None;
     }
+
     members.pop()
 }
 
 // An unrelocated little-endian BFRES v9 with a relocation table inside its bounds
 pub(crate) fn is_bfres(data: &[u8]) -> bool {
     let bfres = Reader::new(data);
+
     let header = || -> Result<bool> {
         if bfres.len() < 0xf0
             || !bfres.magic(0, b"FRES    ")?
@@ -31,6 +34,7 @@ pub(crate) fn is_bfres(data: &[u8]) -> bool {
         let relocation = bfres.u32(24)? as i64;
         Ok(relocation <= bfres.len() - 16 && bfres.magic(relocation, b"_RLT")?)
     };
+
     header().unwrap_or(false)
 }
 
@@ -57,19 +61,24 @@ pub(crate) fn runtime_pool_bytes(
 pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
     let files = bfres.u16(0xec)? as i64;
     let array = bfres.pointer(0xb8)?;
+
     if (files == 0) != (array == 0) || (files == 0 && bfres.u64(0xc0)? != 0) {
         return fail(BfresError::ExternalFileCount);
     }
 
     let relocation = bfres.u32(24)? as i64;
     let mut textures = 0;
+
     for i in 0..files {
         let at = bfres.pointer(array + i * 16)?;
         let length = bfres.pointer(array + i * 16 + 8)?;
+
         if at + length > relocation {
             return fail(BfresError::ExternalFileOverlap);
         }
+
         let bntx = bfres.slice(at, length)?;
+
         if bntx.len() < 0x58
             || !bntx.magic(0, b"BNTX\0\0\0\0")?
             || bntx.u32(8)? != 0x00040100
@@ -83,17 +92,22 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
 
         let count = bntx.u32(36)? as i64;
         let infos = bntx.pointer(40)?;
+
         if count == 0 {
             return fail(BfresError::NoTextures);
         }
+
         bntx.range(infos, count * 8)?;
+
         for texture in 0..count {
             let info = bntx.pointer(infos + texture * 8)?;
             bntx.range(info, 0xa0)?;
             bntx.require_magic(info, b"BRTI")?;
         }
+
         textures += count;
     }
+
     Ok(textures)
 }
 
@@ -102,17 +116,21 @@ pub(crate) fn texture_count(bfres: Reader) -> Result<i64> {
 // animations are not counted. Returns the total and the name bytes
 pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
     let mut animations = 0;
+
     for kind in 0..4 {
         let count = bfres.u16(0xe2 + kind * 2)? as i64;
         let array = 0x58 + kind * 0x10;
+
         if (count == 0) != (bfres.u64(array)? == 0) || (count == 0) != (bfres.u64(array + 8)? == 0)
         {
             return fail(BfresError::AnimationCount);
         }
+
         animations += count;
     }
 
     let mut name_bytes = 0;
+
     for (array, stride, count) in [
         (0x68, 0x70, bfres.u16(0xe4)?),
         (0x78, 0x60, bfres.u16(0xe6)?),
@@ -122,13 +140,17 @@ pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
         bfres.range(start, count * stride)?;
         for i in 0..count {
             let name = bfres.pointer(start + i * stride + 8)?;
+
             if name == 0 {
                 return fail(BfresError::UnnamedAnimation);
             }
+
             name_bytes += normalized_animation_name_bytes(bfres.name(name)?);
         }
     }
+
     let name_bytes = align_up(name_bytes, 8);
+
     Ok((animations * 0x18 + name_bytes, name_bytes))
 }
 
@@ -137,16 +159,20 @@ pub(crate) fn animation_bytes(bfres: Reader) -> Result<(i64, i64)> {
 // the normalized name plus NUL even when its copy-name flag is disabled
 fn normalized_animation_name_bytes(name: &str) -> i64 {
     let bytes = name.as_bytes();
+
     if !["fsp", "fcl", "fts", "ftp", "fvb", "fvm"]
         .iter()
         .any(|suffix| name.ends_with(suffix))
     {
         return 0;
     }
+
     let mut end = bytes.len() - 3;
+
     if end > 0 && matches!(bytes[end - 1], b'_' | b'.') {
         end -= 1;
     }
+
     end.min(1023) as i64 + 1
 }
 
@@ -155,12 +181,14 @@ fn normalized_animation_name_bytes(name: &str) -> i64 {
 pub(crate) fn texture_animation_archive_size(archive: &[u8]) -> Option<u32> {
     let member = single_bfres(archive)?;
     let pool = runtime_pool_without_models(Reader::new(member.data(archive))).ok()??;
+
     let allocation = model_archive_load_bytes(
         align_up(archive.len() as i64, 32),
         &[],
         &resource_requests(pool),
     )
     .ok()?;
+
     // No generic 32-byte rounding: ACNH's recorded allocations may be 16 mod 32
     u32::try_from(allocation).ok()
 }
@@ -192,17 +220,20 @@ fn runtime_pool_without_models(bfres: Reader) -> Result<Option<i64>> {
     {
         return Ok(None);
     }
+
     // The model and reserved arrays/dictionaries, then the scene animation ones
     for offset in (0x28..=0x50).step_by(8) {
         if bfres.u64(offset)? != 0 {
             return Ok(None);
         }
     }
+
     if bfres.u64(0x98)? != 0 || bfres.u64(0xa0)? != 0 || !has_no_gpu_data(bfres)? {
         return Ok(None);
     }
 
     let pool = runtime_pool_bytes(0, 0, 0, 0, texture_count(bfres)?, animation_bytes(bfres)?.0);
+
     // A BFRES with neither would request an empty pool, which has not been traced
     Ok((pool != 0).then_some(pool))
 }
@@ -214,9 +245,11 @@ fn runtime_pool_without_models(bfres: Reader) -> Result<Option<i64>> {
 fn has_no_gpu_data(bfres: Reader) -> Result<bool> {
     let memory_pool = bfres.pointer(0xa8)?;
     let buffer_info = bfres.pointer(0xb0)?;
+
     if memory_pool == 0 && buffer_info == 0 {
         return Ok(true);
     }
+
     Ok(memory_pool != 0
         && buffer_info != 0
         && bfres.u32(buffer_info)? == 0x24

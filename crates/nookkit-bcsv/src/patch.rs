@@ -80,6 +80,7 @@ pub(crate) struct Source {
 impl Source {
     fn rows(&self) -> impl Iterator<Item = &[Cell]> {
         let mut start = 0;
+
         self.ends.iter().map(move |&end| {
             let row = &self.cells[start..end as usize];
             start = end as usize;
@@ -100,6 +101,7 @@ impl Source {
     pub(crate) fn start_blob(&mut self) -> u32 {
         let at = self.bytes.len();
         self.bytes.extend_from_slice(&[0; 4]);
+
         at as u32
     }
 
@@ -112,13 +114,16 @@ impl Source {
     /// Whether `cell`, of the column `key`, can be written to a cell of `size` bytes
     fn fits(&self, cell: Cell, key: &str, size: usize) -> Result<(), CellError> {
         let key = || key.to_owned();
+
         match cell.kind() {
             UNSIGNED | SIGNED => {
                 // A u8 that ends a row is padded, so only its first four bytes are the number
                 let value = cell.integer();
                 let bits = size as u32 * 8;
+
                 let fits = (1..=4).contains(&size)
                     && (-(1i64 << (bits - 1))..(1i64 << bits)).contains(&value);
+
                 if !fits {
                     return Err(CellError::Integer {
                         key: key(),
@@ -130,6 +135,7 @@ impl Source {
             FLOAT | HASH if size != 4 => return Err(CellError::NotFourBytes { key: key(), size }),
             TEXT => {
                 let len = self.blob(cell.value).len();
+
                 if len >= size {
                     return Err(CellError::TextTooLong {
                         key: key(),
@@ -140,6 +146,7 @@ impl Source {
             }
             BYTES => {
                 let len = self.blob(cell.value).len();
+
                 if len != size {
                     return Err(CellError::ByteCount {
                         key: key(),
@@ -150,12 +157,14 @@ impl Source {
             }
             _ => {}
         }
+
         Ok(())
     }
 
     /// Writes `cell` to `out`, which [`Self::fits`] it
     fn write(&self, cell: Cell, out: &mut [u8]) {
         out.fill(0);
+
         match cell.kind() {
             UNSIGNED | SIGNED => {
                 let len = out.len();
@@ -199,15 +208,19 @@ impl Keys {
         };
 
         let id = self.keys.len() as u32;
+
         if id >= 1 << (32 - KIND_BITS) {
             return Err(Invalid::TooManyKeys);
         }
+
         self.keys.push(Key {
             name: key.into(),
             hash,
             text: key.contains(" string"),
         });
+
         self.ids.insert(key.into(), id);
+
         Ok(id)
     }
 
@@ -246,6 +259,7 @@ impl PatchSet {
         for (file, source) in read {
             self.files.entry(file).or_default().push(source);
         }
+
         Ok(())
     }
 
@@ -276,6 +290,7 @@ impl PatchSet {
             .collect();
 
         let mut skipped = Vec::new();
+
         let sources: Vec<&Source> = self
             .files
             .get(file)
@@ -289,6 +304,7 @@ impl PatchSet {
                         table: file.to_owned(),
                         error,
                     });
+
                     false
                 }
             })
@@ -303,18 +319,23 @@ impl PatchSet {
             columns,
             targets: Vec::new(),
         };
+
         plan.find_targets();
+
         plan
     }
 
     fn check(&self, source: &Source, columns: &[Option<Column>]) -> Result<(), CellError> {
         for &cell in source.rows().flatten() {
             let key = self.keys.name(cell.key() as u32);
+
             let column = columns[cell.key()].ok_or_else(|| CellError::MissingColumn {
                 key: key.to_owned(),
             })?;
+
             source.fits(cell, key, column.size)?;
         }
+
         Ok(())
     }
 }
@@ -353,15 +374,19 @@ impl Plan<'_> {
 
         for (source, row) in self.patched_rows() {
             let mut found = None;
+
             if let Some(column) = key {
                 probe.fill(0);
+
                 let cell = row
                     .iter()
                     .rev()
                     .find(|c| self.columns[c.key()] == Some(column));
+
                 if let Some(&cell) = cell {
                     source.write(cell, &mut probe);
                     let range = column.offset..column.offset + column.size;
+
                     found = table
                         .rows()
                         .position(|r| r.get(range.clone()) == Some(&probe[..]))
@@ -384,6 +409,7 @@ impl Plan<'_> {
                     table.row_count + added - 1
                 }
             };
+
             targets.push(target as u32);
         }
 
@@ -410,18 +436,21 @@ impl Plan<'_> {
         for ((source, row), &target) in self.patched_rows().zip(&self.targets) {
             let at = table.row_at(target as usize);
             let out = &mut out[at..at + table.row_size];
+
             for &cell in row {
                 if let Some(column) = self.columns[cell.key()] {
                     source.write(cell, &mut out[column.offset..column.offset + column.size]);
                 }
             }
         }
+
         Ok(())
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, WriteError> {
         let mut out = vec![0; self.size()];
         self.write(&mut out)?;
+
         Ok(out)
     }
 }
@@ -446,21 +475,25 @@ mod tests {
             (crc32("Label string8"), 8),
             (0xbea8_4522, 16),
         ];
+
         let mut data = Vec::new();
         data.extend_from_slice(&2u32.to_le_bytes());
         data.extend_from_slice(&20u32.to_le_bytes());
         data.extend_from_slice(&(columns.len() as u16).to_le_bytes());
         data.extend_from_slice(&[0, 1]);
+
         for (hash, offset) in columns {
             data.extend_from_slice(&hash.to_le_bytes());
             data.extend_from_slice(&offset.to_le_bytes());
         }
+
         for (id, label) in [(1u16, b"cat01"), (2, b"cat02")] {
             let mut row = vec![0u8; 20];
             row[4..6].copy_from_slice(&id.to_le_bytes());
             row[8..13].copy_from_slice(label);
             data.extend_from_slice(&row);
         }
+
         data
     }
 
@@ -469,12 +502,14 @@ mod tests {
         let table = Table::parse(&data).unwrap();
         let plan = set.plan("T", &table);
         let out = plan.to_bytes().unwrap();
+
         (plan.replaced, plan.added, plan.skipped, out)
     }
 
     #[test]
     fn replaces_and_adds_rows() {
         let mut set = PatchSet::default();
+
         set.add(
             "a.json",
             r#"[{ "file": "T", "rows": [
@@ -501,6 +536,7 @@ mod tests {
     #[test]
     fn later_patch_wins() {
         let mut set = PatchSet::default();
+
         for (patch, label) in [("a.json", "first"), ("b.json", "second")] {
             let json = format!(
                 r#"{{ "file": "T", "rows": [{{ "UniqueID u16": 1, "Label string8": "{label}" }}] }}"#
@@ -517,6 +553,7 @@ mod tests {
     #[test]
     fn added_rows_are_patched_again() {
         let mut set = PatchSet::default();
+
         set.add(
             "a.json",
             r#"{ "file": "T", "rows": [
@@ -536,6 +573,7 @@ mod tests {
     #[test]
     fn skips_patches_that_dont_fit() {
         let mut set = PatchSet::default();
+
         set.add(
             "bad.json",
             r#"{ "file": "T", "rows": [
@@ -544,6 +582,7 @@ mod tests {
             ] }"#,
         )
         .unwrap();
+
         set.add(
             "good.json",
             r#"{ "file": "T", "rows": [{ "UniqueID u16": 7 }] }"#,
@@ -552,6 +591,7 @@ mod tests {
 
         let (_, added, skipped, data) = apply(&set);
         assert_eq!(added, 1);
+
         assert_eq!(
             skipped,
             [Skipped {
@@ -564,6 +604,7 @@ mod tests {
                 },
             }]
         );
+
         assert_eq!(Table::parse(&data).unwrap().row_count, 3);
     }
 
@@ -575,6 +616,7 @@ mod tests {
         let plan = set.plan("T", &table);
         assert!(plan.is_empty());
         assert_eq!(plan.to_bytes().unwrap(), data);
+
         assert_eq!(
             plan.write(&mut [0; 4]),
             Err(WriteError::BufferSize {
@@ -587,18 +629,21 @@ mod tests {
     #[test]
     fn checks_cell_sizes() {
         let mut source = Source::default();
+
         let mut blob = |bytes: &[u8]| {
             let at = source.start_blob();
             source.bytes.extend_from_slice(bytes);
             source.end_blob(at);
             at
         };
+
         let (ab, abcd, bytes) = (blob(b"ab"), blob(b"abcd"), blob(&[1, 2]));
 
         let fits = |cell, size| source.fits(cell, "k", size);
         let integer = |n: i64| Cell::new(0, if n < 0 { SIGNED } else { UNSIGNED }, n as u32);
         assert!(fits(integer(65535), 2).is_ok());
         assert!(fits(integer(-32768), 2).is_ok());
+
         assert_eq!(
             fits(integer(65536), 2),
             Err(CellError::Integer {
@@ -607,6 +652,7 @@ mod tests {
                 size: 2
             })
         );
+
         assert!(fits(integer(1), 8).is_err());
         assert!(fits(integer(1), 0).is_err());
         assert!(fits(Cell::new(0, FLOAT, 0), 2).is_err());
@@ -627,34 +673,44 @@ mod tests {
     fn rejects_bad_patches() {
         let mut set = PatchSet::default();
         assert!(set.add("x", "{}").is_err());
+
         assert!(
             set.add("x", r#"{"file":"T","rows":[{"0xzz112233":1}]}"#)
                 .is_err()
         );
+
         assert!(
             set.add("x", r#"{"file":"T","rows":[{"Bits u8":"zz"}]}"#)
                 .is_err()
         );
+
         assert!(
             set.add("x", r#"{"file":"T","rows":[{"A":{"sha1":"x"}}]}"#)
                 .is_err()
         );
+
         assert!(set.add("x", r#"{"file":"T","rows":[{"A":1e30}]}"#).is_ok());
+
         assert!(
             set.add("y", r#"{"file":"T","rows":[{"A":5000000000}]}"#)
                 .is_err()
         );
+
         assert!(set.add("x", r#"{"file":"T","extra":1,"rows":[]}"#).is_err());
+
         assert!(
             set.add("x", r#"[{"file":"T","rows":[]}, {"file":"U"}]"#)
                 .is_err()
         );
+
         assert_eq!(set.files().collect::<Vec<_>>(), ["T"]);
 
         let error = set
             .add("z.json", r#"{"file":"T","rows":[{"B":"q"}]}"#)
             .unwrap_err();
+
         assert_eq!(error.patch, "z.json");
+
         assert!(
             error.to_string().starts_with(r#"z.json: B: "q" isn't hex"#),
             "{error}"

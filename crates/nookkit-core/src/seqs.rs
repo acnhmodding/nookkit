@@ -32,6 +32,7 @@ nookkit_sym::hook! {
         if let Some(seq_ref) = unsafe { seq.as_ref() } {
             crate::keys::follow_player(unsafe { page_of(seq) }, seq_ref.player);
         }
+
         unsafe { fire(seq, SeqEvent::ACTIVATE) };
     }
 }

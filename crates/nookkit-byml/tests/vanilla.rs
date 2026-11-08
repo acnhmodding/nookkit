@@ -9,6 +9,7 @@ fn files(romfs: &Path) -> Vec<(String, Vec<u8>)> {
     fn walk(folder: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(folder).unwrap() {
             let path = entry.unwrap().path();
+
             if path.is_dir() {
                 walk(&path, out);
             } else {
@@ -16,17 +17,20 @@ fn files(romfs: &Path) -> Vec<(String, Vec<u8>)> {
             }
         }
     }
+
     let mut paths = Vec::new();
     walk(romfs, &mut paths);
     paths.sort();
 
     let mut files = Vec::new();
+
     for path in paths {
         let name = path
             .strip_prefix(romfs)
             .unwrap()
             .to_string_lossy()
             .into_owned();
+
         match path.extension().and_then(|e| e.to_str()) {
             Some("byml") => files.push((name, std::fs::read(&path).unwrap())),
             Some("pack") => {
@@ -40,28 +44,34 @@ fn files(romfs: &Path) -> Vec<(String, Vec<u8>)> {
             _ => {}
         }
     }
+
     files
 }
 
 /// The header and table checks `sead::ByamlIter` makes before reading a file
 fn game_accepts(data: &[u8]) -> bool {
     let big = data.starts_with(b"BY");
+
     let u32_at = |at: usize| {
         let bytes: [u8; 4] = data[at..at + 4].try_into().unwrap();
+
         if big {
             u32::from_be_bytes(bytes)
         } else {
             u32::from_le_bytes(bytes)
         }
     };
+
     let u24_at = |at: usize| {
         let [a, b, c] = data[at..at + 3].try_into().unwrap();
+
         if big {
             u32::from_be_bytes([0, a, b, c])
         } else {
             u32::from_le_bytes([a, b, c, 0])
         }
     };
+
     let cstr = |at: usize| {
         let end = at + data[at..].iter().position(|&b| b == 0).unwrap();
         &data[at..end]
@@ -88,15 +98,19 @@ fn game_accepts(data: &[u8]) -> bool {
     };
 
     let (keys, strings, root) = (u32_at(4), u32_at(8), u32_at(0xc));
+
     let (Some(keys_end), Some(strings_end)) = (table(keys), table(strings)) else {
         return false;
     };
+
     if root == 0 {
         return keys == 0 && strings == 0;
     }
+
     if keys != 0 && ((strings != 0 && strings < keys_end) || root < keys_end) {
         return false;
     }
+
     strings == 0 || strings_end <= root
 }
 
@@ -123,6 +137,7 @@ fn every_byml_round_trips() {
                 continue;
             }
         };
+
         big += (byml.format.endian == Endian::Big) as usize;
 
         let written = match byml.to_bytes() {
@@ -132,15 +147,18 @@ fn every_byml_round_trips() {
                 continue;
             }
         };
+
         if !game_accepts(&written) {
             failures.push(format!("{name}: the game would refuse it"));
         }
+
         if Byml::parse(&written).as_ref() != Ok(&byml) {
             failures.push(format!("{name}: reads back differently"));
         }
 
         if let Ok(json) = serde_json::to_string(&byml.root) {
             as_json += 1;
+
             if serde_json::from_str::<Node>(&json).ok().as_ref() != Some(&byml.root) {
                 failures.push(format!("{name}: its JSON reads back differently"));
             }
@@ -151,6 +169,7 @@ fn every_byml_round_trips() {
         "{} files, {big} big endian, {as_json} as JSON, skipped {skipped:?}",
         files.len()
     );
+
     failures.truncate(20);
     assert!(failures.is_empty(), "{failures:#?}");
 }

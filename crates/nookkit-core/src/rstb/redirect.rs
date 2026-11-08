@@ -21,6 +21,7 @@ pub fn install(table: &'static str, target: &str) {
     let Ok(target) = CString::new(target) else {
         return;
     };
+
     if REDIRECT.set(Redirect { table, target }).is_ok() {
         skyline::install_hooks!(open_file, get_entry_type);
     }
@@ -30,6 +31,7 @@ pub fn while_active<T>(f: impl FnOnce() -> T) -> T {
     ACTIVE.store(REDIRECT.get().is_some(), Ordering::Release);
     let result = f();
     ACTIVE.store(false, Ordering::Release);
+
     result
 }
 
@@ -37,27 +39,35 @@ fn redirect(path: *const u8) -> *const u8 {
     if !ACTIVE.load(Ordering::Acquire) {
         return path;
     }
+
     let Some(redirect) = REDIRECT.get() else {
         return path;
     };
+
     if path.is_null() {
         return path;
     }
+
     let bytes = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
+
     let Some(mount_end) = bytes.windows(2).position(|w| w == b":/") else {
         return path;
     };
+
     let relative = &bytes[mount_end + 2..];
     let relative = &relative[relative.iter().take_while(|&&b| b == b'/').count()..];
+
     if relative != redirect.table.as_bytes() {
         return path;
     }
+
     if !USED.swap(true, Ordering::Relaxed) {
         println!(
             "[NookKit] rstb: the game reads its table from {}",
             redirect.target.to_string_lossy()
         );
     }
+
     redirect.target.as_ptr().cast()
 }
 

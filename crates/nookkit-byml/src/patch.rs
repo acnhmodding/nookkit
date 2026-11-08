@@ -39,14 +39,17 @@ impl<'de> Visitor<'de> for PatchesVisitor {
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Patches, A::Error> {
         let mut patches = Vec::new();
+
         while let Some(patch) = seq.next_element()? {
             patches.push(patch);
         }
+
         Ok(Patches(patches))
     }
 
     fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Patches, A::Error> {
         let patch = Patch::deserialize(de::value::MapAccessDeserializer::new(map))?;
+
         Ok(Patches(vec![patch]))
     }
 }
@@ -66,6 +69,7 @@ impl Entry {
             format: Format::read(original)?,
             root: self.root.clone(),
         };
+
         Ok(byml.to_bytes()?)
     }
 }
@@ -86,6 +90,7 @@ impl PatchSet {
         })?;
 
         let mut replaced = Vec::new();
+
         for Patch {
             file,
             archive,
@@ -105,6 +110,7 @@ impl PatchSet {
                 });
             }
         }
+
         Ok(replaced)
     }
 
@@ -164,6 +170,7 @@ mod tests {
         let mut set = PatchSet::default();
         set.add("first.json", HOUSE).unwrap();
         let replaced = set.add("second.json", HOUSE).unwrap();
+
         assert_eq!(
             replaced,
             [Replaced {
@@ -172,7 +179,9 @@ mod tests {
                 patch: "first.json".into(),
             }]
         );
+
         assert_eq!(set.files("StaticParam").count(), 1);
+
         assert_eq!(
             set.get("StaticParam", "Param/NpcHouse/wol13.byml")
                 .unwrap()
@@ -205,6 +214,7 @@ mod tests {
         }
         .to_bytes()
         .unwrap();
+
         let patched = Byml::parse(&entry.apply(&original).unwrap()).unwrap();
         assert_eq!(patched.format, Format::read(&original).unwrap());
         assert_eq!(patched.root, entry.root);

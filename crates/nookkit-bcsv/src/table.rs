@@ -62,6 +62,7 @@ impl Header {
         row_size.copy_from_slice(&self.row_size.to_le_bytes());
         field_count.copy_from_slice(&self.field_count.to_le_bytes());
         rest.copy_from_slice(&[self.has_ext_header as u8, self.lang]);
+
         out
     }
 }
@@ -73,6 +74,7 @@ impl<'a> Bytes<'a> {
     fn array<const N: usize>(&mut self) -> Option<[u8; N]> {
         let (array, rest) = self.0.split_first_chunk::<N>()?;
         self.0 = rest;
+
         Some(*array)
     }
 
@@ -91,6 +93,7 @@ impl<'a> Bytes<'a> {
     fn take(&mut self, len: usize) -> Option<&'a [u8]> {
         let (taken, rest) = self.0.split_at_checked(len)?;
         self.0 = rest;
+
         Some(taken)
     }
 }
@@ -115,12 +118,15 @@ impl<'a> Table<'a> {
         let row_size = header.row_size as usize;
 
         let head = bytes.0;
+
         if header.has_ext_header && !bytes.take(EXT_HEADER_SIZE)?.starts_with(EXT_MAGIC) {
             return None;
         }
+
         let mut fields = (0..header.field_count)
             .map(|_| FieldInfo::read(&mut bytes))
             .collect::<Option<Vec<_>>>()?;
+
         let head = &head[..head.len() - bytes.0.len()];
         let rows = bytes.take(row_count.checked_mul(row_size)?)?;
 
@@ -129,10 +135,12 @@ impl<'a> Table<'a> {
             hash: 0,
             offset: header.row_size,
         });
+
         let columns = fields
             .windows(2)
             .map(|pair| {
                 let (field, next) = (pair[0], pair[1]);
+
                 Some(Column {
                     hash: field.hash,
                     offset: field.offset as usize,
@@ -159,6 +167,7 @@ impl<'a> Table<'a> {
         if index >= self.row_count {
             return None;
         }
+
         self.rows.get(index * self.row_size..)?.get(..self.row_size)
     }
 
@@ -178,10 +187,13 @@ impl<'a> Table<'a> {
     /// bytes. The rows past the table's own are zeros apart from the offset a row starts with
     pub fn write(&self, rows: usize, out: &mut [u8]) -> Result<(), WriteError> {
         let count = self.row_count;
+
         if rows < count {
             return Err(WriteError::TooFewRows { rows, count });
         }
+
         let size = self.size(rows);
+
         if out.len() != size {
             return Err(WriteError::BufferSize {
                 len: out.len(),
@@ -193,6 +205,7 @@ impl<'a> Table<'a> {
             row_count: rows as u32,
             ..self.header
         };
+
         let (out_header, rest) = out.split_at_mut(Header::SIZE);
         let (out_head, rest) = rest.split_at_mut(self.head.len());
         let (out_rows, rest) = rest.split_at_mut(self.rows.len());
@@ -203,20 +216,24 @@ impl<'a> Table<'a> {
 
         // A row's first four bytes hold its offset in the file unless a column starts there
         let row_offsets = self.columns.iter().all(|c| c.offset >= 4) && self.row_size >= 4;
+
         if row_offsets {
             for index in count..rows {
                 let at = self.row_at(index);
+
                 if let Some(offset) = out[at..].first_chunk_mut::<4>() {
                     *offset = (at as u32).to_le_bytes();
                 }
             }
         }
+
         Ok(())
     }
 
     pub fn to_bytes(&self, rows: usize) -> Result<Vec<u8>, WriteError> {
         let mut out = vec![0; self.size(rows)];
         self.write(rows, &mut out)?;
+
         Ok(out)
     }
 }
@@ -232,11 +249,14 @@ mod tests {
         data.extend_from_slice(&12u32.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes());
         data.extend_from_slice(&[0, 1]);
+
         for (hash, offset) in [(0x1111_1111u32, 4u32), (0x2222_2222, 8)] {
             data.extend_from_slice(&hash.to_le_bytes());
             data.extend_from_slice(&offset.to_le_bytes());
         }
+
         data.extend_from_slice(&[0x1c, 0, 0, 0, 7, 0, 0, 0, 3, 0, 0, 0]);
+
         data
     }
 
@@ -244,6 +264,7 @@ mod tests {
     fn reads_columns_and_rows() {
         let data = small();
         let table = Table::parse(&data).unwrap();
+
         assert_eq!(
             table.columns,
             vec![
@@ -259,6 +280,7 @@ mod tests {
                 },
             ]
         );
+
         assert_eq!(table.row_count, 1);
         assert_eq!(table.row(0), Some(&data[0x1c..]));
         assert_eq!(table.row(1), None);
@@ -286,6 +308,7 @@ mod tests {
             table.to_bytes(0),
             Err(WriteError::TooFewRows { rows: 0, count: 1 })
         );
+
         assert_eq!(
             table.write(1, &mut [0; 4]),
             Err(WriteError::BufferSize { len: 4, size: 0x28 })

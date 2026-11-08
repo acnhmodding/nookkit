@@ -33,35 +33,46 @@ pub enum Update {
 impl Table {
     pub fn parse(data: &[u8]) -> Result<Table> {
         let d = Reader::new(data);
+
         if !d.magic(0, b"RSTC")? {
             return fail(TableError::Invalid);
         }
+
         let unique_count = d.u32(4)? as i64;
         let collided_count = d.u32(8)? as i64;
+
         let mut table = Table {
             unique: BTreeMap::new(),
             collided: BTreeMap::new(),
         };
+
         let mut at = 12;
+
         let entry = |at: i64| -> Result<Entry> {
             Ok(Entry {
                 size: d.u32(at)?,
                 dlc: d.u32(at + 4)?,
             })
         };
+
         for _ in 0..unique_count {
             let crc = d.u32(at)?;
+
             if table.unique.insert(crc, entry(at + 4)?).is_some() {
                 return fail(TableError::DuplicateEntry(crc));
             }
+
             at += 4 + ENTRY_BYTES as i64;
         }
+
         for _ in 0..collided_count {
             let bytes = d.range(at, COLLIDED_NAME_BYTES as i64)?;
             let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+
             let Ok(name) = std::str::from_utf8(&bytes[..end]) else {
                 return fail(TableError::CollidedNameNotText);
             };
+
             if !name.is_ascii()
                 || table
                     .collided
@@ -70,9 +81,12 @@ impl Table {
             {
                 return fail(TableError::InvalidCollidedEntry(name.to_owned()));
             }
+
             at += (COLLIDED_NAME_BYTES + ENTRY_BYTES) as i64;
         }
+
         table.normalize();
+
         Ok(table)
     }
 
@@ -81,23 +95,28 @@ impl Table {
             12 + self.unique.len() * (4 + ENTRY_BYTES)
                 + self.collided.len() * (COLLIDED_NAME_BYTES + ENTRY_BYTES),
         );
+
         out.extend_from_slice(b"RSTC");
         out.extend_from_slice(&(self.unique.len() as u32).to_le_bytes());
         out.extend_from_slice(&(self.collided.len() as u32).to_le_bytes());
+
         let write = |out: &mut Vec<u8>, entry: &Entry| {
             out.extend_from_slice(&entry.size.to_le_bytes());
             out.extend_from_slice(&entry.dlc.to_le_bytes());
         };
+
         for (crc, entry) in &self.unique {
             out.extend_from_slice(&crc.to_le_bytes());
             write(&mut out, entry);
         }
+
         for (name, entry) in &self.collided {
             let start = out.len();
             out.extend_from_slice(name.as_bytes());
             out.resize(start + COLLIDED_NAME_BYTES, 0);
             write(&mut out, entry);
         }
+
         out
     }
 
@@ -112,36 +131,45 @@ impl Table {
     /// hash is assumed to belong to `name`
     pub fn set(&mut self, name: &str, size: i64) -> Result<Update> {
         let crc = crc32(name);
+
         let Ok(size) = u32::try_from(size) else {
             let removed =
                 self.collided.remove(name).is_some() || self.unique.remove(&crc).is_some();
+
             self.normalize();
+
             return Ok(if removed {
                 Update::Removed
             } else {
                 Update::None
             });
         };
+
         let existing = match self.collided.get_mut(name) {
             Some(entry) => Some(entry),
             None => self.unique.get_mut(&crc),
         };
+
         if let Some(entry) = existing {
             if entry.size == size {
                 return Ok(Update::None);
             }
+
             entry.size = size;
             return Ok(Update::Changed);
         }
+
         if self.collided.keys().any(|other| crc32(other) == crc) {
             if !name.is_ascii() || name.len() > COLLIDED_NAME_BYTES {
                 return fail(TableError::UnstorableName(name.to_owned()));
             }
+
             self.collided
                 .insert(name.to_owned(), Entry { size, dlc: 0 });
         } else {
             self.unique.insert(crc, Entry { size, dlc: 0 });
         }
+
         Ok(Update::Added)
     }
 
@@ -156,15 +184,18 @@ impl Table {
     // Collided entries left without a partner become unique again
     fn normalize(&mut self) {
         let mut counts: BTreeMap<u32, usize> = BTreeMap::new();
+
         for name in self.collided.keys() {
             *counts.entry(crc32(name)).or_default() += 1;
         }
+
         let single: Vec<String> = self
             .collided
             .keys()
             .filter(|name| counts[&crc32(name)] == 1)
             .cloned()
             .collect();
+
         for name in single {
             if let Some(entry) = self.collided.remove(&name) {
                 self.unique.entry(crc32(&name)).or_insert(entry);
@@ -205,6 +236,7 @@ mod tests {
             unique: BTreeMap::new(),
             collided: BTreeMap::new(),
         };
+
         assert_eq!(table.set("A.bin", 10).unwrap(), Update::Added);
         assert_eq!(table.set("A.bin", 10).unwrap(), Update::None);
         assert_eq!(table.set("A.bin", 20).unwrap(), Update::Changed);
@@ -219,6 +251,7 @@ mod tests {
             unique: BTreeMap::new(),
             collided: BTreeMap::new(),
         };
+
         assert_eq!(table.raise("A.bin", 10).unwrap(), Update::Added);
         assert_eq!(table.raise("A.bin", 5).unwrap(), Update::None);
         assert_eq!(table.raise("A.bin", 20).unwrap(), Update::Changed);

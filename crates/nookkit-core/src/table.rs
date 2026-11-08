@@ -596,6 +596,7 @@ unsafe fn owner_of(control: *mut Control, node: *mut FocusNode) -> NativeResult<
 
         for child in control_ref.children() {
             let found = owner_of(child, node)?;
+
             if !found.is_null() {
                 return Ok(found);
             }
@@ -632,6 +633,7 @@ unsafe extern "C" fn page_focused(
 
         for &root in page.roots() {
             let found = owner_of(root, node)?;
+
             if !found.is_null() {
                 *out = found.cast();
                 break;

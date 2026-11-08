@@ -20,6 +20,7 @@ static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 /// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
+
     let files = match crate::content::json_files(FOLDER) {
         Ok(files) => files,
         Err(e) => {
@@ -29,6 +30,7 @@ fn load() -> PatchSet {
     };
 
     let mut read = 0;
+
     for (name, json) in files {
         let json = match json {
             Ok(json) => json,
@@ -57,11 +59,13 @@ fn load() -> PatchSet {
             read
         );
     }
+
     set
 }
 
 fn patches() -> Option<&'static PatchSet> {
     PATCHES.get_or_init(load);
+
     PATCHES.get().filter(|set| !set.is_empty())
 }
 
@@ -79,11 +83,13 @@ fn locale() -> Option<&'static str> {
         nookkit_sym::data::<[*const c_char; 16]>(&sym::game::System::sLanguageCodes).ok()?;
 
     let code = unsafe { *(*codes).get(language() as usize)? };
+
     if code.is_null() {
         return None;
     }
 
     let locale = unsafe { CStr::from_ptr(code) }.to_str().ok()?.to_owned();
+
     Some(LOCALE.get_or_init(|| locale))
 }
 
@@ -98,6 +104,7 @@ fn file_of(handle: *const c_void) -> Option<&'static str> {
 
 fn handle_of(file: &str) -> Option<usize> {
     let handles = HANDLES.lock().ok()?;
+
     handles
         .as_ref()?
         .iter()
@@ -114,6 +121,7 @@ fn patched_text(handle: *const c_void, label: *const c_char) -> Option<&'static 
     let patches = patches()?;
     let file = file_of(handle)?;
     let label = unsafe { CStr::from_ptr(label) }.to_str().ok()?;
+
     patches.get(file, label)?.text_for(locale()?)
 }
 
@@ -126,13 +134,16 @@ nookkit_sym::hook! {
         if handle.is_null() {
             return handle;
         }
+
         let Some(patches) = patches() else {
             return handle;
         };
 
         let file = unsafe { str_of(name) }.and_then(|n| n.strip_suffix(".msbt"));
+
         if let Ok(mut handles) = HANDLES.lock() {
             let handles = handles.get_or_insert_with(HashMap::new);
+
             match file.and_then(|f| patches.file(f)) {
                 Some(file) => {
                     handles.insert(handle as usize, file);
@@ -212,6 +223,7 @@ pub mod find_text {
         if ORIGINAL.load(Ordering::Acquire) == 0 {
             return Err(nookkit_sym::SymError::HookFailed(target));
         }
+
         Ok(())
     }
 }
@@ -268,6 +280,7 @@ fn read_attribute(
                 entry.source,
                 bytes.len()
             );
+
             Some(found)
         }
         None if found => Some(true),
@@ -310,5 +323,6 @@ pub fn install() -> Result<(), nookkit_sym::SymError> {
     find_file::install()?;
     has_label::install()?;
     find_text::install()?;
+
     install_attribute_readers()
 }

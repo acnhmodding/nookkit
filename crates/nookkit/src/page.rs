@@ -372,6 +372,7 @@ impl Pane {
 
     pub fn on_focus(&self, mut f: impl FnMut(Event) -> Result + 'static) -> Result<Pane> {
         let this = *self;
+
         self.page.on_focus(move |e| {
             if e.control == Some(this) {
                 f(e)
@@ -385,6 +386,7 @@ impl Pane {
 
     pub fn on_decide(&self, mut f: impl FnMut(Event) -> Result + 'static) -> Result<Pane> {
         let this = *self;
+
         self.page.on_decide(move |e| {
             if e.control == Some(this) {
                 f(e)

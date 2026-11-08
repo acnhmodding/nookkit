@@ -63,6 +63,7 @@ fn magic(data: &[u8], at: usize, magic: &[u8]) -> Result<bool> {
 /// Every member of a little-endian `archive`, in the order its node table lists them
 pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
     let length = archive.len();
+
     if !magic(archive, 0, b"SARC")?
         || u16_at(archive, 4)? != 0x14
         || u16_at(archive, 6)? != 0xfeff
@@ -77,33 +78,43 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
     let count = u16_at(archive, 26)? as usize;
     let names = 32 + count * 16;
     let data = u32_at(archive, 12)? as usize;
+
     if names > length || data > length {
         return Err(Error::NodesOutOfBounds);
     }
+
     let has_names = names + 8 <= length && magic(archive, names, b"SFNT")?;
 
     let mut members = Vec::with_capacity(count);
+
     for i in 0..count {
         let node = 32 + i * 16;
         let attributes = u32_at(archive, node + 4)?;
         let start = data + u32_at(archive, node + 8)? as usize;
         let end = data + u32_at(archive, node + 12)? as usize;
+
         if end < start || end > length {
             return Err(Error::MemberOutOfBounds);
         }
+
         let mut name = None;
+
         if attributes >> 24 != 0 {
             let at = names + 8 + (attributes & 0xffffff) as usize * 4;
+
             let terminator = if has_names && at < data {
                 range(archive, at, data - at)?.iter().position(|&b| b == 0)
             } else {
                 None
             };
+
             let Some(terminator) = terminator else {
                 return Err(Error::InvalidName);
             };
+
             // ASCII as .NET decodes it, other bytes become ?
             let bytes = range(archive, at, terminator)?;
+
             name = Some(
                 bytes
                     .iter()
@@ -111,12 +122,14 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
                     .collect(),
             );
         }
+
         members.push(Member {
             name,
             offset: start,
             length: end - start,
         });
     }
+
     Ok(members)
 }
 
@@ -128,6 +141,7 @@ mod tests {
         let mut names: Vec<u8> = Vec::new();
         let mut data: Vec<u8> = Vec::new();
         let mut nodes = Vec::new();
+
         for (name, bytes) in members {
             nodes.extend(0u32.to_le_bytes()); // Name hash, unused by the reader
             nodes.extend((0x0100_0000 | (names.len() as u32 / 4)).to_le_bytes());
@@ -137,6 +151,7 @@ mod tests {
             names.resize((names.len() + 4) & !3, 0);
             data.extend(*bytes);
         }
+
         let data_offset = 0x14 + 12 + nodes.len() + 8 + names.len();
         let mut out = b"SARC".to_vec();
         out.extend(0x14u16.to_le_bytes());
@@ -152,6 +167,7 @@ mod tests {
         out.extend(b"SFNT\x08\0\0\0");
         out.extend(names);
         out.extend(data);
+
         out
     }
 

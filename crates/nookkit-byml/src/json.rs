@@ -15,19 +15,24 @@ use crate::error::Invalid;
 impl Serialize for Node {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let unsupported = |kind| Err(ser::Error::custom(Invalid::Unsupported(kind)));
+
         match self {
             Node::Dict(dict) => {
                 let mut map = s.serialize_map(Some(dict.len()))?;
+
                 for (key, value) in dict {
                     map.serialize_entry(key, value)?;
                 }
+
                 map.end()
             }
             Node::Array(items) => {
                 let mut seq = s.serialize_seq(Some(items.len()))?;
+
                 for item in items {
                     seq.serialize_element(item)?;
                 }
+
                 seq.end()
             }
             Node::String(text) => s.serialize_str(text),
@@ -75,6 +80,7 @@ impl<'de> Visitor<'de> for NodeVisitor {
 
     fn visit_u64<E: de::Error>(self, value: u64) -> Result<Node, E> {
         let value = i64::try_from(value).map_err(|_| E::custom(Invalid::Integer(value)))?;
+
         self.visit_i64(value)
     }
 
@@ -92,21 +98,26 @@ impl<'de> Visitor<'de> for NodeVisitor {
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Node, A::Error> {
         let mut items = Vec::new();
+
         while let Some(item) = seq.next_element()? {
             items.push(item);
         }
+
         Ok(Node::Array(items))
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Node, A::Error> {
         let mut dict = BTreeMap::new();
+
         while let Some(key) = map.next_key::<String>()? {
             if dict.contains_key(&key) {
                 return Err(de::Error::custom(Invalid::DuplicateKey(key)));
             }
+
             let value = map.next_value()?;
             dict.insert(key, value);
         }
+
         Ok(Node::Dict(dict))
     }
 }
@@ -139,6 +150,7 @@ mod tests {
             Node::Int64(1 << 40),
         ]))
         .unwrap();
+
         assert_eq!(json, "[30.0,0.1,1e+20,30,1099511627776]");
     }
 
@@ -147,11 +159,14 @@ mod tests {
         let Node::Dict(dict) = node(r#"{"b": [true, null, "x"], "a": {}}"#) else {
             panic!("not a dictionary");
         };
+
         assert_eq!(dict.keys().collect::<Vec<_>>(), ["a", "b"]);
+
         assert_eq!(
             dict["b"],
             Node::Array(vec![Node::Bool(true), Node::Null, Node::String("x".into())])
         );
+
         assert!(serde_json::from_str::<Node>(r#"{"a": 1, "a": 2}"#).is_err());
     }
 
