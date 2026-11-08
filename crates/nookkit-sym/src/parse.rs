@@ -31,14 +31,17 @@ impl Kind {
 pub enum ParseError {
     #[error("line {line}: {reason}")]
     Syntax { line: usize, reason: &'static str },
+
     #[error("line {line}: unknown section [{section}]")]
     UnknownSection { line: usize, section: String },
+
     #[error("line {line}: \"{name}\" is listed twice under [{section}]")]
     Duplicate {
         line: usize,
         section: &'static str,
         name: String,
     },
+
     #[error("missing header field `{0}`")]
     MissingHeader(&'static str),
 }

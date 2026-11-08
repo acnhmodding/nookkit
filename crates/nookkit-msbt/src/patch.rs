@@ -13,6 +13,7 @@ pub const DEFAULT_LOCALE: &str = "default";
 pub struct Patch {
     /// The msbt as the game asks for it, without `.msbt`, e.g. `MenuDevice`
     pub file: String,
+
     /// The `Message/<archive>_<locale>` archive holding the file, for tools
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archive: Option<String>,
@@ -23,6 +24,7 @@ pub struct Patch {
 #[serde(deny_unknown_fields)]
 pub struct Message {
     pub label: String,
+
     /// Locale code (`USen`, `JPja`, …) or `default` to tagged text
     pub text: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -34,6 +36,7 @@ pub struct Message {
 pub enum Attributes {
     /// Another label's ATR1 entry in the same file
     Like(String),
+
     /// The ATR1 entry itself, the file's attribute size in bytes
     Hex(String),
 }
@@ -49,6 +52,7 @@ pub struct Entry {
     /// Encoded MsgStd UTF-16 per locale, NUL included
     pub text: BTreeMap<String, Vec<u16>>,
     pub attribute: Option<Attribute>,
+
     /// Which patch it came from
     pub source: String,
 }
@@ -141,7 +145,6 @@ impl PatchSet {
     }
 }
 
-/// One patch's file and its messages, encoded
 fn encode(source: &str, patch: Patch) -> Result<(String, Vec<(String, Entry)>), PatchError> {
     let error = |reason: String| PatchError {
         source: source.to_owned(),

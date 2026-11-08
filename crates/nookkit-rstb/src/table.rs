@@ -18,6 +18,7 @@ pub struct Entry {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Table {
     pub unique: BTreeMap<u32, Entry>,
+
     /// Names whose hash collides, told apart by name
     pub collided: BTreeMap<String, Entry>,
 }

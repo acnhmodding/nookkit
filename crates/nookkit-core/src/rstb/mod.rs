@@ -201,7 +201,6 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, RstbError> {
         nookkit_rstb::VERSION
     );
 
-    // Every copy's length and stamp, mod tables included, and the written table's
     let mut fingerprint = crc32fast::Hasher::new();
     fingerprint.update(epoch.as_bytes());
 

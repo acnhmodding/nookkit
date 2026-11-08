@@ -1,8 +1,3 @@
-//! Plain JSON with no type tags, as Heaven Tool's `BymlJson` writes it. An integer that fits 32
-//! bits is an Int and a bigger one an Int64, a number with a decimal point or an exponent is a
-//! Float, and strings, bools, nulls, arrays and dictionaries map directly. Nodes that wouldn't
-//! read back the same (UInt, UInt64, Binary and an Int64 that fits 32 bits) aren't written
-
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -12,6 +7,10 @@ use serde::ser::{self, Serialize, SerializeMap, SerializeSeq, Serializer};
 use crate::byml::Node;
 use crate::error::Invalid;
 
+// Plain JSON with no type tags, as Heaven Tool's `BymlJson` writes it. An integer that fits 32 bits
+// is an Int and a bigger one an Int64, a number with a decimal point or an exponent is a Float.
+// Nodes that wouldn't read back the same (UInt, UInt64, Binary and an Int64 that fits 32 bits)
+// aren't written
 impl Serialize for Node {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let unsupported = |kind| Err(ser::Error::custom(Invalid::Unsupported(kind)));

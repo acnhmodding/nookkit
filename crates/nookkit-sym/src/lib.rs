@@ -47,12 +47,16 @@ pub fn fingerprint(bytes: &[u8]) -> u64 {
 pub enum SymError {
     #[error("no symbol file loaded")]
     NotLoaded,
+
     #[error("symbol \"{name}\" missing from [{}]", kind.section())]
     Missing { kind: Kind, name: String },
+
     #[error("unsupported game build: fingerprint {actual:#x}, expected {expected:#x}")]
     UnsupportedBuild { expected: u64, actual: u64 },
+
     #[error("bad symbol file: {0}")]
     Parse(#[from] ParseError),
+
     #[error("hooking {0:#x} failed")]
     HookFailed(usize),
 }

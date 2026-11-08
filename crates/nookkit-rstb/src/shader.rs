@@ -81,6 +81,7 @@ pub(crate) struct ShadingModel {
 
 pub(crate) struct ProgramLayout {
     pub attributes: Vec<(String, i64)>,
+
     /// Sampler locations in the model's sampler order
     pub samplers: Vec<(String, u32)>,
     pub uniforms: HashMap<String, u32>,

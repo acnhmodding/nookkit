@@ -5,8 +5,8 @@ use nookkit_hash::crc32;
 use crate::error::{CellError, Invalid, ReadError, Skipped, WriteError};
 use crate::table::{Column, Table};
 
-/// The columns that identify a row, the first one a table has. A patched row replaces the row with
-/// the same value there, and is added after the others otherwise
+// The columns that identify a row, the first one a table has. A patched row replaces the row with
+// the same value there, and is added after the others otherwise
 const KEY_COLUMNS: &[&str] = &[
     "UniqueID u16",
     "Label string8",
@@ -21,7 +21,7 @@ const KEY_COLUMNS: &[&str] = &[
     "NpcRoleSetID u16",
 ];
 
-/// The key of the MessageCardSelect tables, whose name isn't known
+// The key of the MessageCardSelect tables, whose name isn't known
 const UNNAMED_KEY_COLUMN: u32 = 0x3757_1146;
 
 // A cell's kind, in the low bits of its tag
@@ -71,8 +71,10 @@ impl Cell {
 pub(crate) struct Source {
     pub(crate) name: String,
     pub(crate) cells: Vec<Cell>,
+
     /// Where each row's cells end
     pub(crate) ends: Vec<u32>,
+
     /// Text and bytes, each after its length as a u32
     pub(crate) bytes: Vec<u8>,
 }
@@ -88,8 +90,7 @@ impl Source {
         })
     }
 
-    /// The text or bytes at `at`, which only [`Self::start_blob`] gives, so it's always there
-    fn blob(&self, at: u32) -> &[u8] {
+    fn blob_at(&self, at: u32) -> &[u8] {
         self.bytes
             .get(at as usize..)
             .and_then(<[u8]>::split_first_chunk::<4>)
@@ -111,7 +112,6 @@ impl Source {
         self.bytes[at..at + 4].copy_from_slice(&len.to_le_bytes());
     }
 
-    /// Whether `cell`, of the column `key`, can be written to a cell of `size` bytes
     fn fits(&self, cell: Cell, key: &str, size: usize) -> Result<(), CellError> {
         let key = || key.to_owned();
 
@@ -134,7 +134,7 @@ impl Source {
             }
             FLOAT | HASH if size != 4 => return Err(CellError::NotFourBytes { key: key(), size }),
             TEXT => {
-                let len = self.blob(cell.value).len();
+                let len = self.blob_at(cell.value).len();
 
                 if len >= size {
                     return Err(CellError::TextTooLong {
@@ -145,7 +145,7 @@ impl Source {
                 }
             }
             BYTES => {
-                let len = self.blob(cell.value).len();
+                let len = self.blob_at(cell.value).len();
 
                 if len != size {
                     return Err(CellError::ByteCount {
@@ -161,7 +161,6 @@ impl Source {
         Ok(())
     }
 
-    /// Writes `cell` to `out`, which [`Self::fits`] it
     fn write(&self, cell: Cell, out: &mut [u8]) {
         out.fill(0);
 
@@ -172,7 +171,7 @@ impl Source {
             }
             FLOAT | HASH => out.copy_from_slice(&cell.value.to_le_bytes()),
             _ => {
-                let bytes = self.blob(cell.value);
+                let bytes = self.blob_at(cell.value);
                 out[..bytes.len()].copy_from_slice(bytes);
             }
         }
@@ -183,6 +182,7 @@ impl Source {
 struct Key {
     name: Box<str>,
     hash: u32,
+
     /// A plain string is text for a `… stringN` column, and hex bytes otherwise
     text: bool,
 }
@@ -234,7 +234,7 @@ impl Keys {
 }
 
 /// Every loaded patch, by table. Patches apply in the order they were added, so a row patched
-/// twice keeps the later one.
+/// twice keeps the later one
 ///
 /// A file holds one patch or an array of them, each `{ "file": "ItemParam", "rows": [...] }`. A
 /// row maps column names, or their hash as `0x%08X`, to a number, a string (text for a
@@ -345,12 +345,15 @@ impl PatchSet {
 pub struct Plan<'p> {
     pub added: usize,
     pub replaced: usize,
+
     /// Patches that didn't fit the table and change nothing
     pub skipped: Vec<Skipped>,
     table: &'p Table<'p>,
     sources: Vec<&'p Source>,
+
     /// The table's column for each key id
     columns: Vec<Option<Column>>,
+
     /// The row each patched row goes to, in order
     targets: Vec<u32>,
 }
@@ -362,8 +365,8 @@ impl Plan<'_> {
             .flat_map(|&source| source.rows().map(move |row| (source, row)))
     }
 
-    /// Finds each row by the key it has once written, among the table's rows and those added
-    /// before it
+    // Finds each row by the key it has once written, among the table's rows and those added
+    // before it
     fn find_targets(&mut self) {
         let table = self.table;
         let key = key_column(table);
@@ -468,7 +471,7 @@ fn key_column(table: &Table) -> Option<Column> {
 mod tests {
     use super::*;
 
-    /// `UniqueID u16` at 4, `Label string8` at 8 and an unnamed hash column at 16, two rows
+    // `UniqueID u16` at 4, `Label string8` at 8 and an unnamed hash column at 16, two rows
     fn table() -> Vec<u8> {
         let columns = [
             (crc32("UniqueID u16"), 4u32),
@@ -658,7 +661,7 @@ mod tests {
         assert!(fits(Cell::new(0, FLOAT, 0), 2).is_err());
         assert!(fits(Cell::new(0, TEXT, abcd), 4).is_err());
         assert!(fits(Cell::new(0, BYTES, bytes), 3).is_err());
-        assert!(source.blob(u32::MAX).is_empty());
+        assert!(source.blob_at(u32::MAX).is_empty());
 
         let mut out = [9; 4];
         source.write(integer(3), &mut out);

@@ -1,5 +1,3 @@
-//! Reads patch JSON straight into a set's sources, without a value for each cell first
-
 use std::fmt;
 
 use nookkit_hash::{crc32, mmh3};

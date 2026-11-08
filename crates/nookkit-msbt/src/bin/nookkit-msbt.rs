@@ -18,7 +18,7 @@ fn unzstd(path: &Path) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// Every locale's copy of `file` in `romfs/Message/<archive>_<locale>.sarc.zs`
+// Every locale's copy of `file` in `romfs/Message/<archive>_<locale>.sarc.zs`
 fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, Msbt>, String> {
     let folder = romfs.join("Message");
     let prefix = format!("{archive}_");

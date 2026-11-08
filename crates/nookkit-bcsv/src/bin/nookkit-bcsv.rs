@@ -3,7 +3,6 @@ use std::process::ExitCode;
 
 use nookkit_bcsv::{PatchSet, Table};
 
-/// Loads every patch and applies it to its table in `romfs/Bcsv`, reporting what changes
 fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     let mut set = PatchSet::default();
     let mut failed = false;

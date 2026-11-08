@@ -9,22 +9,21 @@ pub struct Column {
     pub size: usize,
 }
 
-/// What every table starts with, `FileHeader` in nookkit-types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Header {
     row_count: u32,
     row_size: u32,
     field_count: u16,
+
     /// An `ExtHeader` follows, before the fields
     has_ext_header: bool,
     lang: u8,
 }
 
-/// `ExtHeader`, written back as read
+// `ExtHeader`, written back as read
 const EXT_HEADER_SIZE: usize = 0x10;
 const EXT_MAGIC: &[u8] = b"VSCB";
 
-/// A column's hash and offset in a row
 #[derive(Debug, Clone, Copy)]
 struct FieldInfo {
     hash: u32,
@@ -67,7 +66,6 @@ impl Header {
     }
 }
 
-/// Little endian values read in order
 struct Bytes<'a>(&'a [u8]);
 
 impl<'a> Bytes<'a> {
@@ -102,6 +100,7 @@ impl<'a> Bytes<'a> {
 #[derive(Debug, Clone)]
 pub struct Table<'a> {
     header: Header,
+
     /// The ext header and fields, written back as read
     head: &'a [u8],
     rows: &'a [u8],

@@ -364,7 +364,7 @@ pub struct NookKitV2 {
 
     pub key_set_enabled: unsafe extern "C" fn(key: *mut c_void, enable: bool) -> Status,
 
-    /// Literal text, or a LayoutMsg/KeyGuide.msbt label when text is empty, both empty removes it.
+    /// Literal text, or a LayoutMsg/KeyGuide.msbt label when text is empty, both empty removes it
     /// Applies at the page's next guide refresh
     pub key_set_guide: unsafe extern "C" fn(key: *mut c_void, text: Str, label: Str) -> Status,
 

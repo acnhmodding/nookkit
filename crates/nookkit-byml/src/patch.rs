@@ -13,13 +13,14 @@ use crate::error::{ApplyError, ReadError, Replaced};
 pub struct Patch {
     /// The file's path in the pack, e.g. `Param/NpcHouse/wol13.byml`
     pub file: String,
+
     /// The pack's name, `StaticParam` for `Pack/StaticParam.pack`
     pub archive: String,
+
     /// The whole file as plain JSON
     pub data: Node,
 }
 
-/// A patch file holds one patch or an array of them
 struct Patches(Vec<Patch>);
 
 impl<'de> Deserialize<'de> for Patches {

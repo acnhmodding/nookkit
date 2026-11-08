@@ -36,7 +36,7 @@ fn unquote(s: &str) -> String {
     }
 }
 
-/// Only the subset tools/harvest_layouts.py writes: `[name]`, `control = "…"`, `parts.<pane> = "…"`
+// Only the subset tools/harvest_layouts.py writes: `[name]`, `control = "…"`, `parts.<pane> = "…"`
 fn layouts(text: &str) -> BTreeMap<String, Layout> {
     let mut out: BTreeMap<String, Layout> = BTreeMap::new();
     let mut current = None;
@@ -91,7 +91,7 @@ fn pages(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `L_BtnListEye_00` to `L_BTN_LIST_EYE_00`
+// `L_BtnListEye_00` to `L_BTN_LIST_EYE_00`
 fn screaming(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     let mut out = String::new();
@@ -154,7 +154,7 @@ fn consts(
 
         let control = all.get(part).map_or("", |l| l.control.as_str());
 
-        let (ty, path) = if root {
+        let (type_name, path) = if root {
             ("PanePath", format!("/{pane}"))
         } else {
             ("RelPath", pane.clone())
@@ -170,7 +170,7 @@ fn consts(
 
         writeln!(
             out,
-            "    pub const {name}: crate::{ty}<{}> = crate::{ty}::new({path:?}, {part:?});",
+            "    pub const {name}: crate::{type_name}<{}> = crate::{type_name}::new({path:?}, {part:?});",
             kind(control)
         )
         .unwrap();
@@ -196,9 +196,9 @@ fn main() {
     let mut seen = HashMap::new();
 
     for (name, layout) in &all {
-        let ty = ident(name);
+        let type_name = ident(name);
 
-        if let Some(other) = seen.insert(ty.clone(), name) {
+        if let Some(other) = seen.insert(type_name.clone(), name) {
             panic!("layouts `{name}` and `{other}` map to the same type");
         }
 
@@ -209,10 +209,10 @@ fn main() {
         };
 
         writeln!(out, "/// Layout `{name}`{control}").unwrap();
-        writeln!(out, "pub struct {ty};").unwrap();
+        writeln!(out, "pub struct {type_name};").unwrap();
 
         if !layout.parts.is_empty() {
-            writeln!(out, "impl {ty} {{").unwrap();
+            writeln!(out, "impl {type_name} {{").unwrap();
             consts(layout, &all, false, name, &mut out);
             writeln!(out, "}}").unwrap();
         }
@@ -224,18 +224,18 @@ fn main() {
     let mut seen = HashMap::new();
 
     for (class, layout) in &pages {
-        let ty = ident(class.strip_suffix("Page").unwrap_or(class));
+        let type_name = ident(class.strip_suffix("Page").unwrap_or(class));
 
-        if let Some(other) = seen.insert(ty.clone(), class) {
+        if let Some(other) = seen.insert(type_name.clone(), class) {
             panic!("pages `{class}` and `{other}` map to the same type");
         }
 
         writeln!(out, "/// `{class}`, layout `{layout}`").unwrap();
-        writeln!(out, "pub struct {ty};").unwrap();
+        writeln!(out, "pub struct {type_name};").unwrap();
 
         writeln!(
             out,
-            "impl crate::PageClass for {ty} {{\n    const CLASS: &'static str = {class:?};\n    const LAYOUT: &'static str = {layout:?};\n}}"
+            "impl crate::PageClass for {type_name} {{\n    const CLASS: &'static str = {class:?};\n    const LAYOUT: &'static str = {layout:?};\n}}"
         )
         .unwrap();
 
@@ -244,7 +244,7 @@ fn main() {
         }
 
         if let Some(root) = all.get(layout).filter(|l| !l.parts.is_empty()) {
-            writeln!(out, "impl {ty} {{").unwrap();
+            writeln!(out, "impl {type_name} {{").unwrap();
             consts(root, &all, true, class, &mut out);
             writeln!(out, "}}").unwrap();
         }

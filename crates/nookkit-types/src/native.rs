@@ -25,6 +25,7 @@ pub enum Error {
     /// From a mod's own `#[native]` functions
     #[error(transparent)]
     Native(#[from] native_vtable::Unresolved),
+
     #[error("symbol \"{0}\" is missing")]
     Missing(String),
 }

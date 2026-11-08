@@ -7,7 +7,6 @@ fn read(path: &Path) -> Result<Vec<u8>, String> {
     std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// Prints a BYML file, or a file in a pack, as patch JSON
 fn json(path: &str, member: Option<&str>) -> Result<(), String> {
     let data = read(Path::new(path))?;
 
@@ -32,7 +31,6 @@ fn json(path: &str, member: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-/// Loads every patch and applies it to its file in `romfs/Pack`, reporting what changes
 fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     let mut set = PatchSet::default();
     let mut failed = false;

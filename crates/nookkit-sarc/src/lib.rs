@@ -1,16 +1,18 @@
-//! The game's SARC archives: the files inside one, read in place
-
 /// Why an archive could not be read
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("Resource data exceeds its bounds.")]
     OutOfBounds,
+
     #[error("Expected a little-endian SARC archive.")]
     NotSarc,
+
     #[error("SARC nodes exceed the archive.")]
     NodesOutOfBounds,
+
     #[error("SARC member exceeds the archive.")]
     MemberOutOfBounds,
+
     #[error("SARC member name is invalid.")]
     InvalidName,
 }

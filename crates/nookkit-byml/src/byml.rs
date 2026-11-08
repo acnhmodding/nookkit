@@ -1,5 +1,3 @@
-//! BYML as `sead::ByamlIter` reads it: versions 1 to 4 in either byte order
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::{ParseError, WriteError};
@@ -20,18 +18,18 @@ const INT64: u8 = 0xd4;
 const UINT64: u8 = 0xd5;
 const NULL: u8 = 0xff;
 
-/// Counts and key indices are 24 bits
 const MAX_COUNT: usize = 0xff_ffff;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Endian {
     /// `YB`
     Little,
+
     /// `BY`
     Big,
 }
 
-/// The byte order and version a file is written in
+/// The byte order and version (1 to 4) a file is written in
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Format {
     pub endian: Endian,
@@ -79,7 +77,7 @@ pub enum Node {
 }
 
 impl Node {
-    fn ty(&self) -> u8 {
+    fn node_type(&self) -> u8 {
         match self {
             Node::String(_) => STRING,
             Node::Binary(_) => BINARY,
@@ -96,7 +94,6 @@ impl Node {
     }
 }
 
-/// Floats compare by their bits, so a NaN equals itself and 0.0 differs from -0.0
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -123,7 +120,7 @@ pub struct Byml {
     pub root: Node,
 }
 
-/// What every file starts with. An offset of 0 means the table or root is missing
+// An offset of 0 means the table or root is missing
 #[derive(Debug, Clone, Copy)]
 struct Header {
     format: Format,
@@ -160,34 +157,32 @@ impl Header {
     }
 }
 
-/// What a container and a string table start with
 #[derive(Debug, Clone, Copy)]
 struct ContainerHeader {
-    ty: u8,
+    node_type: u8,
     count: usize,
 }
 
 impl ContainerHeader {
     fn read(bytes: Bytes, offset: usize) -> Result<Self, ParseError> {
         Ok(Self {
-            ty: bytes.u8(offset)?,
+            node_type: bytes.u8(offset)?,
             count: bytes.u24(offset + 1)? as usize,
         })
     }
 
     fn write(self, out: &mut Out) -> Result<(), WriteError> {
-        out.u8(self.ty);
+        out.u8(self.node_type);
         out.u24(count(self.count)?);
 
         Ok(())
     }
 }
 
-/// A dictionary entry: its key's index, its node's type and its value
 #[derive(Debug, Clone, Copy)]
 struct DictEntry {
     key: u32,
-    ty: u8,
+    node_type: u8,
     value: u32,
 }
 
@@ -197,18 +192,16 @@ impl DictEntry {
     fn read(bytes: Bytes, offset: usize) -> Result<Self, ParseError> {
         Ok(Self {
             key: bytes.u24(offset)?,
-            ty: bytes.u8(offset + 3)?,
+            node_type: bytes.u8(offset + 3)?,
             value: bytes.u32(offset + 4)?,
         })
     }
 }
 
-/// An array's values follow its types, aligned to 4
 fn array_values(offset: usize, count: usize) -> usize {
     offset + 4 + count.next_multiple_of(4)
 }
 
-/// The file in its byte order, read at absolute offsets
 #[derive(Clone, Copy)]
 struct Bytes<'a> {
     data: &'a [u8],
@@ -254,8 +247,8 @@ impl<'a> Bytes<'a> {
     }
 }
 
-/// A string table: a count, the offset of each string and of the end, then the strings with a
-/// NUL after each
+// A string table: a count, the offset of each string and of the end, then the strings with a
+// NUL after each
 fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
     if offset == 0 {
         return Ok(Vec::new());
@@ -264,7 +257,7 @@ fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
     let offset = offset as usize;
     let header = ContainerHeader::read(bytes, offset)?;
 
-    if header.ty != STRING_TABLE {
+    if header.node_type != STRING_TABLE {
         return Err(ParseError::NotStringTable { offset });
     }
 
@@ -297,11 +290,16 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
-    /// The node of type `ty` with `value`, found in the container at `parent`
-    fn node(&self, ty: u8, value: u32, parent: usize, depth: usize) -> Result<Node, ParseError> {
+    fn node(
+        &self,
+        node_type: u8,
+        value: u32,
+        parent: usize,
+        depth: usize,
+    ) -> Result<Node, ParseError> {
         let offset = value as usize;
 
-        Ok(match ty {
+        Ok(match node_type {
             STRING => Node::String(
                 self.strings
                     .get(offset)
@@ -312,7 +310,7 @@ impl Reader<'_> {
                 let len = self.bytes.u32(offset)? as usize;
                 Node::Binary(self.bytes.slice(offset + 4, len)?.to_vec())
             }
-            ARRAY | DICT => self.container(ty, offset, depth)?,
+            ARRAY | DICT => self.container(node_type, offset, depth)?,
             BOOL => Node::Bool(value != 0),
             INT => Node::Int(value as i32),
             FLOAT => Node::Float(f32::from_bits(value)),
@@ -320,28 +318,33 @@ impl Reader<'_> {
             INT64 => Node::Int64(self.bytes.u64(offset)? as i64),
             UINT64 => Node::UInt64(self.bytes.u64(offset)?),
             NULL => Node::Null,
-            _ => return Err(ParseError::Type { offset: parent, ty }),
+            _ => {
+                return Err(ParseError::Type {
+                    offset: parent,
+                    node_type,
+                });
+            }
         })
     }
 
-    fn container(&self, ty: u8, offset: usize, depth: usize) -> Result<Node, ParseError> {
+    fn container(&self, node_type: u8, offset: usize, depth: usize) -> Result<Node, ParseError> {
         if depth >= MAX_DEPTH {
             return Err(ParseError::TooDeep);
         }
 
         let header = ContainerHeader::read(self.bytes, offset)?;
 
-        if header.ty != ty {
+        if header.node_type != node_type {
             return Err(ParseError::Header {
                 offset,
-                expected: ty,
-                found: header.ty,
+                expected: node_type,
+                found: header.node_type,
             });
         }
 
         let count = header.count;
 
-        if ty == ARRAY {
+        if node_type == ARRAY {
             let types = self.bytes.slice(offset + 4, count)?;
             let values = array_values(offset, count);
             let mut items = Vec::with_capacity(count);
@@ -368,7 +371,7 @@ impl Reader<'_> {
                     index: entry.key,
                 })?;
 
-            let node = self.node(entry.ty, entry.value, offset, depth + 1)?;
+            let node = self.node(entry.node_type, entry.value, offset, depth + 1)?;
             dict.insert(key.clone(), node);
         }
 
@@ -400,15 +403,15 @@ impl Byml {
         };
 
         let root = header.root as usize;
-        let ty = bytes.u8(root)?;
+        let node_type = bytes.u8(root)?;
 
-        if !matches!(ty, ARRAY | DICT) {
+        if !matches!(node_type, ARRAY | DICT) {
             return Err(ParseError::Root);
         }
 
         Ok(Self {
             format,
-            root: reader.container(ty, root, 0)?,
+            root: reader.container(node_type, root, 0)?,
         })
     }
 
@@ -493,7 +496,7 @@ fn count(count: usize) -> Result<u32, WriteError> {
     Ok(count as u32)
 }
 
-/// Where `text` sits in a sorted table that holds it
+// `table` is sorted and holds `text`
 fn index(table: &[&str], text: &str) -> u32 {
     table.partition_point(|t| *t < text) as u32
 }
@@ -506,7 +509,7 @@ fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
     let start = out.pos()?;
 
     ContainerHeader {
-        ty: STRING_TABLE,
+        node_type: STRING_TABLE,
         count: table.len(),
     }
     .write(out)?;
@@ -530,7 +533,6 @@ fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
     Ok(start)
 }
 
-/// The file being written, in its byte order
 struct Out {
     buf: Vec<u8>,
     endian: Endian,
@@ -592,7 +594,6 @@ struct Writer<'n> {
 }
 
 impl<'n> Writer<'n> {
-    /// The value a container holds for `node`, writing what it points to
     fn value(&mut self, node: &'n Node) -> Result<u32, WriteError> {
         Ok(match node {
             Node::String(text) => index(&self.strings, text),
@@ -610,13 +611,13 @@ impl<'n> Writer<'n> {
                 let at = self.out.pos()?;
 
                 ContainerHeader {
-                    ty: ARRAY,
+                    node_type: ARRAY,
                     count: items.len(),
                 }
                 .write(&mut self.out)?;
 
                 for item in items {
-                    self.out.u8(item.ty());
+                    self.out.u8(item.node_type());
                 }
 
                 self.out.align();
@@ -634,7 +635,7 @@ impl<'n> Writer<'n> {
                 let at = self.out.pos()?;
 
                 ContainerHeader {
-                    ty: DICT,
+                    node_type: DICT,
                     count: dict.len(),
                 }
                 .write(&mut self.out)?;
@@ -643,7 +644,7 @@ impl<'n> Writer<'n> {
 
                 for (key, item) in dict {
                     self.out.u24(index(&self.keys, key));
-                    self.out.u8(item.ty());
+                    self.out.u8(item.node_type());
                     self.out.u32(0);
                 }
 

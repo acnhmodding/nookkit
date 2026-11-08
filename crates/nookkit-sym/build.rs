@@ -30,7 +30,7 @@ struct Module {
     items: BTreeMap<String, String>,
 }
 
-/// Keeps `<...>` template arguments in one segment
+// Keeps `<...>` template arguments in one segment
 fn segments(name: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let (mut depth, mut start) = (0usize, 0usize);
@@ -80,7 +80,7 @@ fn abi_type(token: &str) -> Option<&'static str> {
     })
 }
 
-/// `"ptr, i32 -> i8"` to `crate::Sig<(Ptr, I32,), I8>`
+// `"ptr, i32 -> i8"` to `crate::Sig<(Ptr, I32,), I8>`
 fn signature(text: &str) -> Result<String, String> {
     let (args, ret) = text.split_once("->").ok_or("missing `->`")?;
 
@@ -119,9 +119,11 @@ fn signatures(text: &str) -> HashMap<String, String> {
             });
 
         let sig = sig.trim_matches('"');
-        let ty = signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
 
-        if out.insert(name.to_owned(), ty).is_some() {
+        let type_name =
+            signature(sig).unwrap_or_else(|e| panic!("{SIGNATURES}:{}: {e}", index + 1));
+
+        if out.insert(name.to_owned(), type_name).is_some() {
             panic!(
                 "{SIGNATURES}:{}: duplicate signature for \"{name}\"",
                 index + 1

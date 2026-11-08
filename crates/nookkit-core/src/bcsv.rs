@@ -14,17 +14,20 @@ static PATCHES: OnceLock<PatchSet> = OnceLock::new();
 enum BcsvError {
     #[error(transparent)]
     Native(#[from] native::Error),
+
     #[error("sead has no heap manager")]
     NoHeapMgr,
+
     #[error("no heap holds the table")]
     NoHeap,
+
     #[error("no memory for the {size} byte patched table")]
     OutOfMemory { size: usize },
+
     #[error(transparent)]
     Write(#[from] WriteError),
 }
 
-/// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
 
@@ -69,14 +72,13 @@ fn patches() -> Option<&'static PatchSet> {
     Some(PATCHES.get_or_init(load)).filter(|set| !set.is_empty())
 }
 
-/// "Bcsv/ItemParam.bcsv" names the table "ItemParam"
 fn table_name(path: &str) -> &str {
     let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
 
     name.strip_suffix(".bcsv").unwrap_or(name)
 }
 
-/// The heap that holds the resource's data, the one its destructor frees an owned buffer from
+// The heap that holds the resource's data, the one its destructor frees an owned buffer from
 unsafe fn data_heap(resource: &DirectResource) -> Result<*mut Heap, BcsvError> {
     let mgr = unsafe { HeapMgr::instance()?.as_mut() }.ok_or(BcsvError::NoHeapMgr)?;
     let heap = unsafe { mgr.find_contain_heap(resource.raw_data)? };
@@ -95,8 +97,7 @@ struct Patched {
 }
 
 impl Patched {
-    /// Writes the table to the heap that holds the resource's data, since the game leaves
-    /// `malloc` too little memory for a copy of a large table
+    // The game leaves `malloc` too little memory for a copy of a large table
     unsafe fn write(resource: &DirectResource, plan: &Plan) -> Result<Self, BcsvError> {
         let heap = unsafe { data_heap(resource)? };
         let size = plan.size();
@@ -118,7 +119,7 @@ impl Patched {
         }
     }
 
-    /// Gives the table to the resource, once nothing reads its old data
+    // Gives the table to the resource, once nothing reads its old data
     unsafe fn hand_to(self, resource: &mut DirectResource) {
         if resource.owns_data() {
             unsafe { (*self.heap).free(resource.raw_data.cast()) };
@@ -194,7 +195,7 @@ fn loaded_tables() -> i32 {
 pub fn install() -> Result<(), nookkit_sym::SymError> {
     load_resource::install()?;
 
-    // Reloading them instead would leave tables that share another's rows pointing at freed data.
+    // Reloading them instead would leave tables that share another's rows pointing at freed data
     // The patches aren't read here, "content" may not be mounted yet
     let loaded = loaded_tables();
 

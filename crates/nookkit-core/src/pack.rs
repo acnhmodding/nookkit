@@ -16,7 +16,6 @@ static LOADING: Mutex<BTreeMap<usize, Loading>> = Mutex::new(BTreeMap::new());
 // The archives whose patches were checked against the files the game cached
 static CHECKED: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
 
-/// A patched archive being loaded, and what the game cached from it so far
 struct Loading {
     archive: &'static str,
     cached: usize,
@@ -33,7 +32,6 @@ impl Loading {
     }
 }
 
-/// Every patch, a broken one is reported and skipped
 fn load_patches() -> PatchSet {
     let mut set = PatchSet::default();
 
@@ -89,7 +87,6 @@ fn patches() -> Option<&'static PatchSet> {
     Some(patches)
 }
 
-/// The patched archive `request` loads, none when it isn't one
 fn patched_archive(request: *const LoadRequest<'static>) -> Option<&'static str> {
     let patches = patches()?;
     let request = unsafe { request.as_ref()? };
@@ -99,7 +96,6 @@ fn patched_archive(request: *const LoadRequest<'static>) -> Option<&'static str>
     patches.archives().find(|archive| *archive == name)
 }
 
-/// "Pack/StaticParam.pack" names the archive "StaticParam"
 fn archive_name(path: &str) -> Option<&str> {
     let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
 
@@ -116,7 +112,6 @@ fn loading() -> MutexGuard<'static, BTreeMap<usize, Loading>> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Notes `file` as cached from the archive this thread is loading, returning the archive
 fn cache_file(file: &str) -> Option<&'static str> {
     let mut loading = loading();
     let loading = loading.get_mut(&current_thread())?;
@@ -129,8 +124,7 @@ fn cache_file(file: &str) -> Option<&'static str> {
     Some(loading.archive)
 }
 
-/// Reports the patches of a file the archive doesn't have, once per archive. JSON only
-/// replaces files, a new one goes in the romfs as a loose file
+// JSON only replaces files, a new one goes in the romfs as a loose file
 fn check_missing(loaded: &Loading) {
     // Nothing was cached when the game already had the archive
     if loaded.cached == 0 {
@@ -159,7 +153,6 @@ fn check_missing(loaded: &Loading) {
     }
 }
 
-/// The patched file, none when no patch takes it or it doesn't apply
 fn patch_file(archive: &str, file: &str, game_file: &[u8]) -> Option<Vec<u8>> {
     let entry = patches()?.get(archive, file)?;
 
@@ -194,7 +187,6 @@ fn patch_file(archive: &str, file: &str, game_file: &[u8]) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-/// The patched bytes of the file the game is caching, none when it keeps its own
 fn patched_insert(path: *const SafeString<'static>, data: *const u8, size: u32) -> Option<Vec<u8>> {
     let path = unsafe { path.as_ref()? };
     let file = unsafe { path.as_str()? };

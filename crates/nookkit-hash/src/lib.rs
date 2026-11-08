@@ -1,12 +1,9 @@
-//! The game's two string hashes. Most names, bcsv columns among them, are CRC32. Some tables
-//! hash their values with MurmurHash3 instead
-
 /// CRC32 of `text`
 pub fn crc32(text: &str) -> u32 {
     crc32fast::hash(text.as_bytes())
 }
 
-/// MurmurHash3 x86_32 of `text`, with seed 0
+/// MurmurHash3 x86_32 of `text`, with seed 0. Some tables hash their values with it instead of CRC32
 pub fn mmh3(text: &str) -> u32 {
     const C1: u32 = 0xcc9e_2d51;
     const C2: u32 = 0x1b87_3593;

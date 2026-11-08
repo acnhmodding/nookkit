@@ -17,7 +17,6 @@ static LOCALE: OnceLock<String> = OnceLock::new();
 // File handles (MessageArchive::findFile's {msbt*, count} entries) of patched files, by address
 static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 
-/// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
 
@@ -69,7 +68,7 @@ fn patches() -> Option<&'static PatchSet> {
     PATCHES.get().filter(|set| !set.is_empty())
 }
 
-/// The game's language as its archives name it, read on first use when the game has settled it
+// The game's language as its archives name it, read on first use when the game has settled it
 fn locale() -> Option<&'static str> {
     if let Some(locale) = LOCALE.get() {
         return Some(locale);
@@ -116,7 +115,6 @@ unsafe fn str_of<'a>(string: *const SafeString<'a>) -> Option<&'a str> {
     unsafe { string.as_ref()?.as_str() }
 }
 
-/// The patch for `label` in the file `handle` is, with text in the current locale
 fn patched_text(handle: *const c_void, label: *const c_char) -> Option<&'static [u16]> {
     let patches = patches()?;
     let file = file_of(handle)?;
@@ -166,7 +164,6 @@ nookkit_sym::hook! {
     }
 }
 
-/// MessageFile::findText's result
 #[repr(C)]
 struct Text {
     units: *const u16,
@@ -228,7 +225,6 @@ pub mod find_text {
     }
 }
 
-/// The byte size of the ATR1 entries in the file `handle` is, 0 without attributes
 unsafe fn attribute_size(handle: usize) -> usize {
     let Some(file) = (unsafe { (handle as *const MessageFile).as_ref() }) else {
         return 0;
@@ -244,8 +240,8 @@ unsafe fn attribute_size(handle: usize) -> usize {
 type ReadAttribute =
     unsafe fn(*mut c_void, *mut u8, *const SafeString<'static>, *const SafeString<'static>) -> bool;
 
-/// One of MessageAttribute's readers for a patched label: its own attributes, another label's, or
-/// zeros for a new label without any. `None` leaves the read to the game
+// One of MessageAttribute's readers for a patched label: its own attributes, another label's, or
+// zeros for a new label without any. `None` leaves the read to the game
 fn read_attribute(
     original: ReadAttribute,
     reader: *mut c_void,

@@ -3,8 +3,10 @@ use std::collections::BTreeMap;
 pub struct Msbt {
     /// Label to message index
     pub labels: BTreeMap<String, u32>,
+
     /// Each message as raw UTF-16, NUL included
     pub texts: Vec<Vec<u16>>,
+
     /// Each message's ATR1 entry, empty when the file has none
     pub attributes: Vec<Vec<u8>>,
     pub attribute_size: u32,
