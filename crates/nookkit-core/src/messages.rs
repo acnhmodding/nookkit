@@ -189,7 +189,7 @@ pub mod find_text {
                 out.write(Text {
                     units: units.as_ptr(),
                     len: units.len() as i32,
-                })
+                });
             },
             None => unsafe { call(handle, label, out, ORIGINAL.load(Ordering::Acquire)) },
         }
@@ -217,14 +217,14 @@ pub mod find_text {
 unsafe fn attribute_size(handle: usize) -> usize {
     unsafe {
         let msbt = *(handle as *const *const u8);
-        let section = *(msbt.add(0x28) as *const i32);
+        let section = *msbt.add(0x28).cast::<i32>();
         if msbt.is_null() || section < 0 {
             return 0;
         }
 
-        let sections = *(msbt.add(0x18) as *const *const u8);
-        let data = *(sections.add(section as usize * 0x18) as *const *const u8);
-        *(data.add(4) as *const u32) as usize
+        let sections = *msbt.add(0x18).cast::<*const u8>();
+        let data = *sections.add(section as usize * 0x18).cast::<*const u8>();
+        *data.add(4).cast::<u32>() as usize
     }
 }
 
@@ -254,7 +254,7 @@ fn read_attribute(
             let other = std::ffi::CString::new(other.as_str()).ok()?;
             let other = SafeString::new(&other).ok()?;
             // Only read during the call
-            let other = (&other as *const SafeString<'_>).cast::<SafeString<'static>>();
+            let other = (&raw const other).cast::<SafeString<'static>>();
             Some(unsafe { original(reader, dst, file, other) })
         }
         Some(Attribute::Bytes(bytes)) if bytes.len() == size => {

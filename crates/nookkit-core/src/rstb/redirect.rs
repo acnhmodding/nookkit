@@ -43,7 +43,7 @@ fn redirect(path: *const u8) -> *const u8 {
     if path.is_null() {
         return path;
     }
-    let bytes = unsafe { CStr::from_ptr(path as _) }.to_bytes();
+    let bytes = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
     let Some(mount_end) = bytes.windows(2).position(|w| w == b":/") else {
         return path;
     };
@@ -58,7 +58,7 @@ fn redirect(path: *const u8) -> *const u8 {
             redirect.target.to_string_lossy()
         );
     }
-    redirect.target.as_ptr() as _
+    redirect.target.as_ptr().cast()
 }
 
 #[skyline::hook(replace = skyline::nn::fs::OpenFile)]

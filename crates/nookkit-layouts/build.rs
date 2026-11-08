@@ -1,4 +1,10 @@
 // Generates layouts::<Layout> and pages::<Page> from the harvested layout data and the page export
+#![expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "build scripts report errors by panicking"
+)]
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -92,7 +98,7 @@ fn screaming(name: &str) -> String {
             && prev.is_some_and(|p| {
                 p.is_ascii_lowercase()
                     || p.is_ascii_digit()
-                    || (p.is_ascii_uppercase() && next.is_some_and(|n| n.is_ascii_lowercase()))
+                    || (p.is_ascii_uppercase() && next.is_some_and(char::is_ascii_lowercase))
             });
         if hump && !out.ends_with('_') {
             out.push('_');

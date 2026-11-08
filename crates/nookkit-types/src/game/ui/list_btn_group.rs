@@ -143,7 +143,7 @@ impl ItemUpdater {
     }
 
     pub unsafe fn update(&mut self, scroll_event: *mut c_void) -> NativeResult {
-        unsafe { self.update_native(&scroll_event) }
+        unsafe { self.update_native(&raw const scroll_event) }
     }
 }
 

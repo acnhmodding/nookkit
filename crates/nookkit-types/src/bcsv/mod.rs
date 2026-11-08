@@ -1,4 +1,7 @@
-#[allow(clippy::module_inception)]
+#[expect(
+    clippy::module_inception,
+    reason = "mirrors the game's bcsv::bcsv namespace"
+)]
 pub mod bcsv;
 mod file;
 mod keyed_table;

@@ -10,7 +10,8 @@ fn folder_exists(folder: &str) -> bool {
     };
     let mut kind = u32::MAX;
     unsafe {
-        skyline::nn::fs::GetEntryType(&mut kind, path.as_ptr() as _) == 0 && kind == ENTRY_DIRECTORY
+        skyline::nn::fs::GetEntryType(&raw mut kind, path.as_ptr().cast()) == 0
+            && kind == ENTRY_DIRECTORY
     }
 }
 

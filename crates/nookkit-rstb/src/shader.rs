@@ -155,27 +155,27 @@ impl ShaderArchive {
         model: &ShadingModel,
         choices: &HashMap<String, String>,
     ) -> Result<Vec<i64>> {
-        if model.static_programs.get().is_none() {
-            let mut statics: HashMap<Vec<u32>, Vec<i64>> = HashMap::new();
-            for i in 0..model.program_count {
-                let words = (0..model.static_key_words)
-                    .map(|j| {
-                        self.data()
-                            .u32(model.key_table + (i * model.key_words + j) * 4)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                statics.entry(words).or_default().push(i);
+        let statics = match model.static_programs.get() {
+            Some(statics) => statics,
+            None => {
+                let mut statics: HashMap<Vec<u32>, Vec<i64>> = HashMap::new();
+                for i in 0..model.program_count {
+                    let words = (0..model.static_key_words)
+                        .map(|j| {
+                            self.data()
+                                .u32(model.key_table + (i * model.key_words + j) * 4)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    statics.entry(words).or_default().push(i);
+                }
+
+                model.static_programs.get_or_init(|| statics)
             }
-            let _ = model.static_programs.set(statics);
-        }
+        };
+
         let words = self.key(model, choices, false)?;
-        Ok(model
-            .static_programs
-            .get()
-            .unwrap()
-            .get(&words)
-            .cloned()
-            .unwrap_or_default())
+
+        Ok(statics.get(&words).cloned().unwrap_or_default())
     }
 
     pub fn find_program(

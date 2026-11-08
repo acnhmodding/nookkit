@@ -91,7 +91,10 @@ impl ListState {
         self.active.set(active);
     }
 
-    #[allow(clippy::mut_from_ref)]
+    #[expect(
+        clippy::mut_from_ref,
+        reason = "the list is owned by the game, not by self"
+    )]
     fn list(&self) -> &mut ScrollBtnListCtrl {
         unsafe { &mut *self.list }
     }
@@ -224,7 +227,7 @@ impl ListState {
 
         if index >= 0 {
             let item = index as u32;
-            unsafe { self.fire(ListEvent::FOCUS, (&item as *const u32).cast()) };
+            unsafe { self.fire(ListEvent::FOCUS, (&raw const item).cast()) };
         } else if self.active.get() {
             // Outside focus (e.g. a tab entering on another row) bypasses the list, which would keep the D-pad
             unsafe {
@@ -260,7 +263,7 @@ impl ListState {
         }
 
         let item = unsafe { group.selected() }.max(0) as u32;
-        unsafe { self.fire(ListEvent::DECIDE, (&item as *const u32).cast()) };
+        unsafe { self.fire(ListEvent::DECIDE, (&raw const item).cast()) };
 
         Ok(())
     }
@@ -306,7 +309,7 @@ extern "C" fn on_item(user: *mut c_void, event: *const ItemEvent) {
         item,
     };
 
-    unsafe { state.fire(ListEvent::ITEM, (&update as *const ItemUpdate).cast()) };
+    unsafe { state.fire(ListEvent::ITEM, (&raw const update).cast()) };
 }
 
 extern "C" fn on_leave(user: *mut c_void, target: *mut *mut Control, event: *const LeaveEvent) {
@@ -327,10 +330,10 @@ extern "C" fn on_leave(user: *mut c_void, target: *mut *mut Control, event: *con
             .list()
             .focused_visible_line()
             .map_or(NO_LINE, |line| line as u32),
-        target: &mut out,
+        target: &raw mut out,
     };
 
-    unsafe { state.fire(ListEvent::LEAVE, (&query as *const LeaveQuery).cast()) };
+    unsafe { state.fire(ListEvent::LEAVE, (&raw const query).cast()) };
 
     if !out.is_null() && !target.is_null() {
         unsafe { *target = out.cast() };

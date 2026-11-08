@@ -1,4 +1,7 @@
-#![allow(clippy::missing_safety_doc)]
+#![expect(
+    clippy::missing_safety_doc,
+    reason = "docs are kept minimal before 1.0"
+)]
 
 pub mod bcsv;
 pub mod game;

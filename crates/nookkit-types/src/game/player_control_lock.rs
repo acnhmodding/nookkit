@@ -20,7 +20,9 @@ crate::native! {
 // update time, mid actor-update the player reads as invalid and the action is refused
 pub unsafe fn lock_menu(player: u8) -> NativeResult<bool> {
     unsafe {
-        if is_player_locked(&player, 0)? || !begin_category(MENU_CATEGORY, &player, 0)? {
+        if is_player_locked(&raw const player, 0)?
+            || !begin_category(MENU_CATEGORY, &raw const player, 0)?
+        {
             return Ok(false);
         }
 
@@ -29,10 +31,10 @@ pub unsafe fn lock_menu(player: u8) -> NativeResult<bool> {
             return Ok(false);
         }
 
-        acquire(mgr, &player, -1, MENU_LOCK)
+        acquire(mgr, &raw const player, -1, MENU_LOCK)
     }
 }
 
 pub unsafe fn release_menu(player: u8) -> NativeResult<bool> {
-    Ok(unsafe { release_menu_lock(&player)? })
+    Ok(unsafe { release_menu_lock(&raw const player)? })
 }

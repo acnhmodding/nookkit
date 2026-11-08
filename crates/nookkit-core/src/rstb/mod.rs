@@ -54,12 +54,13 @@ impl Log {
     // The log file holds the last launch, which starts with a fresh one
     fn append(&mut self) {
         static STARTED: AtomicBool = AtomicBool::new(false);
-        let mut text = match STARTED.swap(true, Ordering::Relaxed) {
-            true => platform::read_optional(LOG)
+        let mut text = if STARTED.swap(true, Ordering::Relaxed) {
+            platform::read_optional(LOG)
                 .ok()
                 .flatten()
-                .unwrap_or_default(),
-            false => Vec::new(),
+                .unwrap_or_default()
+        } else {
+            Vec::new()
         };
         text.extend_from_slice(self.0.as_bytes());
         if let Err(error) = platform::write(LOG, &text) {
@@ -250,9 +251,10 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
             ));
         }
     }
-    need += match models {
-        true => SHADER_PEAK_MEMORY.max(SHADER_RESIDENT_MEMORY + largest),
-        false => largest,
+    need += if models {
+        SHADER_PEAK_MEMORY.max(SHADER_RESIDENT_MEMORY + largest)
+    } else {
+        largest
     };
     // Headroom for talc's fragmentation
     need = (need + need / 4 + (16 << 20)).next_multiple_of(1 << 20);

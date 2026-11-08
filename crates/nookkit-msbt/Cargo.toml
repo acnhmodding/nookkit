@@ -19,3 +19,6 @@ nookkit-sarc = { workspace = true }
 [[bin]]
 name = "nookkit-msbt"
 required-features = ["cli"]
+
+[lints]
+workspace = true

@@ -21,7 +21,8 @@ pub fn file_exists(path: &str) -> bool {
     };
     let mut entry_type = 0;
     unsafe {
-        nn::fs::GetEntryType(&mut entry_type, path.as_ptr() as _) == 0 && entry_type == ENTRY_FILE
+        nn::fs::GetEntryType(&raw mut entry_type, path.as_ptr().cast()) == 0
+            && entry_type == ENTRY_FILE
     }
 }
 
@@ -168,7 +169,7 @@ pub fn lengths(path: &str) -> (u64, u64) {
 pub fn stamp(path: &str) -> Result<String, String> {
     let mut times = nn::fs::FileTimeStamp::new();
     if let Some(c) = c_path(path)
-        && unsafe { nn::fs::GetFileTimeStampForDebug(&mut times, c.as_ptr() as _) } == 0
+        && unsafe { nn::fs::GetFileTimeStampForDebug(&raw mut times, c.as_ptr().cast()) } == 0
         && times.modify.time != 0
     {
         return Ok(format!("t{:x}-{:x}", times.create.time, times.modify.time));

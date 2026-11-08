@@ -50,24 +50,32 @@ impl<'a> Reader<'a> {
         Ok(Reader::new(self.range(at, count)?))
     }
 
+    pub fn array<const N: usize>(&self, at: i64) -> Result<[u8; N]> {
+        let Some(&bytes) = self.range(at, N as i64)?.first_chunk() else {
+            return fail(Error::OutOfBounds);
+        };
+
+        Ok(bytes)
+    }
+
     pub fn byte(&self, at: i64) -> Result<u8> {
         Ok(self.range(at, 1)?[0])
     }
 
     pub fn u16(&self, at: i64) -> Result<u16> {
-        Ok(u16::from_le_bytes(self.range(at, 2)?.try_into().unwrap()))
+        Ok(u16::from_le_bytes(self.array(at)?))
     }
 
     pub fn u32(&self, at: i64) -> Result<u32> {
-        Ok(u32::from_le_bytes(self.range(at, 4)?.try_into().unwrap()))
+        Ok(u32::from_le_bytes(self.array(at)?))
     }
 
     pub fn u64(&self, at: i64) -> Result<u64> {
-        Ok(u64::from_le_bytes(self.range(at, 8)?.try_into().unwrap()))
+        Ok(u64::from_le_bytes(self.array(at)?))
     }
 
     pub fn u32_be(&self, at: i64) -> Result<u32> {
-        Ok(u32::from_be_bytes(self.range(at, 4)?.try_into().unwrap()))
+        Ok(u32::from_be_bytes(self.array(at)?))
     }
 
     pub fn magic(&self, at: i64, magic: &[u8]) -> Result<bool> {

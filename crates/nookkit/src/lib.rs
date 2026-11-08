@@ -250,7 +250,7 @@ impl Ui {
     pub fn find_page<P: PageClass>(&self) -> Result<Option<Page>> {
         let mut handle = Handle::NULL;
 
-        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &mut handle) })?;
+        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &raw mut handle) })?;
 
         Ok((!handle.raw.is_null()).then(|| Page::new(*self, handle)))
     }
@@ -268,7 +268,7 @@ impl Ui {
 
         let mut handle = Handle::NULL;
 
-        check(unsafe { (self.table.seq_page)(raw, &mut handle) })?;
+        check(unsafe { (self.table.seq_page)(raw, &raw mut handle) })?;
 
         Ok((!handle.raw.is_null()).then(|| Seq::new(Page::new(*self, handle), raw)))
     }

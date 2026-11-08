@@ -51,7 +51,7 @@ impl Page {
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {
-            (self.ui.table.find_pane)(self.handle, Str::new(path), Str::new(class), &mut raw)
+            (self.ui.table.find_pane)(self.handle, Str::new(path), Str::new(class), &raw mut raw)
         })?;
 
         Ok(Pane { page: *self, raw })
@@ -87,7 +87,9 @@ impl Page {
     pub fn list(&self, path: impl ListRef) -> Result<List> {
         let mut raw = core::ptr::null_mut();
 
-        check(unsafe { (self.ui.table.list_get)(self.handle, Str::new(path.path()), &mut raw) })?;
+        check(unsafe {
+            (self.ui.table.list_get)(self.handle, Str::new(path.path()), &raw mut raw)
+        })?;
 
         Ok(List::new(*self, raw))
     }
@@ -99,7 +101,7 @@ impl Page {
 
         let mut raw = core::ptr::null_mut();
 
-        check(unsafe { (self.ui.table.page_focused)(self.handle, seq.player()?, &mut raw) })?;
+        check(unsafe { (self.ui.table.page_focused)(self.handle, seq.player()?, &raw mut raw) })?;
 
         Ok((!raw.is_null()).then(|| Pane::new(*self, raw)))
     }
@@ -107,7 +109,7 @@ impl Page {
     pub fn seq(&self) -> Result<Option<Seq>> {
         let mut raw = core::ptr::null_mut();
 
-        check(unsafe { (self.ui.table.page_seq)(self.handle, &mut raw) })?;
+        check(unsafe { (self.ui.table.page_seq)(self.handle, &raw mut raw) })?;
 
         Ok((!raw.is_null()).then(|| Seq::new(*self, raw)))
     }
@@ -350,7 +352,7 @@ impl Pane {
     pub fn decide(&self) -> Result<bool> {
         let mut decided = false;
 
-        check(unsafe { (self.page.ui.table.pane_decide)(self.handle(), &mut decided) })?;
+        check(unsafe { (self.page.ui.table.pane_decide)(self.handle(), &raw mut decided) })?;
 
         Ok(decided)
     }
@@ -363,7 +365,7 @@ impl Pane {
     pub fn is_valid(&self) -> Result<bool> {
         let mut valid = false;
 
-        check(unsafe { (self.page.ui.table.pane_is_valid)(self.handle(), &mut valid) })?;
+        check(unsafe { (self.page.ui.table.pane_is_valid)(self.handle(), &raw mut valid) })?;
 
         Ok(valid)
     }

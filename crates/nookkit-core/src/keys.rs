@@ -39,7 +39,10 @@ static TEXTS: Mutex<BTreeMap<u32, Vec<u16>>> = Mutex::new(BTreeMap::new());
 static NEXT_TEXT: AtomicU32 = AtomicU32::new(0);
 
 impl KeyState {
-    #[allow(clippy::mut_from_ref)]
+    #[expect(
+        clippy::mut_from_ref,
+        reason = "the game writes the handler through its own pointer"
+    )]
     fn handler(&self) -> &mut KeyHandler {
         unsafe { &mut *self.handler.get() }
     }
@@ -112,7 +115,7 @@ extern "C" fn dispatch(user: *mut c_void, kind: u32, event: *const GameKeyEvent)
 
     let cbs = snapshot(&cbs.borrow());
 
-    unsafe { call(cbs, (&event as *const KeyEvent).cast()) };
+    unsafe { call(cbs, (&raw const event).cast()) };
 }
 
 pub unsafe fn bind(
@@ -134,7 +137,7 @@ pub unsafe fn bind(
             .keys
             .iter()
             .find(|k| k.player == player && k.handler().key == key)
-            .map(|k| &**k as *const KeyState as *mut KeyState)
+            .map(|k| &raw const **k as *mut KeyState)
     })
     .flatten();
 
@@ -165,10 +168,10 @@ pub unsafe fn bind(
     if handler.consume_key
         && let Some(root) = unsafe { page_ref.input_root() }
     {
-        unsafe { root.key_handlers.move_to_front(&mut handler.list_node) };
+        unsafe { root.key_handlers.move_to_front(&raw mut handler.list_node) };
     }
 
-    let ptr = &*state as *const KeyState as *mut KeyState;
+    let ptr = &raw const *state as *mut KeyState;
 
     with_page(page, |page_state| page_state.keys.push(state));
 
@@ -266,7 +269,12 @@ pub fn page_of(key: *const KeyState) -> Option<*mut ViewPage> {
 
     pages
         .iter()
-        .find(|(_, state)| state.keys.iter().any(|k| core::ptr::eq(&**k, key)))
+        .find(|(_, state)| {
+            state
+                .keys
+                .iter()
+                .any(|k| core::ptr::eq(&raw const **k, key))
+        })
         .map(|(&page, _)| page as *mut ViewPage)
 }
 
@@ -339,7 +347,7 @@ nookkit_sym::hook! {
         if before == 0 && (hidden || seq_ref.pending.len() == 1) {
             for mut guide in active_guides() {
                 guide.label.pin();
-                unsafe { original(seq, &guide, flag) };
+                unsafe { original(seq, &raw const guide, flag) };
             }
         }
     }

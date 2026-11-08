@@ -29,7 +29,7 @@ pub unsafe fn open_pocket_menu(player: u8, close_enabled: bool) -> NativeResult<
         close_enabled,
     };
 
-    unsafe { request_open(&player, &options) }
+    unsafe { request_open(&raw const player, &raw const options) }
 }
 
 #[repr(C)]

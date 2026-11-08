@@ -1,10 +1,16 @@
 // One typed constant per symbol, so a name missing from the symbol file fails to compile
+#![expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "build scripts report errors by panicking"
+)]
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::{env, fs, path::PathBuf};
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "the build script uses only part of the parser")]
 #[path = "src/parse.rs"]
 mod parse;
 

@@ -166,8 +166,9 @@ impl Table {
             .cloned()
             .collect();
         for name in single {
-            let entry = self.collided.remove(&name).unwrap();
-            self.unique.entry(crc32(&name)).or_insert(entry);
+            if let Some(entry) = self.collided.remove(&name) {
+                self.unique.entry(crc32(&name)).or_insert(entry);
+            }
         }
     }
 }

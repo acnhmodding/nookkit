@@ -109,7 +109,7 @@ unsafe fn apply(page: *mut ViewPage, seq: *mut SequenceBase, reg: StateReg) -> S
                 cbs: Mutex::new(Default::default()),
             }));
 
-            entry_ref.vtable = &hook.vt;
+            entry_ref.vtable = &raw const hook.vt;
             hook
         }
     };

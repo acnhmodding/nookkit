@@ -103,7 +103,9 @@ fn current_thread() -> usize {
 }
 
 fn loading() -> MutexGuard<'static, BTreeMap<usize, Loading>> {
-    LOADING.lock().unwrap_or_else(|e| e.into_inner())
+    LOADING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Notes `file` as cached from the archive this thread is loading, returning the archive
@@ -124,7 +126,9 @@ fn check_missing(loaded: &Loading) {
     if loaded.cached == 0 {
         return;
     }
-    let mut checked = CHECKED.lock().unwrap_or_else(|e| e.into_inner());
+    let mut checked = CHECKED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if !checked.insert(loaded.archive) {
         return;
     }

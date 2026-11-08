@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used, reason = "test helpers fail the test")]
+
 use std::path::{Path, PathBuf};
 
 use nookkit_byml::{Byml, Endian, Node, ParseError};

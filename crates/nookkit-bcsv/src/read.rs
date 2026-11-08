@@ -101,7 +101,7 @@ impl<'de> Visitor<'de> for PatchSeed<'_> {
                     source = Some(map.next_value_seed(RowsSeed {
                         keys: &mut *self.keys,
                         name: self.name,
-                    })?)
+                    })?);
                 }
             }
         }

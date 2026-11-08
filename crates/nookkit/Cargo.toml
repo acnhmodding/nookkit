@@ -10,3 +10,6 @@ nookkit-sys = { workspace = true }
 nookkit-types = { workspace = true }
 skyline = { workspace = true }
 thiserror = { workspace = true }
+
+[lints]
+workspace = true

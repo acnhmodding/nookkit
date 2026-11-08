@@ -41,12 +41,19 @@ fn range(data: &[u8], at: usize, count: usize) -> Result<&[u8]> {
         .ok_or(Error::OutOfBounds)
 }
 
+fn array<const N: usize>(data: &[u8], at: usize) -> Result<[u8; N]> {
+    range(data, at, N)?
+        .first_chunk()
+        .copied()
+        .ok_or(Error::OutOfBounds)
+}
+
 fn u16_at(data: &[u8], at: usize) -> Result<u16> {
-    Ok(u16::from_le_bytes(range(data, at, 2)?.try_into().unwrap()))
+    Ok(u16::from_le_bytes(array(data, at)?))
 }
 
 fn u32_at(data: &[u8], at: usize) -> Result<u32> {
-    Ok(u32::from_le_bytes(range(data, at, 4)?.try_into().unwrap()))
+    Ok(u32::from_le_bytes(array(data, at)?))
 }
 
 fn magic(data: &[u8], at: usize, magic: &[u8]) -> Result<bool> {
@@ -87,9 +94,10 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
         let mut name = None;
         if attributes >> 24 != 0 {
             let at = names + 8 + (attributes & 0xffffff) as usize * 4;
-            let terminator = match has_names && at < data {
-                true => range(archive, at, data - at)?.iter().position(|&b| b == 0),
-                false => None,
+            let terminator = if has_names && at < data {
+                range(archive, at, data - at)?.iter().position(|&b| b == 0)
+            } else {
+                None
             };
             let Some(terminator) = terminator else {
                 return Err(Error::InvalidName);

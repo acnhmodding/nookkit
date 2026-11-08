@@ -248,7 +248,7 @@ impl ScrollBtnListCtrl {
             key_1c: -1,
         };
 
-        unsafe { self.attach_native(&params) }
+        unsafe { self.attach_native(&raw const params) }
     }
 
     pub unsafe fn set_content(&mut self, content: &Content, player: u8) -> NativeResult {
@@ -265,7 +265,7 @@ impl ScrollBtnListCtrl {
             _pad_2d: [0; 3],
         };
 
-        unsafe { self.set_content_native(&params) }
+        unsafe { self.set_content_native(&raw const params) }
     }
 
     pub unsafe fn enable(&mut self, enable: &Enable) -> NativeResult {
@@ -278,7 +278,7 @@ impl ScrollBtnListCtrl {
             cursor_item: enable.cursor_item,
         };
 
-        unsafe { self.enable_native(&params) }
+        unsafe { self.enable_native(&raw const params) }
     }
 
     pub unsafe fn play(&mut self) -> NativeResult {

@@ -13,7 +13,7 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     if data.len() < HEADER_BYTES || !is_yaz0(data) {
         return fail(Yaz0Error::NotYaz0);
     }
-    let size = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
+    let size = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
     let mut out = Vec::new();
     out.try_reserve_exact(size)
         .map_err(|_| Error::OutOfMemory("Yaz0 data"))?;

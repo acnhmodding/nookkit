@@ -111,15 +111,19 @@ unsafe impl Send for EventSlot {}
 
 #[derive(Default)]
 pub struct PageState {
-    // Boxed so the delegates in the game's tables keep pointing at them
-    #[allow(clippy::vec_box)]
+    #[expect(
+        clippy::vec_box,
+        reason = "the delegates in the game's tables keep pointing at the boxes"
+    )]
     events: Vec<Box<EventSlot>>,
 
     pub seq: [Vec<Callback>; SeqEvent::COUNT],
     pub lists: Vec<&'static ListState>,
 
-    // Boxed so the key handlers in the page's input root keep pointing at them
-    #[allow(clippy::vec_box)]
+    #[expect(
+        clippy::vec_box,
+        reason = "the key handlers in the page's input root keep pointing at the boxes"
+    )]
     pub keys: Vec<Box<KeyState>>,
 
     /// Its seq is active, so its key guides belong in the bar
@@ -339,7 +343,7 @@ unsafe fn built(page: *mut ViewPage) {
         Err(_) => return,
     };
 
-    unsafe { call(matching, (&handle as *const Handle).cast()) };
+    unsafe { call(matching, (&raw const handle).cast()) };
 }
 
 pub fn on_page_built(layout: &str, class: &str, cb: Callback) -> Status {
@@ -372,7 +376,7 @@ extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
         return;
     };
 
-    unsafe { call(cbs, (&event as *const Event).cast()) };
+    unsafe { call(cbs, (&raw const event).cast()) };
 }
 
 pub unsafe fn on_control_event(
@@ -426,7 +430,7 @@ pub unsafe fn on_control_event(
         cbs: Mutex::new(vec![cb]),
     });
 
-    *free = Delegate::bind(&mut *slot as *mut EventSlot, dispatch as *const () as usize);
+    *free = Delegate::bind(&raw mut *slot, dispatch as *const () as usize);
     events.push(slot);
 
     Ok(Status::OK)

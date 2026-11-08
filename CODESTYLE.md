@@ -2,7 +2,9 @@
 
 ## Formatting
 
-Run `cargo fmt` before committing and resolve `cargo clippy` warnings. Dependencies shared between crates are declared under `[workspace.dependencies]` and referenced with `{ workspace = true }`.
+Run `cargo fmt` before committing and resolve `cargo clippy` warnings. The lints in `[workspace.lints]` enforce parts of this document, every crate opts in with `[lints] workspace = true`.
+
+When a lint has to be silenced, use `#[expect(lint, reason = "...")]` rather than `#[allow]`, so the suppression is explained and goes away once it is no longer needed.
 
 ## Readability
 
@@ -46,9 +48,45 @@ if entries.is_empty() {
 Ok(Self { name, entries })
 ```
 
+### Combinator chains
+
+Chaining `Option` / `Result` combinators (`and_then`, `map`, `or_else`, `filter`, `map_or`, ...) is shorter, but the reader has to unwind every closure in their head to follow it. Prefer `?`, `let ... else`, `if let` or `match`, which name each step and keep the control flow visible.
+
+A single short combinator is fine (`.ok_or(Error::OutOfBounds)?`, `.map(|e| e.name)`), as are plain iterator pipelines like `.iter().filter(..).collect()`. Rewrite a chain once it nests closures, mixes `Option` and `Result`, or needs more than one closure to understand.
+
+### Bad
+
+```rs
+let pockets = ui
+    .find_page::<pages::PocketMenu>()?
+    .and_then(|page| page.seq().ok().flatten())
+    .filter(|seq| seq.is_idle().unwrap_or(false));
+```
+
+### Good
+
+```rs
+let Some(page) = ui.find_page::<pages::PocketMenu>()? else {
+    return Ok(());
+};
+let Some(pockets) = page.seq()? else {
+    return Ok(());
+};
+
+if !pockets.is_idle()? {
+    return Ok(());
+}
+```
+
 ## Comments
 
 Only write a comment to explain a quirk or necessary prerequisite knowledge, it shouldn't simply restate what the code already says.
+
+Comments inside a function body are almost never needed. Clear names and steps separated by blank lines should carry the meaning. Keep one only for something the code cannot express, such as a game bug workaround, an ordering the game depends on or a race.
+
+Don't extract a helper just to replace a comment, a helper used in one place usually muddies the code more than it helps.
+
+Comments are terse and have no trailing period.
 
 ### Bad
 
@@ -57,6 +95,10 @@ Only write a comment to explain a quirk or necessary prerequisite knowledge, it 
 for entry in &entries {
     // ...
 }
+
+// read the header, then the entries
+let count = reader.read_u8()?;
+let n = reader.read_u32()?;
 ```
 
 ### Good
@@ -66,33 +108,38 @@ for entry in &entries {
 if matches!(anim_type, AnimType::User) {
     // ...
 }
+
+let count = reader.read_u8()?;
+let entry_offset = reader.read_u32()?;
 ```
 
 ### Documentation comments
 
-Until a 1.0 release, keep documentation comments minimal, only on higher level items used across crates.
+Until a 1.0 release, keep documentation comments minimal, only on higher level items used across crates. No `//!` module docs for now.
 
-Describe what the item is or does, not how it works. Only mention inner workings if they are necessary to understand it.
+Describe what the item is or does, not how it works. Only mention inner workings if they are necessary to understand it. Like comments, they have no trailing period.
 
 ```rs
-/// Borrows memory from one of the game's existing heaps.
+/// Borrows memory from one of the game's existing heaps
 ```
 
 On structs and enums, a documented field or variant is separated from the previous one by a blank line (the first needs none):
 
 ```rs
 pub struct UserData {
-    /// The user-defined data stored in this entry.
+    /// The user-defined data stored in this entry
     pub content: UserDataContent,
 
-    /// The name of this user data entry.
+    /// The name of this user data entry
     pub o_name: String,
 }
 ```
 
 ## Pointer offsets
 
-Using offsets in a pointer to access data should be avoided in the case that the game updates, new structures should be created in [nookkit-types](crates/nookkit-types).
+Using offsets in a pointer to access game memory should be avoided in the case that the game updates, new structures should be created in [nookkit-types](crates/nookkit-types).
+
+This doesn't apply to parsers of file formats (e.g. BFRES in nookkit-rstb), which read offsets from the format's own layout. Give an offset a named const when it is used more than once.
 
 ### Bad
 
@@ -117,6 +164,8 @@ To create a new hook, the `nookkit_sym::hook!` function should be used. If it's 
 
 Files in [offsets](offsets) are generated, do not edit them by hand.
 
+SDK functions that skyline already exposes (`skyline::nn::*`) aren't in the offsets and are hooked with `#[skyline::hook(replace = ...)]` instead.
+
 ### Example usage
 
 ```rs
@@ -137,6 +186,10 @@ Functions that can error should always return either a `Result<>` or `Option<>` 
 - Include context in an error, such as the offset, path, or expected versus found value.
 - `unwrap()` and `expect()` are only acceptable where failure is impossible because the invariant was just checked. Mods run in the game process with `panic = "abort"`, so a stray panic crashes the whole game.
 - Propagate errors with `?`. Only print an error where propagating it would obscure it, and at the top level where it is finally handled.
+- Error messages are lowercase and have no trailing period, e.g. `invalid magic, found 0x{found:08X}`.
+- Don't discard a `Result` with `let _ =` unless it can't fail, like `write!` into a `String`.
+
+Logging uses `println!` with the crate's prefix, e.g. `[NookKit]`.
 
 ### Bad
 
@@ -205,7 +258,7 @@ If a new crate is absolutely necessary, create it in its own PR, separate from t
 
 ## Unsafe code
 
-Keep `unsafe` in the low level crates (`nookkit-types`, `nookkit-sym`, `nookkit-sys` and `nookkit-core`). The `nookkit` crate should expose only safe APIs.
+Keep `unsafe` in the low level crates (`nookkit-types`, `nookkit-sym`, `nookkit-sys` and `nookkit-core`). The `nookkit` crate may use `unsafe` internally, but it exposes only safe APIs. The exception is `original` in hooks made with `nookkit::hook!`, which calls the game's function directly.
 
 ## Dependencies
 

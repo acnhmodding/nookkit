@@ -146,7 +146,7 @@ impl KeyBuilder {
                 self.player.unwrap_or_default(),
                 self.key.id(),
                 flags,
-                &mut raw,
+                &raw mut raw,
             )
         })?;
 

@@ -29,13 +29,13 @@ macro_rules! hook {
         fn($($arg:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? $body:block
     ) => {
         $vis mod $name {
-            #[allow(unused_imports)]
+            #[allow(unused_imports, reason = "the hook body may not use the parent scope")]
             use super::*;
 
             static ORIGINAL: ::core::sync::atomic::AtomicUsize = ::core::sync::atomic::AtomicUsize::new(0);
             static INSTALLED: ::core::sync::atomic::AtomicBool = ::core::sync::atomic::AtomicBool::new(false);
 
-            #[allow(dead_code)]
+            #[allow(dead_code, reason = "not every hook calls the original")]
             pub unsafe fn original($($arg: $ty),*) $(-> $ret)? {
                 let f: unsafe extern "C" fn($($ty),*) $(-> $ret)? = unsafe {
                     ::core::mem::transmute(ORIGINAL.load(::core::sync::atomic::Ordering::Acquire))

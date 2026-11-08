@@ -7,7 +7,15 @@ mod runtime;
 pub use parse::{Kind, ParseError, SymbolFile, parse};
 pub use typed::{Abi, AbiArgs, Data, Fn, Matches, Sig, Unchecked, Vtable, abi, check};
 
-#[allow(non_snake_case, non_upper_case_globals)]
+#[expect(
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "paths mirror the game's C++ names"
+)]
+#[allow(
+    clippy::type_complexity,
+    reason = "generated signatures, only some are long"
+)]
 pub mod sym {
     include!(concat!(env!("OUT_DIR"), "/sym.rs"));
 }

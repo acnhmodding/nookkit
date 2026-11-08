@@ -84,10 +84,12 @@ pub(crate) fn gpu_pool_parent_requests(requests: &[Request]) -> Result<Vec<Reque
                 // 0x138 pool record + 0x108 virtual heap + 32 bytes per entry
                 parent.push(request(0x240 + entries * 0x20, 8));
                 parent.push(request(backing, align_up(alignment, 4096)));
-                pools.push(Pool::new(backing, entries));
-                let Some(offset) = pools.last().unwrap().try_place(wanted) else {
+                let pool = Pool::new(backing, entries);
+                let Some(offset) = pool.try_place(wanted) else {
                     return fail(HeapError::GpuPoolTooSmall);
                 };
+
+                pools.push(pool);
                 (pools.len() - 1, offset)
             }
         };

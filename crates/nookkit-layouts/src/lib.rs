@@ -173,13 +173,15 @@ impl<K> core::fmt::Debug for PanePath<K> {
 }
 
 /// One zero-sized struct per layout, holding its parts panes as [`RelPath`]s for [`PanePath::then`]
-#[allow(non_camel_case_types)]
+#[expect(
+    non_camel_case_types,
+    reason = "types are named after the game's layouts"
+)]
 pub mod layouts {
     include!(concat!(env!("OUT_DIR"), "/layouts.rs"));
 }
 
 /// One marker per page class, holding its root layout's parts panes as page paths
-#[allow(non_camel_case_types)]
 pub mod pages {
     include!(concat!(env!("OUT_DIR"), "/pages.rs"));
 }

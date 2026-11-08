@@ -1,5 +1,8 @@
 #![no_std]
-#![allow(clippy::missing_safety_doc)]
+#![expect(
+    clippy::missing_safety_doc,
+    reason = "docs are kept minimal before 1.0"
+)]
 
 use core::ffi::{c_char, c_void};
 

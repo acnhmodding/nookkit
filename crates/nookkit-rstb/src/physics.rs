@@ -397,9 +397,9 @@ impl<'a> Tagfile<'a> {
         }
 
         let mut items = Vec::with_capacity(index.len() / 12);
-        for record in index.as_chunks::<12>().0 {
-            let word = |i: usize| u32::from_le_bytes(record[i..i + 4].try_into().unwrap());
-            let (kind, offset, count) = (word(0) & 0xffffff, word(4), word(8));
+        for record in index.as_chunks::<4>().0.as_chunks::<3>().0 {
+            let [kind, offset, count] = record.map(u32::from_le_bytes);
+            let kind = kind & 0xffffff;
             if kind as usize >= types.len() || offset as i64 > data.len() || count > i32::MAX as u32
             {
                 return fail(PhysicsError::ItemOutOfRange);
@@ -464,7 +464,7 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
         if size < 8 || size > end - start {
             return fail(PhysicsError::InvalidSectionSize);
         }
-        let tag = file.range(start + 4, 4)?.try_into().unwrap();
+        let tag = file.array(start + 4)?;
         sections.push(Section {
             tag,
             start: start + 8,

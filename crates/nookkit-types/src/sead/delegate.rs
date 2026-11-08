@@ -114,6 +114,6 @@ impl Delegate {
 
     /// `method` must be an `extern "C" fn(*mut T, ...)` taking what the game invokes this delegate with
     pub fn bind<T>(object: *mut T, method: usize) -> Self {
-        Self::new((&RUST_VTABLE as *const RustVtable).cast(), object, method)
+        Self::new((&raw const RUST_VTABLE).cast(), object, method)
     }
 }
