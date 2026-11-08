@@ -96,8 +96,13 @@ impl PocketMenuSeq {
 
     /// The slot's button, null past the page's slots
     pub unsafe fn slot_button(&self, slot: u8) -> *mut UniteBtnCtrl {
-        unsafe { self.page.as_ref() }
-            .and_then(|page| page.slots.get(slot as usize).copied())
+        let Some(page) = (unsafe { self.page.as_ref() }) else {
+            return core::ptr::null_mut();
+        };
+
+        page.slots
+            .get(slot as usize)
+            .copied()
             .unwrap_or(core::ptr::null_mut())
     }
 }

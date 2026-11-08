@@ -91,10 +91,15 @@ impl Source {
     }
 
     fn blob_at(&self, at: u32) -> &[u8] {
-        self.bytes
-            .get(at as usize..)
-            .and_then(<[u8]>::split_first_chunk::<4>)
-            .and_then(|(len, rest)| rest.get(..u32::from_le_bytes(*len) as usize))
+        let Some(blob) = self.bytes.get(at as usize..) else {
+            return &[];
+        };
+
+        let Some((len, rest)) = blob.split_first_chunk::<4>() else {
+            return &[];
+        };
+
+        rest.get(..u32::from_le_bytes(*len) as usize)
             .unwrap_or_default()
     }
 
@@ -392,12 +397,14 @@ impl Plan<'_> {
 
                     found = table
                         .rows()
-                        .position(|r| r.get(range.clone()) == Some(&probe[..]))
-                        .or_else(|| {
-                            let mut added = added_keys.chunks_exact(column.size);
-                            let index = added.position(|k| k == &probe[..])?;
-                            Some(table.row_count + index)
-                        });
+                        .position(|r| r.get(range.clone()) == Some(&probe[..]));
+
+                    if found.is_none() {
+                        found = added_keys
+                            .chunks_exact(column.size)
+                            .position(|k| k == &probe[..])
+                            .map(|index| table.row_count + index);
+                    }
                 }
             }
 

@@ -59,10 +59,9 @@ fn layouts(text: &str) -> BTreeMap<String, Layout> {
             .split_once(" = ")
             .unwrap_or_else(|| panic!("{LAYOUTS}:{}: expected key = value", index + 1));
 
-        let layout = current
-            .as_ref()
-            .and_then(|c| out.get_mut(c))
-            .unwrap_or_else(|| panic!("{LAYOUTS}:{}: key outside a table", index + 1));
+        let Some(layout) = current.as_ref().and_then(|name| out.get_mut(name)) else {
+            panic!("{LAYOUTS}:{}: key outside a table", index + 1);
+        };
 
         match key.strip_prefix("parts.") {
             Some(pane) => layout.parts.push((unquote(pane), unquote(value))),

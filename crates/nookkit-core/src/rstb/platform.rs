@@ -179,20 +179,23 @@ pub fn lengths(path: &str) -> (u64, u64) {
     let length = fs::metadata(path).map_or(0, |m| m.len());
     let mut prefix = [0u8; 18];
 
-    let read = fs::File::open(path)
-        .and_then(|mut file| file.read(&mut prefix))
-        .unwrap_or(0);
+    let read = match fs::File::open(path) {
+        Ok(mut file) => file.read(&mut prefix).unwrap_or(0),
+        Err(_) => 0,
+    };
 
     let prefix = &prefix[..read];
 
-    let yaz0 = || {
-        let size = prefix.strip_prefix(b"Yaz0")?.get(..4)?;
-        Some(u32::from_be_bytes(size.try_into().ok()?) as u64)
+    let decompressed = if let Some(declared) = nookkit_rstb::declared_length(prefix) {
+        declared
+    } else if let Some(size) = prefix
+        .strip_prefix(b"Yaz0")
+        .and_then(<[u8]>::first_chunk::<4>)
+    {
+        u64::from(u32::from_be_bytes(*size))
+    } else {
+        length
     };
-
-    let decompressed = nookkit_rstb::declared_length(prefix)
-        .or_else(yaz0)
-        .unwrap_or(length);
 
     (length, decompressed)
 }

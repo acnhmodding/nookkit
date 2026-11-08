@@ -23,11 +23,10 @@ impl Cache {
     pub fn load(path: &str, epoch: String) -> Cache {
         let mut earlier = BTreeMap::new();
 
-        let text = platform::read_optional(path)
-            .ok()
-            .flatten()
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .unwrap_or_default();
+        let text = match platform::read_optional(path) {
+            Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
+            _ => String::new(),
+        };
 
         let mut lines = text.lines();
 
@@ -64,10 +63,9 @@ impl Cache {
     }
 
     pub fn get(&self, relative: &str, length: u64, stamp: &str) -> Option<i64> {
-        self.earlier
-            .get(relative)
-            .filter(|s| s.length == length && s.stamp == stamp)
-            .map(|s| s.size)
+        let earlier = self.earlier.get(relative)?;
+
+        (earlier.length == length && earlier.stamp == stamp).then_some(earlier.size)
     }
 
     // Files not inserted are dropped on save

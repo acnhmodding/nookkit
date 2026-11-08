@@ -621,12 +621,15 @@ unsafe extern "C" fn page_focused(
 
         *out = core::ptr::null_mut();
 
-        let node = page
-            .input_root()
-            .and_then(|root| root.focus_navigator.as_ref())
-            .map_or(core::ptr::null_mut(), |nav| {
-                nav.focused(u32::from(player.0))
-            });
+        let Some(root) = page.input_root() else {
+            return Ok(Status::OK);
+        };
+
+        let Some(navigator) = root.focus_navigator.as_ref() else {
+            return Ok(Status::OK);
+        };
+
+        let node = navigator.focused(u32::from(player.0));
         if node.is_null() {
             return Ok(Status::OK);
         }

@@ -311,11 +311,13 @@ pub fn hide_guide(page: *mut ViewPage, key: i32, hide: bool) -> Status {
 }
 
 fn guide_hidden(key: i32) -> bool {
-    PAGES.lock().is_ok_and(|pages| {
-        pages
-            .values()
-            .any(|state| state.active && state.hidden_guides.contains(&key))
-    })
+    let Ok(pages) = PAGES.lock() else {
+        return false;
+    };
+
+    pages
+        .values()
+        .any(|state| state.active && state.hidden_guides.contains(&key))
 }
 
 fn report_value<T>(context: &str, result: NativeResult<T>) -> Option<T> {

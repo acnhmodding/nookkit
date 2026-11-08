@@ -463,10 +463,15 @@ impl<'a> Tagfile<'a> {
         for _ in 1..count {
             let name = varint(names, &mut position)?;
 
-            match usize::try_from(name).ok().and_then(|n| text.get(n)) {
-                Some(name) => types.push(Some(name.clone())),
-                None => return fail(PhysicsError::TypeNameOutOfRange),
-            }
+            let Ok(index) = usize::try_from(name) else {
+                return fail(PhysicsError::TypeNameOutOfRange);
+            };
+
+            let Some(name) = text.get(index) else {
+                return fail(PhysicsError::TypeNameOutOfRange);
+            };
+
+            types.push(Some(name.clone()));
 
             let mut templates = varint(names, &mut position)?;
 

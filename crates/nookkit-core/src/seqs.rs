@@ -77,11 +77,14 @@ unsafe fn set_active(seq: *mut SequenceBase, active: bool) {
 unsafe fn lists_of(seq: *mut SequenceBase) -> Vec<&'static crate::lists::ListState> {
     let page = unsafe { page_of(seq) } as usize;
 
-    PAGES
-        .lock()
-        .ok()
-        .and_then(|pages| pages.get(&page).map(|state| state.lists.clone()))
-        .unwrap_or_default()
+    let Ok(pages) = PAGES.lock() else {
+        return Vec::new();
+    };
+
+    match pages.get(&page) {
+        Some(state) => state.lists.clone(),
+        None => Vec::new(),
+    }
 }
 
 unsafe fn ready(seq: *mut SequenceBase) {
@@ -100,16 +103,25 @@ unsafe fn ready(seq: *mut SequenceBase) {
 unsafe fn fire(seq: *mut SequenceBase, kind: SeqEvent) {
     let page = unsafe { page_of(seq) } as usize;
 
-    let cbs = PAGES.lock().ok().and_then(|pages| {
-        let state = pages.get(&page)?;
-        let cbs = state.seq.get(kind.0 as usize)?;
+    let Ok(pages) = PAGES.lock() else {
+        return;
+    };
 
-        (!cbs.is_empty()).then(|| snapshot(cbs))
-    });
+    let Some(cbs) = pages
+        .get(&page)
+        .and_then(|state| state.seq.get(kind.0 as usize))
+    else {
+        return;
+    };
 
-    if let Some(cbs) = cbs {
-        unsafe { call(cbs, seq.cast()) };
+    if cbs.is_empty() {
+        return;
     }
+
+    let cbs = snapshot(cbs);
+    drop(pages);
+
+    unsafe { call(cbs, seq.cast()) };
 }
 
 pub fn on_seq_event(page: *mut ViewPage, kind: SeqEvent, cb: Callback) -> Status {

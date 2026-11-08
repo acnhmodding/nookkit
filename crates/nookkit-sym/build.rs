@@ -108,15 +108,25 @@ fn signatures(text: &str) -> HashMap<String, String> {
             continue;
         }
 
-        let (name, sig) = line
-            .split_once('=')
-            .and_then(|(k, v)| Some((k.trim().strip_prefix('"')?.strip_suffix('"')?, v.trim())))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{SIGNATURES}:{}: expected \"name\" = \"signature\"",
-                    index + 1
-                )
-            });
+        let Some((key, sig)) = line.split_once('=') else {
+            panic!(
+                "{SIGNATURES}:{}: expected \"name\" = \"signature\"",
+                index + 1
+            );
+        };
+
+        let Some(name) = key
+            .trim()
+            .strip_prefix('"')
+            .and_then(|key| key.strip_suffix('"'))
+        else {
+            panic!(
+                "{SIGNATURES}:{}: expected \"name\" = \"signature\"",
+                index + 1
+            );
+        };
+
+        let sig = sig.trim();
 
         let sig = sig.trim_matches('"');
 

@@ -53,14 +53,14 @@ impl Log {
     fn append(&mut self) {
         static STARTED: AtomicBool = AtomicBool::new(false);
 
-        let mut text = if STARTED.swap(true, Ordering::Relaxed) {
-            platform::read_optional(LOG)
-                .ok()
-                .flatten()
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let mut text = Vec::new();
+
+        if STARTED.swap(true, Ordering::Relaxed) {
+            match platform::read_optional(LOG) {
+                Ok(earlier) => text = earlier.unwrap_or_default(),
+                Err(error) => println!("[NookKit] rstb: {error}"),
+            }
+        }
 
         text.extend_from_slice(self.0.as_bytes());
 
@@ -364,9 +364,12 @@ fn run(log: &mut Log, scan: &Scan) -> Result<(), RstbError> {
     let mut table = base_table(log, &scan.folders)?;
     size_files(log, &mut table, scan)?;
 
-    if platform::read_optional(MODDED_TABLE)?
-        .is_some_and(|bytes| parse_table(&bytes).is_ok_and(|current| current == table))
-    {
+    let current = match platform::read_optional(MODDED_TABLE)? {
+        Some(bytes) => parse_table(&bytes).ok(),
+        None => None,
+    };
+
+    if current.as_ref() == Some(&table) {
         log.line("The table is up to date");
         return Ok(());
     }
@@ -427,14 +430,25 @@ fn source(relative: &str) -> Option<String> {
 }
 
 fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), RstbError> {
-    let hints: Vec<_> = scan
-        .folders
-        .iter()
-        .filter_map(|folder| {
-            let bytes = platform::read_optional(&format!("{}/{TABLE}", folder.root)).ok()??;
-            Some((format!("{}/", folder.root), parse_table(&bytes).ok()?))
-        })
-        .collect();
+    let mut hints = Vec::new();
+
+    for folder in &scan.folders {
+        let path = format!("{}/{TABLE}", folder.root);
+
+        let bytes = match platform::read_optional(&path) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => continue,
+            Err(error) => {
+                log.line(error);
+                continue;
+            }
+        };
+
+        match parse_table(&bytes) {
+            Ok(hint) => hints.push((format!("{}/", folder.root), hint)),
+            Err(error) => log.line(format!("{path}: {error}, not used for hints")),
+        }
+    }
 
     let mut cache = Cache::load(CACHE, scan.epoch.clone());
     let mut sizer = Sizer::new(platform::rom_path(SHADER_ARCHIVE));

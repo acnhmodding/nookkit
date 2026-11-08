@@ -180,7 +180,10 @@ fn normalized_animation_name_bytes(name: &str) -> i64 {
 // Geometry, scene animations and unfamiliar layouts deliberately return `None`
 pub(crate) fn texture_animation_archive_size(archive: &[u8]) -> Option<u32> {
     let member = single_bfres(archive)?;
-    let pool = runtime_pool_without_models(Reader::new(member.data(archive))).ok()??;
+
+    let Ok(Some(pool)) = runtime_pool_without_models(Reader::new(member.data(archive))) else {
+        return None;
+    };
 
     let allocation = model_archive_load_bytes(
         align_up(archive.len() as i64, 32),

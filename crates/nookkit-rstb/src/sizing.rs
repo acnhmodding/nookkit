@@ -124,9 +124,11 @@ impl Sizer {
             if let [phive] = members.as_slice()
                 && phive.is("output.phive")
             {
-                return Ok(physics::requests(phive.data(&archive))
-                    .and_then(|requests| model_archive_load_bytes(loaded, &requests, &[]))
-                    .unwrap_or(GAME_SIZED));
+                let Ok(requests) = physics::requests(phive.data(&archive)) else {
+                    return Ok(GAME_SIZED);
+                };
+
+                return Ok(model_archive_load_bytes(loaded, &requests, &[]).unwrap_or(GAME_SIZED));
             }
         }
 

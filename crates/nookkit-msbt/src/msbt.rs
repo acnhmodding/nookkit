@@ -13,11 +13,15 @@ pub struct Msbt {
 }
 
 fn u16_at(b: &[u8], at: usize) -> Option<u16> {
-    Some(u16::from_le_bytes(b.get(at..at + 2)?.try_into().ok()?))
+    let bytes = b.get(at..)?.first_chunk()?;
+
+    Some(u16::from_le_bytes(*bytes))
 }
 
 fn u32_at(b: &[u8], at: usize) -> Option<u32> {
-    Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?))
+    let bytes = b.get(at..)?.first_chunk()?;
+
+    Some(u32::from_le_bytes(*bytes))
 }
 
 fn sections(b: &[u8]) -> Option<BTreeMap<[u8; 4], &[u8]>> {
@@ -30,7 +34,7 @@ fn sections(b: &[u8]) -> Option<BTreeMap<[u8; 4], &[u8]>> {
     let mut out = BTreeMap::new();
 
     for _ in 0..count {
-        let magic: [u8; 4] = b.get(at..at + 4)?.try_into().ok()?;
+        let magic: [u8; 4] = *b.get(at..)?.first_chunk()?;
         let size = u32_at(b, at + 4)? as usize;
         out.insert(magic, b.get(at + 16..at + 16 + size)?);
         at = (at + 16 + size + 15) & !15;

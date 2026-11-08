@@ -210,9 +210,12 @@ struct Bytes<'a> {
 
 impl<'a> Bytes<'a> {
     fn slice(self, offset: usize, len: usize) -> Result<&'a [u8], ParseError> {
-        offset
-            .checked_add(len)
-            .and_then(|end| self.data.get(offset..end))
+        let Some(end) = offset.checked_add(len) else {
+            return Err(ParseError::OutOfBounds { offset });
+        };
+
+        self.data
+            .get(offset..end)
             .ok_or(ParseError::OutOfBounds { offset })
     }
 

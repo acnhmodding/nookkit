@@ -66,9 +66,10 @@ fn lengths(path: &str) -> (u64, u64) {
     let length = std::fs::metadata(path).map_or(0, |m| m.len());
     let mut prefix = [0u8; 18];
 
-    let read = std::fs::File::open(path)
-        .and_then(|mut f| f.read(&mut prefix))
-        .unwrap_or(0);
+    let read = match std::fs::File::open(path) {
+        Ok(mut file) => file.read(&mut prefix).unwrap_or(0),
+        Err(_) => 0,
+    };
 
     (length, declared_length(&prefix[..read]).unwrap_or(length))
 }

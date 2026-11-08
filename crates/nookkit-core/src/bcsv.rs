@@ -143,9 +143,11 @@ nookkit_sym::hook! {
             return resource;
         };
 
-        let Some(file) = unsafe { name.as_ref().and_then(|n| n.as_str()) }
-            .and_then(|path| patches.file(table_name(path)))
-        else {
+        let Some(path) = (unsafe { name.as_ref().and_then(|n| n.as_str()) }) else {
+            return resource;
+        };
+
+        let Some(file) = patches.file(table_name(path)) else {
             return resource;
         };
 
