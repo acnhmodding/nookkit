@@ -11,7 +11,7 @@ When a lint has to be silenced, use `#[expect(lint, reason = "...")]` rather tha
 Code should be easily skimmable and not clustered into dense blocks.
 
 - Separate distinct steps of a function (reading, computing, writing) with a blank line.
-- Put a blank line before and after loops, `if` / `match` blocks and any other multiline statement, unless it is the first or last thing in its scope.
+- Put a blank line before and after loops, `if` / `match` blocks and any other multiline statement, unless it is the first or last thing in its scope. A `let ... else { ... };` is multiline too, so consecutive ones are separated by a blank line.
 - Put a blank line before the final return expression.
 - Consecutive one-line statements that belong together (e.g. a run of `let` reads) can stay grouped.
 

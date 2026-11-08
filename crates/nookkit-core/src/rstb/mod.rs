@@ -1,5 +1,6 @@
 mod arena;
 mod cache;
+mod error;
 mod mods;
 mod platform;
 mod redirect;
@@ -16,8 +17,10 @@ use nookkit_rstb::sizing::{
 use nookkit_rstb::table::{PATH as TABLE, Table, Update};
 use nookkit_rstb::yaz0;
 use nookkit_sym::{SymError, sym};
+use nookkit_types::game::resource_mgr::ResourceMgr;
 
 use cache::Cache;
+use error::RstbError;
 use mods::{Copies, Folder};
 
 const CONFIG: &str = "sd:/config/nookkit/rstb";
@@ -32,11 +35,6 @@ const STATE: &str = "sd:/config/nookkit/rstb/state.txt";
 
 const ERROR_CODE: u32 = 2;
 const PLUGINS: &str = "skyline/plugins";
-
-// game::ResourceMgr's ResourceSizeTable, and that table's RSTC and RSTB entry pointers
-const MGR_TABLE: usize = 0x820;
-const TABLE_RSTC_ENTRIES: usize = 0x70;
-const TABLE_RSTB_ENTRIES: usize = 0x50;
 
 static UPDATED: AtomicBool = AtomicBool::new(false);
 
@@ -84,15 +82,16 @@ pub fn install() -> Result<(), SymError> {
 }
 
 fn table_loaded() -> bool {
-    let Ok(instance) = nookkit_sym::data::<usize>(&sym::game::ResourceMgr::sInstance) else {
+    let Ok(instance) = nookkit_sym::data::<*const ResourceMgr>(&sym::game::ResourceMgr::sInstance)
+    else {
         return false;
     };
-    let mgr = unsafe { *instance };
-    if mgr == 0 {
+
+    let Some(mgr) = (unsafe { (*instance).as_ref() }) else {
         return false;
-    }
-    let entries = |offset: usize| unsafe { ((mgr + MGR_TABLE + offset) as *const usize).read() };
-    entries(TABLE_RSTC_ENTRIES) != 0 || entries(TABLE_RSTB_ENTRIES) != 0
+    };
+
+    mgr.size_table.is_loaded()
 }
 
 fn update_once(redirect: bool) {
@@ -109,8 +108,8 @@ fn update_once(redirect: bool) {
                 peak.div_ceil(1 << 20),
                 scan.need >> 20
             ));
-            if !failed {
-                let _ = platform::write(STATE, scan.fingerprint.as_bytes());
+            if !failed && let Err(error) = platform::write(STATE, scan.fingerprint.as_bytes()) {
+                log.line(error);
             }
         }
         Ok(None) => {}
@@ -131,7 +130,7 @@ nookkit_sym::hook! {
     }
 }
 
-fn fail(log: &mut Log, error: &str) {
+fn fail(log: &mut Log, error: &RstbError) {
     log.line(format!("Failed: {error}"));
     show_error(
         "NookKit could not update the resource size table.",
@@ -159,7 +158,7 @@ struct Scan {
 }
 
 // `None` when nothing changed since the table was last written
-fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
+fn scan(log: &mut Log) -> Result<Option<Scan>, RstbError> {
     platform::create_dirs(CONFIG)?;
     let folders = mods::folders()?;
     let (files, counts) = mods::files(&folders)?;
@@ -179,6 +178,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
         ),
         None => "game shader".to_string(),
     };
+
     let epoch = format!(
         "nookkit {} rstb {} {shader}",
         env!("CARGO_PKG_VERSION"),
@@ -216,6 +216,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
         let Some(name) = table_name(relative) else {
             continue;
         };
+
         let Some(path) = source(relative) else {
             for (copy, _) in copies {
                 if let Some(folder) = folders.iter().position(|f| copy.starts_with(&f.root)) {
@@ -224,6 +225,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, String> {
             }
             continue;
         };
+
         let length = mods::length(copies);
         let stamp = mods::stamp(copies).ok();
         let cached = stamp
@@ -305,14 +307,14 @@ fn update(loan: &arena::Loan, scan: &Scan) -> bool {
     let mut log = Log::default();
     log.line(loan.report.trim_end());
     let outcome = match loan.size {
-        0 => Err("No game heap could lend memory to size files".to_string()),
-        size if size < loan.need => Err(format!(
-            "The game's heaps could lend {} MiB of the {} MiB needed",
-            size >> 20,
-            loan.need >> 20
-        )),
+        0 => Err(RstbError::NoLoan),
+        size if size < loan.need => Err(RstbError::LoanTooSmall {
+            lent: size >> 20,
+            need: loan.need >> 20,
+        }),
         _ => run(&mut log, scan),
     };
+
     let failed = outcome.is_err();
     if let Err(error) = outcome {
         fail(&mut log, &error);
@@ -321,7 +323,7 @@ fn update(loan: &arena::Loan, scan: &Scan) -> bool {
     failed
 }
 
-fn run(log: &mut Log, scan: &Scan) -> Result<(), String> {
+fn run(log: &mut Log, scan: &Scan) -> Result<(), RstbError> {
     let mut table = base_table(log, &scan.folders)?;
     size_files(log, &mut table, scan)?;
 
@@ -340,7 +342,7 @@ fn run(log: &mut Log, scan: &Scan) -> Result<(), String> {
 // The saved copy of the game's own table, else the romfs table. That one is the game's own only while
 // no romfs folder has a table, and a mod's table, vanilla plus its own entries, still serves as the base
 // since every modded file is sized again on top
-fn base_table(log: &mut Log, folders: &[Folder]) -> Result<Table, String> {
+fn base_table(log: &mut Log, folders: &[Folder]) -> Result<Table, RstbError> {
     if let Some(bytes) = platform::read_optional(VANILLA_TABLE)? {
         match parse_table(&bytes) {
             Ok(table) => return Ok(table),
@@ -367,10 +369,10 @@ fn base_table(log: &mut Log, folders: &[Folder]) -> Result<Table, String> {
     Ok(table)
 }
 
-fn parse_table(bytes: &[u8]) -> Result<Table, String> {
-    yaz0::decompress(bytes)
-        .and_then(|data| Table::parse(&data))
-        .map_err(|error| error.to_string())
+fn parse_table(bytes: &[u8]) -> Result<Table, RstbError> {
+    let data = yaz0::decompress(bytes)?;
+
+    Ok(Table::parse(&data)?)
 }
 
 // The game's romfs holds the copy the game loads when several folders replace a file. A file missing
@@ -380,7 +382,7 @@ fn source(relative: &str) -> Option<String> {
     platform::file_exists(&path).then_some(path)
 }
 
-fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), String> {
+fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), RstbError> {
     let hints: Vec<_> = scan
         .folders
         .iter()
@@ -407,6 +409,7 @@ fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), Strin
                     GAME_SIZED
                 }),
         };
+
         if let Some(stamp) = &resource.stamp {
             cache.insert(relative, resource.length, stamp.clone(), size);
         }
@@ -434,9 +437,7 @@ fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), Strin
                     log.line(format!(
                         "{relative}: no traced size and larger than its entry, which is removed so the game sizes it"
                     ));
-                    table
-                        .set(name, GAME_SIZED)
-                        .map_err(|error| error.to_string())?;
+                    table.set(name, GAME_SIZED)?;
                     removed += 1;
                 } else {
                     log.line(format!(
@@ -445,6 +446,7 @@ fn size_files(log: &mut Log, table: &mut Table, scan: &Scan) -> Result<(), Strin
                 }
                 continue;
             };
+
             log.line(format!(
                 "{relative}: no traced size, raised to its mod's entry {hint} at least"
             ));

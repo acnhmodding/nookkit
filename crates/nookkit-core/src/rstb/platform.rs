@@ -4,6 +4,8 @@ use std::io::{Read, Write};
 
 use skyline::nn;
 
+use super::error::{RstbError, io};
+
 const ENTRY_FILE: u32 = 1;
 
 // The game's romfs with its mods applied, mounted by sead::FileDeviceMgr before the table loads
@@ -19,6 +21,7 @@ pub fn file_exists(path: &str) -> bool {
     let Some(path) = c_path(path) else {
         return false;
     };
+
     let mut entry_type = 0;
     unsafe {
         nn::fs::GetEntryType(&raw mut entry_type, path.as_ptr().cast()) == 0
@@ -26,11 +29,11 @@ pub fn file_exists(path: &str) -> bool {
     }
 }
 
-pub fn read(path: &str) -> Result<Vec<u8>, String> {
-    fs::read(path).map_err(|e| format!("Reading {path} failed: {e}"))
+pub fn read(path: &str) -> Result<Vec<u8>, RstbError> {
+    fs::read(path).map_err(io("reading", path))
 }
 
-pub fn read_optional(path: &str) -> Result<Option<Vec<u8>>, String> {
+pub fn read_optional(path: &str) -> Result<Option<Vec<u8>>, RstbError> {
     if !file_exists(path) {
         return Ok(None);
     }
@@ -38,7 +41,7 @@ pub fn read_optional(path: &str) -> Result<Option<Vec<u8>>, String> {
 }
 
 // Sized first, as Skyline's std can't write past a file's end
-pub fn write(path: &str, data: &[u8]) -> Result<(), String> {
+pub fn write(path: &str, data: &[u8]) -> Result<(), RstbError> {
     let result = (|| {
         let mut file = OpenOptions::new()
             .write(true)
@@ -49,28 +52,28 @@ pub fn write(path: &str, data: &[u8]) -> Result<(), String> {
         file.write_all(data)?;
         file.flush()
     })();
-    result.map_err(|e| format!("Writing {path} failed: {e}"))
+    result.map_err(io("writing", path))
 }
 
 // Written completely at `temporary` first, so an interrupted write never leaves a partial file
-pub fn replace(path: &str, temporary: &str, data: &[u8]) -> Result<(), String> {
+pub fn replace(path: &str, temporary: &str, data: &[u8]) -> Result<(), RstbError> {
     write(temporary, data)?;
     rename(temporary, path)
 }
 
-fn rename(from: &str, to: &str) -> Result<(), String> {
+fn rename(from: &str, to: &str) -> Result<(), RstbError> {
     remove(to)?;
-    fs::rename(from, to).map_err(|e| format!("Moving {from} to {to} failed: {e}"))
+    fs::rename(from, to).map_err(io("moving", &format!("{from} to {to}")))
 }
 
-pub fn remove(path: &str) -> Result<(), String> {
+pub fn remove(path: &str) -> Result<(), RstbError> {
     if !file_exists(path) {
         return Ok(());
     }
-    fs::remove_file(path).map_err(|e| format!("Deleting {path} failed: {e}"))
+    fs::remove_file(path).map_err(io("deleting", path))
 }
 
-pub fn create_dirs(path: &str) -> Result<(), String> {
+pub fn create_dirs(path: &str) -> Result<(), RstbError> {
     let root = path.find(":/").map_or(0, |at| at + 2);
     for (at, _) in path
         .match_indices('/')
@@ -81,7 +84,7 @@ pub fn create_dirs(path: &str) -> Result<(), String> {
         let _ = fs::create_dir(&path[..at]);
     }
     if fs::read_dir(path).is_err() {
-        return Err(format!("Creating {path} failed."));
+        return Err(RstbError::CreateDir(path.to_owned()));
     }
     Ok(())
 }
@@ -90,17 +93,18 @@ pub fn dir_exists(path: &str) -> bool {
     fs::read_dir(path).is_ok()
 }
 
-pub fn dirs(root: &str) -> Result<Vec<String>, String> {
+pub fn dirs(root: &str) -> Result<Vec<String>, RstbError> {
     let Ok(entries) = fs::read_dir(root) else {
         return Ok(Vec::new());
     };
+
     let mut out = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Listing {root} failed: {e}"))?;
+        let entry = entry.map_err(io("listing", root))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if entry
             .metadata()
-            .map_err(|e| format!("Reading {root}/{name} failed: {e}"))?
+            .map_err(io("reading", &format!("{root}/{name}")))?
             .is_dir()
         {
             out.push(name);
@@ -111,16 +115,16 @@ pub fn dirs(root: &str) -> Result<Vec<String>, String> {
 }
 
 // Paths relative to `root` with their lengths, none when `root` doesn't exist
-pub fn files(root: &str) -> Result<Vec<(String, u64)>, String> {
-    fn walk(root: &str, relative: &str, out: &mut Vec<(String, u64)>) -> Result<(), String> {
+pub fn files(root: &str) -> Result<Vec<(String, u64)>, RstbError> {
+    fn walk(root: &str, relative: &str, out: &mut Vec<(String, u64)>) -> Result<(), RstbError> {
         let dir = if relative.is_empty() {
             root.to_string()
         } else {
             format!("{root}/{relative}")
         };
-        let entries = fs::read_dir(&dir).map_err(|e| format!("Listing {dir} failed: {e}"))?;
+        let entries = fs::read_dir(&dir).map_err(io("listing", &dir))?;
         for entry in entries {
-            let entry = entry.map_err(|e| format!("Listing {dir} failed: {e}"))?;
+            let entry = entry.map_err(io("listing", &dir))?;
             let name = entry.file_name().to_string_lossy().into_owned();
             let path = if relative.is_empty() {
                 name
@@ -129,7 +133,7 @@ pub fn files(root: &str) -> Result<Vec<(String, u64)>, String> {
             };
             let metadata = entry
                 .metadata()
-                .map_err(|e| format!("Reading {dir}/{path} failed: {e}"))?;
+                .map_err(io("reading", &format!("{dir}/{path}")))?;
             if metadata.is_dir() {
                 walk(root, &path, out)?;
             } else {
@@ -158,6 +162,7 @@ pub fn lengths(path: &str) -> (u64, u64) {
         let size = prefix.strip_prefix(b"Yaz0")?.get(..4)?;
         Some(u32::from_be_bytes(size.try_into().ok()?) as u64)
     };
+
     let decompressed = nookkit_rstb::declared_length(prefix)
         .or_else(yaz0)
         .unwrap_or(length);
@@ -166,7 +171,7 @@ pub fn lengths(path: &str) -> (u64, u64) {
 
 // Identifies a file's contents for the size cache by its time stamps, or a hash of its bytes when the
 // file system has none
-pub fn stamp(path: &str) -> Result<String, String> {
+pub fn stamp(path: &str) -> Result<String, RstbError> {
     let mut times = nn::fs::FileTimeStamp::new();
     if let Some(c) = c_path(path)
         && unsafe { nn::fs::GetFileTimeStampForDebug(&raw mut times, c.as_ptr().cast()) } == 0
@@ -174,13 +179,11 @@ pub fn stamp(path: &str) -> Result<String, String> {
     {
         return Ok(format!("t{:x}-{:x}", times.create.time, times.modify.time));
     }
-    let mut file = fs::File::open(path).map_err(|e| format!("Reading {path} failed: {e}"))?;
+    let mut file = fs::File::open(path).map_err(io("reading", path))?;
     let mut hasher = crc32fast::Hasher::new();
     let mut buffer = vec![0u8; 0x10000];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|e| format!("Reading {path} failed: {e}"))?;
+        let read = file.read(&mut buffer).map_err(io("reading", path))?;
         if read == 0 {
             return Ok(format!("c{:08x}", hasher.finalize()));
         }

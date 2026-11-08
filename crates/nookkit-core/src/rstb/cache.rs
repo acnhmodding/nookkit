@@ -2,6 +2,7 @@
 // size depends on the sizing code and the shader archive, which together form the cache's epoch
 use std::collections::BTreeMap;
 
+use super::error::RstbError;
 use super::platform;
 
 #[derive(PartialEq)]
@@ -35,9 +36,11 @@ impl Cache {
                 else {
                     continue;
                 };
+
                 let (Ok(length), Ok(size)) = (length.parse(), size.parse()) else {
                     continue;
                 };
+
                 earlier.insert(
                     relative.to_string(),
                     Sized {
@@ -74,7 +77,7 @@ impl Cache {
         );
     }
 
-    pub fn save(&self, path: &str) -> Result<(), String> {
+    pub fn save(&self, path: &str) -> Result<(), RstbError> {
         if self.current == self.earlier && platform::file_exists(path) {
             return Ok(());
         }

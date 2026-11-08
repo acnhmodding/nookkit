@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use super::error::RstbError;
 use super::platform;
 
 const TITLE: &str = "01006F8002326000";
@@ -15,14 +16,14 @@ pub struct Folder {
 }
 
 // An emulator's SD card is a host folder, case-sensitive on Linux, so the title id may be either case
-fn title_dir(parent: &str) -> Result<Option<String>, String> {
+fn title_dir(parent: &str) -> Result<Option<String>, RstbError> {
     let name = platform::dirs(parent)?
         .into_iter()
         .find(|name| name.eq_ignore_ascii_case(TITLE));
     Ok(name.map(|name| format!("{parent}/{name}")))
 }
 
-fn mod_folders(title: &str, folders: &mut Vec<Folder>) -> Result<(), String> {
+fn mod_folders(title: &str, folders: &mut Vec<Folder>) -> Result<(), RstbError> {
     for name in platform::dirs(title)? {
         let root = format!("{title}/{name}/romfs");
         if !["romfs", "exefs"].contains(&name.as_str()) && platform::dir_exists(&root) {
@@ -32,7 +33,7 @@ fn mod_folders(title: &str, folders: &mut Vec<Folder>) -> Result<(), String> {
     Ok(())
 }
 
-pub fn folders() -> Result<Vec<Folder>, String> {
+pub fn folders() -> Result<Vec<Folder>, RstbError> {
     let mut folders = Vec::new();
     if let Some(title) = title_dir(ATMOSPHERE)? {
         folders.push(Folder {
@@ -50,7 +51,7 @@ pub fn folders() -> Result<Vec<Folder>, String> {
 pub type Copies = Vec<(String, u64)>;
 
 // By romfs path, with each folder's file count
-pub fn files(folders: &[Folder]) -> Result<(BTreeMap<String, Copies>, Vec<usize>), String> {
+pub fn files(folders: &[Folder]) -> Result<(BTreeMap<String, Copies>, Vec<usize>), RstbError> {
     let mut files = BTreeMap::<String, Copies>::new();
     let mut counts = Vec::with_capacity(folders.len());
     for folder in folders {
@@ -68,7 +69,7 @@ pub fn length(copies: &Copies) -> u64 {
     copies.iter().map(|(_, length)| length).sum()
 }
 
-pub fn stamp(copies: &Copies) -> Result<String, String> {
+pub fn stamp(copies: &Copies) -> Result<String, RstbError> {
     let stamps: Result<Vec<_>, _> = copies
         .iter()
         .map(|(path, _)| platform::stamp(path))

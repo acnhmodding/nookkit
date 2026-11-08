@@ -332,6 +332,7 @@ impl<'a> Tagfile<'a> {
         let [root] = roots.as_slice() else {
             return fail(PhysicsError::NotTagfile);
         };
+
         if &root.tag != b"TAG0"
             || file
                 .range(root.end, file.len() - root.end)?
@@ -462,7 +463,7 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
     while start < end {
         let size = (file.u32_be(start)? & 0x3fffffff) as i64;
         if size < 8 || size > end - start {
-            return fail(PhysicsError::InvalidSectionSize);
+            return fail(PhysicsError::InvalidSectionSize { at: start, size });
         }
         let tag = file.array(start + 4)?;
         sections.push(Section {
@@ -477,8 +478,9 @@ fn sections(file: Reader, mut start: i64, end: i64) -> Result<Vec<Section>> {
 
 fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
     let Some(&first) = data.get(*at) else {
-        return fail(PhysicsError::TruncatedVarint);
+        return fail(PhysicsError::TruncatedVarint { at: *at });
     };
+
     let extra = match first {
         0x00..=0x7f => 0,
         0x80..=0xbf => 1,
@@ -488,8 +490,9 @@ fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
         0xf0..=0xf7 => 7,
         0xf8..=0xff => 8,
     };
+
     if data.len() - *at - 1 < extra {
-        return fail(PhysicsError::TruncatedVarint);
+        return fail(PhysicsError::TruncatedVarint { at: *at });
     }
     let mut value: i64 = match extra {
         0 => first as i64,
@@ -498,6 +501,7 @@ fn varint(data: &[u8], at: &mut usize) -> Result<i64> {
         3 | 4 | 7 => (first & 7) as i64,
         _ => 0,
     };
+
     for i in 1..=extra {
         value = value.wrapping_shl(8) | data[*at + i] as i64;
     }

@@ -3,6 +3,7 @@ pub mod control;
 mod focus_node;
 pub mod input;
 mod job;
+pub mod message;
 mod name;
 pub mod page;
 pub mod page_base;
@@ -19,6 +20,7 @@ pub use input::{
     KeyHandler, PlayerInputState,
 };
 pub use job::Job;
+pub use message::{Atr1Header, MessageFile, MsgBlock, MsgStdBinary};
 pub use name::Name;
 pub use page::{Page, PriorityPage, VftPage, VftPageLayout};
 pub use page_base::{PageBase, VftPageBase, VftPageBaseLayout};

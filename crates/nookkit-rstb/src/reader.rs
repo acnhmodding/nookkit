@@ -41,7 +41,7 @@ impl<'a> Reader<'a> {
 
     pub fn range(&self, at: i64, count: i64) -> Result<&'a [u8]> {
         if at < 0 || count < 0 || at > self.len() - count {
-            return fail(Error::OutOfBounds);
+            return fail(Error::OutOfBounds { at, count });
         }
         Ok(&self.data[at as usize..(at + count) as usize])
     }
@@ -52,7 +52,10 @@ impl<'a> Reader<'a> {
 
     pub fn array<const N: usize>(&self, at: i64) -> Result<[u8; N]> {
         let Some(&bytes) = self.range(at, N as i64)?.first_chunk() else {
-            return fail(Error::OutOfBounds);
+            return fail(Error::OutOfBounds {
+                at,
+                count: N as i64,
+            });
         };
 
         Ok(bytes)
@@ -93,7 +96,7 @@ impl<'a> Reader<'a> {
     pub fn pointer(&self, at: i64) -> Result<i64> {
         let value = self.u64(at)?;
         if value > self.len() as u64 {
-            return fail(Error::PointerOutOfBounds);
+            return fail(Error::PointerOutOfBounds { at, value });
         }
         Ok(value as i64)
     }

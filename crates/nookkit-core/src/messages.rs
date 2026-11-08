@@ -5,6 +5,7 @@ use std::sync::{Mutex, OnceLock};
 
 use nookkit_msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
+use nookkit_types::lp::ui::MessageFile;
 use nookkit_types::sead::SafeString;
 
 // The game reads messages only once "content" is mounted
@@ -36,6 +37,7 @@ fn load() -> PatchSet {
                 continue;
             }
         };
+
         read += 1;
 
         match set.add(&name, &json) {
@@ -72,6 +74,7 @@ fn locale() -> Option<&'static str> {
     let language: unsafe extern "C" fn() -> u32 = unsafe {
         core::mem::transmute(nookkit_sym::fun_addr(&sym::game::System::getLanguageImpl).ok()?)
     };
+
     let codes =
         nookkit_sym::data::<[*const c_char; 16]>(&sym::game::System::sLanguageCodes).ok()?;
 
@@ -215,17 +218,15 @@ pub mod find_text {
 
 /// The byte size of the ATR1 entries in the file `handle` is, 0 without attributes
 unsafe fn attribute_size(handle: usize) -> usize {
-    unsafe {
-        let msbt = *(handle as *const *const u8);
-        let section = *msbt.add(0x28).cast::<i32>();
-        if msbt.is_null() || section < 0 {
-            return 0;
-        }
+    let Some(file) = (unsafe { (handle as *const MessageFile).as_ref() }) else {
+        return 0;
+    };
 
-        let sections = *msbt.add(0x18).cast::<*const u8>();
-        let data = *sections.add(section as usize * 0x18).cast::<*const u8>();
-        *data.add(4).cast::<u32>() as usize
-    }
+    let Some(binary) = (unsafe { file.binary.as_ref() }) else {
+        return 0;
+    };
+
+    unsafe { binary.attribute_size() }
 }
 
 type ReadAttribute =
