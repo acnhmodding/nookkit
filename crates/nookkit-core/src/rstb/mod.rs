@@ -10,12 +10,12 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use nookkit_rstb::sizing::{
+use nookkit_formats::rstb::sizing::{
     GAME_SIZED, SHADER_ARCHIVE, SHADER_PEAK_MEMORY, SHADER_RESIDENT_MEMORY, Sizer, TABLE_MEMORY,
     UNSUPPORTED, is_model_archive, sizing_memory, table_name,
 };
-use nookkit_rstb::table::{PATH as TABLE, Table, Update};
-use nookkit_rstb::yaz0;
+use nookkit_formats::rstb::table::{PATH as TABLE, Table, Update};
+use nookkit_formats::rstb::yaz0;
 use nookkit_sym::{SymError, sym};
 use nookkit_types::game::resource_mgr::ResourceMgr;
 
@@ -198,7 +198,7 @@ fn scan(log: &mut Log) -> Result<Option<Scan>, RstbError> {
     let epoch = format!(
         "nookkit {} rstb {} {shader}",
         env!("CARGO_PKG_VERSION"),
-        nookkit_rstb::VERSION
+        nookkit_formats::rstb::VERSION
     );
 
     let mut fingerprint = crc32fast::Hasher::new();

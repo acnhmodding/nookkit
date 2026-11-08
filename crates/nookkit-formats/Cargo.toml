@@ -1,0 +1,50 @@
+[package]
+name = "nookkit-formats"
+version = "0.2.0"
+edition = "2024"
+
+[features]
+default = ["bcsv", "byml", "msbt", "rstb"]
+bcsv = ["dep:serde", "dep:serde_json"]
+byml = ["dep:serde", "dep:serde_json"]
+msbt = ["dep:serde", "dep:serde_json"]
+rstb = ["dep:ruzstd"]
+
+[dependencies]
+crc32fast = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+ruzstd = { workspace = true, optional = true }
+
+[[bin]]
+name = "nookkit-bcsv"
+required-features = ["bcsv"]
+
+[[bin]]
+name = "nookkit-byml"
+required-features = ["byml"]
+
+# Reads the zstd-compressed message archives
+[[bin]]
+name = "nookkit-msbt"
+required-features = ["msbt", "rstb"]
+
+[[example]]
+name = "rstb_check"
+required-features = ["rstb"]
+
+[[test]]
+name = "bcsv"
+required-features = ["bcsv"]
+
+[[test]]
+name = "byml"
+required-features = ["byml"]
+
+[[test]]
+name = "msbt"
+required-features = ["msbt", "rstb"]
+
+[lints]
+workspace = true

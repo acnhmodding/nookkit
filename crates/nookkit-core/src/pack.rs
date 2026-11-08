@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use nookkit_byml::PatchSet;
+use nookkit_formats::byml::PatchSet;
 use nookkit_sym::sym;
 use nookkit_types::game::file_cache::LoadRequest;
 use nookkit_types::sead::SafeString;

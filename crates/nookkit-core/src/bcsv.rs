@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use nookkit_bcsv::{PatchSet, Plan, Table, WriteError};
+use nookkit_formats::bcsv::{PatchSet, Plan, Table, WriteError};
 use nookkit_sym::sym;
 use nookkit_types::bcsv::BcsvMgr;
 use nookkit_types::native;

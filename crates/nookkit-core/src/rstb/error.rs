@@ -17,7 +17,7 @@ pub enum RstbError {
     LoanTooSmall { lent: usize, need: usize },
 
     #[error(transparent)]
-    Rstb(#[from] nookkit_rstb::Error),
+    Rstb(#[from] nookkit_formats::rstb::Error),
 }
 
 pub fn io(action: &'static str, path: &str) -> impl FnOnce(std::io::Error) -> RstbError {

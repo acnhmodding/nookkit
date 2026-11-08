@@ -1,9 +1,9 @@
 use core::ffi::{CStr, c_char, c_void};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use nookkit_msbt::{Attribute, Entry, PatchSet};
+use nookkit_formats::msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
 use nookkit_types::lp::ui::MessageFile;
 use nookkit_types::sead::SafeString;
@@ -176,6 +176,7 @@ pub mod find_text {
     use super::*;
 
     static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
 
     // (handle, label) returning a Text through x8, which Rust can't name, so it's passed on as a
     // third argument
@@ -207,21 +208,9 @@ pub mod find_text {
     }
 
     pub fn install() -> Result<(), nookkit_sym::SymError> {
-        let target = nookkit_sym::fun_addr(&sym::Lp::UI::MessageFile::findText)?;
+        let target = nookkit_sym::fun_addr(&sym::Lp::UI::MessageFile::findText);
 
-        unsafe {
-            nookkit_sym::__hook_function(
-                target as *const _,
-                entry as *const _,
-                ORIGINAL.as_ptr().cast(),
-            );
-        }
-
-        if ORIGINAL.load(Ordering::Acquire) == 0 {
-            return Err(nookkit_sym::SymError::HookFailed(target));
-        }
-
-        Ok(())
+        nookkit_sym::__install(&INSTALLED, &ORIGINAL, target, entry as *const () as usize)
     }
 }
 

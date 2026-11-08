@@ -16,7 +16,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      HOST_CRATES: -p nookkit-hash -p nookkit-sarc -p nookkit-byml -p nookkit-bcsv -p nookkit-msbt -p nookkit-rstb -p nookkit-layouts -p nookkit-sym
+      HOST_CRATES: -p nookkit-formats -p nookkit-layouts -p nookkit-sym
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -32,9 +32,9 @@ jobs:
       - name: Host lints
         run: cargo +stable clippy $HOST_CRATES --all-targets -- -D warnings
 
-      # Generated pane paths, their compile_fail doctests and the symbol file manifests
+      # Generated pane paths, their compile_fail doctests, the symbol file manifests and the file formats
       - name: Host tests
-        run: cargo +stable test -p nookkit-layouts -p nookkit-sym
+        run: cargo +stable test $HOST_CRATES
 
   build:
     runs-on: ubuntu-latest

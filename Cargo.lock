@@ -73,31 +73,12 @@ dependencies = [
 name = "nookkit"
 version = "0.2.0"
 dependencies = [
- "nookkit-hash",
+ "nookkit-formats",
  "nookkit-layouts",
+ "nookkit-sym",
  "nookkit-sys",
  "nookkit-types",
  "skyline",
- "thiserror",
-]
-
-[[package]]
-name = "nookkit-bcsv"
-version = "0.1.0"
-dependencies = [
- "nookkit-hash",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "nookkit-byml"
-version = "0.1.0"
-dependencies = [
- "nookkit-sarc",
- "serde",
- "serde_json",
  "thiserror",
 ]
 
@@ -106,10 +87,7 @@ name = "nookkit-core"
 version = "0.2.0"
 dependencies = [
  "crc32fast",
- "nookkit-bcsv",
- "nookkit-byml",
- "nookkit-msbt",
- "nookkit-rstb",
+ "nookkit-formats",
  "nookkit-sym",
  "nookkit-sys",
  "nookkit-types",
@@ -119,42 +97,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "nookkit-hash"
-version = "0.1.0"
+name = "nookkit-formats"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
 name = "nookkit-layouts"
 version = "0.2.0"
-
-[[package]]
-name = "nookkit-msbt"
-version = "0.2.0"
-dependencies = [
- "nookkit-sarc",
- "ruzstd",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "nookkit-rstb"
-version = "0.2.0"
-dependencies = [
- "crc32fast",
- "nookkit-sarc",
- "ruzstd",
- "thiserror",
-]
-
-[[package]]
-name = "nookkit-sarc"
-version = "0.1.0"
-dependencies = [
- "thiserror",
-]
 
 [[package]]
 name = "nookkit-sym"

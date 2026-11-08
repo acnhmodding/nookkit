@@ -1,4 +1,5 @@
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use skyline::hooks::{Region, getRegionAddress};
 
@@ -76,8 +77,42 @@ pub fn data<T>(symbol: &crate::Data) -> Result<*mut T, SymError> {
     Ok(address(Kind::Data, symbol.name)? as *mut T)
 }
 
+/// Installs the hook behind `hook!`, once. `original` receives the trampoline to the game's function
 #[doc(hidden)]
-pub use skyline::hooks::A64HookFunction as __hook_function;
+pub fn __install(
+    installed: &AtomicBool,
+    original: &AtomicUsize,
+    target: Result<usize, SymError>,
+    replacement: usize,
+) -> Result<(), SymError> {
+    // Hooking twice would make original() call the replacement
+    if installed.swap(true, Ordering::AcqRel) {
+        return Ok(());
+    }
+
+    let target = match target {
+        Ok(target) => target,
+        Err(e) => {
+            installed.store(false, Ordering::Release);
+            return Err(e);
+        }
+    };
+
+    // Written straight into `original`, so a call racing the patch never sees 0
+    unsafe {
+        skyline::hooks::A64HookFunction(
+            target as *const _,
+            replacement as *const _,
+            original.as_ptr().cast(),
+        );
+    }
+
+    if original.load(Ordering::Acquire) == 0 {
+        return Err(SymError::HookFailed(target));
+    }
+
+    Ok(())
+}
 
 #[macro_export]
 macro_rules! hook {
@@ -106,33 +141,7 @@ macro_rules! hook {
             extern "C" fn replacement($($arg: $ty),*) $(-> $ret)? $body
 
             pub fn install() -> ::core::result::Result<(), $crate::SymError> {
-                // Hooking twice would make original() call the replacement
-                if INSTALLED.swap(true, ::core::sync::atomic::Ordering::AcqRel) {
-                    return Ok(());
-                }
-
-                let target = match $crate::fun_addr(&$symbol) {
-                    Ok(target) => target,
-                    Err(e) => {
-                        INSTALLED.store(false, ::core::sync::atomic::Ordering::Release);
-                        return Err(e);
-                    }
-                };
-
-                // Written straight into ORIGINAL, so a call racing the patch never sees 0
-                unsafe {
-                    $crate::__hook_function(
-                        target as *const _,
-                        replacement as *const _,
-                        ORIGINAL.as_ptr().cast(),
-                    );
-                }
-
-                if ORIGINAL.load(::core::sync::atomic::Ordering::Acquire) == 0 {
-                    return Err($crate::SymError::HookFailed(target));
-                }
-
-                Ok(())
+                $crate::__install(&INSTALLED, &ORIGINAL, $crate::fun_addr(&$symbol), replacement as *const () as usize)
             }
         }
     };

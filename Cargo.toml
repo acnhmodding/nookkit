@@ -2,13 +2,8 @@
 members = [
     "crates/nookkit",
     "crates/nookkit-core",
-    "crates/nookkit-bcsv",
-    "crates/nookkit-byml",
-    "crates/nookkit-hash",
+    "crates/nookkit-formats",
     "crates/nookkit-layouts",
-    "crates/nookkit-msbt",
-    "crates/nookkit-rstb",
-    "crates/nookkit-sarc",
     "crates/nookkit-sym",
     "crates/nookkit-sys",
     "crates/nookkit-types",
@@ -34,14 +29,9 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 talc = { version = "4.4", default-features = false }
 
 nookkit = { path = "crates/nookkit" }
-nookkit-bcsv = { path = "crates/nookkit-bcsv" }
-nookkit-byml = { path = "crates/nookkit-byml" }
 nookkit-core = { path = "crates/nookkit-core" }
-nookkit-hash = { path = "crates/nookkit-hash" }
+nookkit-formats = { path = "crates/nookkit-formats", default-features = false }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
-nookkit-msbt = { path = "crates/nookkit-msbt" }
-nookkit-rstb = { path = "crates/nookkit-rstb" }
-nookkit-sarc = { path = "crates/nookkit-sarc" }
 nookkit-sym = { path = "crates/nookkit-sym" }
 nookkit-sys = { path = "crates/nookkit-sys" }
 nookkit-types = { path = "crates/nookkit-types" }

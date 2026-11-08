@@ -186,7 +186,7 @@ pub fn lengths(path: &str) -> (u64, u64) {
 
     let prefix = &prefix[..read];
 
-    let decompressed = if let Some(declared) = nookkit_rstb::declared_length(prefix) {
+    let decompressed = if let Some(declared) = nookkit_formats::rstb::declared_length(prefix) {
         declared
     } else if let Some(size) = prefix
         .strip_prefix(b"Yaz0")

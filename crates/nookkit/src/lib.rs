@@ -19,12 +19,14 @@ use nookkit_types::native::SymbolKind as NativeKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
-pub use nookkit_hash as hash;
+pub use nookkit_formats::hash;
 pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, RelPath, kind, layouts, pages};
 pub use nookkit_sys::Player;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
-pub use offsets::{__hook_function, module_base};
+pub use offsets::module_base;
+#[doc(hidden)]
+pub use offsets::{__Kind, __SymError, __install};
 pub use page::{Event, Page, Pane, Seq, SeqState, StateHooks};
 
 #[non_exhaustive]
@@ -74,6 +76,16 @@ pub enum UiError {
 }
 
 pub type Result<T = (), E = UiError> = core::result::Result<T, E>;
+
+impl From<nookkit_sym::SymError> for UiError {
+    fn from(error: nookkit_sym::SymError) -> Self {
+        match error {
+            nookkit_sym::SymError::UnsupportedBuild { .. } => UiError::UnsupportedBuild,
+            nookkit_sym::SymError::HookFailed(_) => UiError::HookFailed,
+            _ => UiError::MissingSymbol,
+        }
+    }
+}
 
 fn check(status: Status) -> Result {
     Err(match status {

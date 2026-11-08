@@ -14,10 +14,7 @@ skyline = { workspace = true }
 nookkit-sys = { workspace = true }
 nookkit-sym = { workspace = true, features = ["skyline"] }
 nookkit-types = { workspace = true }
-nookkit-bcsv = { workspace = true }
-nookkit-byml = { workspace = true }
-nookkit-msbt = { workspace = true }
-nookkit-rstb = { workspace = true }
+nookkit-formats = { workspace = true, features = ["bcsv", "byml", "msbt", "rstb"] }
 crc32fast = { workspace = true }
 thiserror = { workspace = true }
 talc = { workspace = true }

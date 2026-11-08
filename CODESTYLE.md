@@ -139,7 +139,7 @@ pub struct UserData {
 
 Using offsets in a pointer to access game memory should be avoided in the case that the game updates, new structures should be created in [nookkit-types](crates/nookkit-types).
 
-This doesn't apply to parsers of file formats (e.g. BFRES in nookkit-rstb), which read offsets from the format's own layout. Give an offset a named const when it is used more than once.
+This doesn't apply to parsers of file formats (e.g. BFRES in nookkit-formats), which read offsets from the format's own layout. Give an offset a named const when it is used more than once.
 
 ### Bad
 
