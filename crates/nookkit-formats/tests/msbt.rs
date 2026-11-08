@@ -37,8 +37,7 @@ fn every_message_round_trips() {
                 continue;
             };
 
-            let msbt =
-                Msbt::parse(member.data(&data)).unwrap_or_else(|| panic!("{name} isn't an MSBT"));
+            let msbt = Msbt::parse(member.data(&data)).unwrap_or_else(|e| panic!("{name}: {e}"));
 
             for (index, units) in msbt.texts.iter().enumerate() {
                 messages += 1;

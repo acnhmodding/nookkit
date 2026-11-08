@@ -19,7 +19,7 @@ fn check(romfs: &str, paths: &[String]) -> Result<(), String> {
     for file in set.files() {
         let path = Path::new(romfs).join("Bcsv").join(format!("{file}.bcsv"));
         let data = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let table = Table::parse(&data).ok_or_else(|| format!("{}: not a BCSV", path.display()))?;
+        let table = Table::parse(&data).map_err(|e| format!("{}: {e}", path.display()))?;
 
         let plan = set.plan(file, &table);
 

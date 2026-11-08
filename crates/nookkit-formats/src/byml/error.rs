@@ -11,8 +11,8 @@ pub enum ParseError {
     #[error("version {0}, the game reads 1 to 4")]
     Version(u16),
 
-    #[error("{offset:#x} is past the end")]
-    OutOfBounds { offset: usize },
+    #[error(transparent)]
+    OutOfBounds(#[from] crate::bytes::OutOfBounds),
 
     #[error("{offset:#x}: not a string table")]
     NotStringTable { offset: usize },

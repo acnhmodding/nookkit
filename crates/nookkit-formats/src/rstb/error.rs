@@ -41,8 +41,11 @@ pub enum Error {
     #[error("arithmetic operation resulted in an overflow")]
     Overflow,
 
-    #[error("resource data exceeds its bounds, {count} bytes at 0x{at:X}")]
-    OutOfBounds { at: i64, count: i64 },
+    #[error(transparent)]
+    OutOfBounds(#[from] crate::bytes::OutOfBounds),
+
+    #[error("negative offset or length {0}")]
+    Negative(i64),
 
     #[error("resource pointer 0x{value:X} at 0x{at:X} exceeds its bounds")]
     PointerOutOfBounds { at: i64, value: u64 },

@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 
+use crate::bytes;
 use crate::rstb::error::{BfresError, Error, Result, fail};
 
 // Fails instead of aborting when the file does not fit in memory
@@ -29,26 +30,28 @@ pub(crate) fn to_int(value: i64) -> Result<i64> {
     Ok(value)
 }
 
+fn index(value: i64) -> Result<usize> {
+    usize::try_from(value).or_else(|_| fail(Error::Negative(value)))
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct Reader<'a> {
-    data: &'a [u8],
+    bytes: bytes::Reader<'a>,
 }
 
 impl<'a> Reader<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        Reader { data }
+        Reader {
+            bytes: bytes::Reader::new(data),
+        }
     }
 
     pub fn len(&self) -> i64 {
-        self.data.len() as i64
+        self.bytes.len() as i64
     }
 
     pub fn range(&self, at: i64, count: i64) -> Result<&'a [u8]> {
-        if at < 0 || count < 0 || at > self.len() - count {
-            return fail(Error::OutOfBounds { at, count });
-        }
-
-        Ok(&self.data[at as usize..(at + count) as usize])
+        Ok(self.bytes.bytes_at(index(at)?, index(count)?)?)
     }
 
     pub fn slice(&self, at: i64, count: i64) -> Result<Reader<'a>> {
@@ -56,30 +59,23 @@ impl<'a> Reader<'a> {
     }
 
     pub fn array<const N: usize>(&self, at: i64) -> Result<[u8; N]> {
-        let Some(&bytes) = self.range(at, N as i64)?.first_chunk() else {
-            return fail(Error::OutOfBounds {
-                at,
-                count: N as i64,
-            });
-        };
-
-        Ok(bytes)
+        Ok(self.bytes.array_at(index(at)?)?)
     }
 
     pub fn byte(&self, at: i64) -> Result<u8> {
-        Ok(self.range(at, 1)?[0])
+        Ok(self.bytes.u8_at(index(at)?)?)
     }
 
     pub fn u16(&self, at: i64) -> Result<u16> {
-        Ok(u16::from_le_bytes(self.array(at)?))
+        Ok(self.bytes.u16_at(index(at)?)?)
     }
 
     pub fn u32(&self, at: i64) -> Result<u32> {
-        Ok(u32::from_le_bytes(self.array(at)?))
+        Ok(self.bytes.u32_at(index(at)?)?)
     }
 
     pub fn u64(&self, at: i64) -> Result<u64> {
-        Ok(u64::from_le_bytes(self.array(at)?))
+        Ok(self.bytes.u64_at(index(at)?)?)
     }
 
     pub fn u32_be(&self, at: i64) -> Result<u32> {
@@ -87,7 +83,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn magic(&self, at: i64, magic: &[u8]) -> Result<bool> {
-        Ok(self.range(at, magic.len() as i64)? == magic)
+        Ok(self.bytes.magic_at(index(at)?, magic)?)
     }
 
     pub fn require_magic(&self, at: i64, magic: &[u8]) -> Result<()> {

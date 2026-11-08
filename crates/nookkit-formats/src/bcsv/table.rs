@@ -1,4 +1,5 @@
-use crate::bcsv::error::WriteError;
+use crate::bcsv::error::{ParseError, WriteError};
+use crate::bytes::{OutOfBounds, Reader, Writer};
 
 /// A column: its name's CRC32 and where its cell sits in a row. The cell runs to the next column or
 /// the end of the row
@@ -31,10 +32,10 @@ struct FieldInfo {
 }
 
 impl FieldInfo {
-    fn read(bytes: &mut Bytes) -> Option<Self> {
-        Some(Self {
-            hash: bytes.u32()?,
-            offset: bytes.u32()?,
+    fn read(reader: &mut Reader) -> Result<Self, OutOfBounds> {
+        Ok(Self {
+            hash: reader.read_u32()?,
+            offset: reader.read_u32()?,
         })
     }
 }
@@ -42,57 +43,25 @@ impl FieldInfo {
 impl Header {
     const SIZE: usize = 0xc;
 
-    fn read(bytes: &mut Bytes) -> Option<Self> {
-        Some(Self {
-            row_count: bytes.u32()?,
-            row_size: bytes.u32()?,
-            field_count: bytes.u16()?,
-            has_ext_header: bytes.u8()? != 0,
-            lang: bytes.u8()?,
+    fn read(reader: &mut Reader) -> Result<Self, OutOfBounds> {
+        Ok(Self {
+            row_count: reader.read_u32()?,
+            row_size: reader.read_u32()?,
+            field_count: reader.read_u16()?,
+            has_ext_header: reader.read_u8()? != 0,
+            lang: reader.read_u8()?,
         })
     }
 
-    fn to_bytes(self) -> [u8; Self::SIZE] {
-        let mut out = [0; Self::SIZE];
-        let (row_count, rest) = out.split_at_mut(4);
-        let (row_size, rest) = rest.split_at_mut(4);
-        let (field_count, rest) = rest.split_at_mut(2);
-        row_count.copy_from_slice(&self.row_count.to_le_bytes());
-        row_size.copy_from_slice(&self.row_size.to_le_bytes());
-        field_count.copy_from_slice(&self.field_count.to_le_bytes());
-        rest.copy_from_slice(&[self.has_ext_header as u8, self.lang]);
+    fn to_bytes(self) -> Vec<u8> {
+        let mut out = Writer::default();
+        out.write_u32(self.row_count);
+        out.write_u32(self.row_size);
+        out.write_u16(self.field_count);
+        out.write_u8(self.has_ext_header as u8);
+        out.write_u8(self.lang);
 
-        out
-    }
-}
-
-struct Bytes<'a>(&'a [u8]);
-
-impl<'a> Bytes<'a> {
-    fn array<const N: usize>(&mut self) -> Option<[u8; N]> {
-        let (array, rest) = self.0.split_first_chunk::<N>()?;
-        self.0 = rest;
-
-        Some(*array)
-    }
-
-    fn u8(&mut self) -> Option<u8> {
-        self.array().map(u8::from_le_bytes)
-    }
-
-    fn u16(&mut self) -> Option<u16> {
-        self.array().map(u16::from_le_bytes)
-    }
-
-    fn u32(&mut self) -> Option<u32> {
-        self.array().map(u32::from_le_bytes)
-    }
-
-    fn take(&mut self, len: usize) -> Option<&'a [u8]> {
-        let (taken, rest) = self.0.split_at_checked(len)?;
-        self.0 = rest;
-
-        Some(taken)
+        out.into_bytes()
     }
 }
 
@@ -110,24 +79,31 @@ pub struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub fn parse(data: &'a [u8]) -> Option<Self> {
-        let mut bytes = Bytes(data);
-        let header = Header::read(&mut bytes)?;
+    pub fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        let mut reader = Reader::new(data);
+        let header = Header::read(&mut reader)?;
         let row_count = header.row_count as usize;
         let row_size = header.row_size as usize;
 
-        let head = bytes.0;
+        let head_start = reader.pos();
 
-        if header.has_ext_header && !bytes.take(EXT_HEADER_SIZE)?.starts_with(EXT_MAGIC) {
-            return None;
+        if header.has_ext_header && !reader.read_bytes(EXT_HEADER_SIZE)?.starts_with(EXT_MAGIC) {
+            return Err(ParseError::ExtHeader);
         }
 
-        let mut fields = (0..header.field_count)
-            .map(|_| FieldInfo::read(&mut bytes))
-            .collect::<Option<Vec<_>>>()?;
+        let mut fields = Vec::with_capacity(header.field_count as usize + 1);
 
-        let head = &head[..head.len() - bytes.0.len()];
-        let rows = bytes.take(row_count.checked_mul(row_size)?)?;
+        for _ in 0..header.field_count {
+            fields.push(FieldInfo::read(&mut reader)?);
+        }
+
+        let head = reader.bytes_at(head_start, reader.pos() - head_start)?;
+
+        let Some(rows_len) = row_count.checked_mul(row_size) else {
+            return Err(ParseError::RowsOverflow);
+        };
+
+        let rows = reader.read_bytes(rows_len)?;
 
         // Cell sizes come from the offsets, which the files list in order
         fields.push(FieldInfo {
@@ -135,20 +111,23 @@ impl<'a> Table<'a> {
             offset: header.row_size,
         });
 
-        let columns = fields
-            .windows(2)
-            .map(|pair| {
-                let (field, next) = (pair[0], pair[1]);
+        let mut columns = Vec::with_capacity(fields.len());
 
-                Some(Column {
-                    hash: field.hash,
-                    offset: field.offset as usize,
-                    size: next.offset.checked_sub(field.offset)? as usize,
-                })
-            })
-            .collect::<Option<Vec<_>>>()?;
+        for (index, pair) in fields.windows(2).enumerate() {
+            let (field, next) = (pair[0], pair[1]);
 
-        Some(Self {
+            let Some(size) = next.offset.checked_sub(field.offset) else {
+                return Err(ParseError::ColumnOrder { index });
+            };
+
+            columns.push(Column {
+                hash: field.hash,
+                offset: field.offset as usize,
+                size: size as usize,
+            });
+        }
+
+        Ok(Self {
             header,
             head,
             rows,
@@ -243,20 +222,20 @@ mod tests {
 
     /// Two columns, a u16 at 4 and a u8 padded to 4 at 8, with one row
     pub(crate) fn small() -> Vec<u8> {
-        let mut data = Vec::new();
-        data.extend_from_slice(&1u32.to_le_bytes());
-        data.extend_from_slice(&12u32.to_le_bytes());
-        data.extend_from_slice(&2u16.to_le_bytes());
-        data.extend_from_slice(&[0, 1]);
+        let mut data = Writer::default();
+        data.write_u32(1);
+        data.write_u32(12);
+        data.write_u16(2);
+        data.write_bytes(&[0, 1]);
 
-        for (hash, offset) in [(0x1111_1111u32, 4u32), (0x2222_2222, 8)] {
-            data.extend_from_slice(&hash.to_le_bytes());
-            data.extend_from_slice(&offset.to_le_bytes());
+        for (hash, offset) in [(0x1111_1111, 4), (0x2222_2222, 8)] {
+            data.write_u32(hash);
+            data.write_u32(offset);
         }
 
-        data.extend_from_slice(&[0x1c, 0, 0, 0, 7, 0, 0, 0, 3, 0, 0, 0]);
+        data.write_bytes(&[0x1c, 0, 0, 0, 7, 0, 0, 0, 3, 0, 0, 0]);
 
-        data
+        data.into_bytes()
     }
 
     #[test]
@@ -317,7 +296,7 @@ mod tests {
     #[test]
     fn rejects_truncated_tables() {
         let data = small();
-        assert!(Table::parse(&data[..data.len() - 1]).is_none());
-        assert!(Table::parse(&data[..8]).is_none());
+        assert!(Table::parse(&data[..data.len() - 1]).is_err());
+        assert!(Table::parse(&data[..8]).is_err());
     }
 }

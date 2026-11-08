@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::byml::error::{ParseError, WriteError};
+use crate::bytes::{self, Slot};
+
+pub use crate::bytes::Endian;
 
 /// How deep the reader follows containers, which keeps a file that loops from recursing forever
 pub const MAX_DEPTH: usize = 256;
@@ -19,15 +22,6 @@ const UINT64: u8 = 0xd5;
 const NULL: u8 = 0xff;
 
 const MAX_COUNT: usize = 0xff_ffff;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Endian {
-    /// `YB`
-    Little,
-
-    /// `BY`
-    Big,
-}
 
 /// The byte order and version (1 to 4) a file is written in
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,30 +124,25 @@ struct Header {
 }
 
 impl Header {
-    const SIZE: usize = 0x10;
-
     fn read(data: &[u8]) -> Result<Self, ParseError> {
         let format = Format::read(data)?;
 
-        let bytes = Bytes {
-            data,
-            endian: format.endian,
-        };
+        let bytes = bytes::Reader::with_endian(data, format.endian);
 
         Ok(Self {
             format,
-            keys: bytes.u32(4)?,
-            strings: bytes.u32(8)?,
-            root: bytes.u32(0xc)?,
+            keys: bytes.u32_at(4)?,
+            strings: bytes.u32_at(8)?,
+            root: bytes.u32_at(0xc)?,
         })
     }
 
-    fn write(self, out: &mut Out) {
-        out.buf[..2].copy_from_slice(&self.format.magic());
-        out.set_u16(2, self.format.version);
-        out.set_u32(4, self.keys);
-        out.set_u32(8, self.strings);
-        out.set_u32(0xc, self.root);
+    // The key table, string table and root offsets, filled in once they are written
+    fn reserve(format: Format, out: &mut bytes::Writer) -> [Slot<4>; 3] {
+        out.write_bytes(&format.magic());
+        out.write_u16(format.version);
+
+        [out.reserve(), out.reserve(), out.reserve()]
     }
 }
 
@@ -164,16 +153,16 @@ struct ContainerHeader {
 }
 
 impl ContainerHeader {
-    fn read(bytes: Bytes, offset: usize) -> Result<Self, ParseError> {
+    fn read(bytes: bytes::Reader, offset: usize) -> Result<Self, ParseError> {
         Ok(Self {
-            node_type: bytes.u8(offset)?,
-            count: bytes.u24(offset + 1)? as usize,
+            node_type: bytes.u8_at(offset)?,
+            count: bytes.u24_at(offset + 1)? as usize,
         })
     }
 
-    fn write(self, out: &mut Out) -> Result<(), WriteError> {
-        out.u8(self.node_type);
-        out.u24(count(self.count)?);
+    fn write(self, out: &mut bytes::Writer) -> Result<(), WriteError> {
+        out.write_u8(self.node_type);
+        out.write_u24(count(self.count)?);
 
         Ok(())
     }
@@ -189,11 +178,11 @@ struct DictEntry {
 impl DictEntry {
     const SIZE: usize = 8;
 
-    fn read(bytes: Bytes, offset: usize) -> Result<Self, ParseError> {
+    fn read(bytes: bytes::Reader, offset: usize) -> Result<Self, ParseError> {
         Ok(Self {
-            key: bytes.u24(offset)?,
-            node_type: bytes.u8(offset + 3)?,
-            value: bytes.u32(offset + 4)?,
+            key: bytes.u24_at(offset)?,
+            node_type: bytes.u8_at(offset + 3)?,
+            value: bytes.u32_at(offset + 4)?,
         })
     }
 }
@@ -202,57 +191,9 @@ fn array_values(offset: usize, count: usize) -> usize {
     offset + 4 + count.next_multiple_of(4)
 }
 
-#[derive(Clone, Copy)]
-struct Bytes<'a> {
-    data: &'a [u8],
-    endian: Endian,
-}
-
-impl<'a> Bytes<'a> {
-    fn slice(self, offset: usize, len: usize) -> Result<&'a [u8], ParseError> {
-        let Some(end) = offset.checked_add(len) else {
-            return Err(ParseError::OutOfBounds { offset });
-        };
-
-        self.data
-            .get(offset..end)
-            .ok_or(ParseError::OutOfBounds { offset })
-    }
-
-    fn array<const N: usize>(self, offset: usize) -> Result<[u8; N], ParseError> {
-        let slice = self.slice(offset, N)?;
-        let mut array = [0; N];
-        array.copy_from_slice(slice);
-
-        if self.endian == Endian::Big {
-            array.reverse();
-        }
-
-        Ok(array)
-    }
-
-    fn u8(self, offset: usize) -> Result<u8, ParseError> {
-        Ok(self.array::<1>(offset)?[0])
-    }
-
-    fn u24(self, offset: usize) -> Result<u32, ParseError> {
-        let [a, b, c] = self.array(offset)?;
-
-        Ok(u32::from_le_bytes([a, b, c, 0]))
-    }
-
-    fn u32(self, offset: usize) -> Result<u32, ParseError> {
-        self.array(offset).map(u32::from_le_bytes)
-    }
-
-    fn u64(self, offset: usize) -> Result<u64, ParseError> {
-        self.array(offset).map(u64::from_le_bytes)
-    }
-}
-
 // A string table: a count, the offset of each string and of the end, then the strings with a
 // NUL after each
-fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
+fn read_table(bytes: bytes::Reader, offset: u32) -> Result<Vec<String>, ParseError> {
     if offset == 0 {
         return Ok(Vec::new());
     }
@@ -264,14 +205,14 @@ fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
         return Err(ParseError::NotStringTable { offset });
     }
 
-    bytes.slice(offset + 4, (header.count + 1) * 4)?;
+    bytes.bytes_at(offset + 4, (header.count + 1) * 4)?;
 
     let mut strings = Vec::with_capacity(header.count);
 
     for index in 0..header.count {
-        let start = offset + bytes.u32(offset + 4 + index * 4)? as usize;
-        let end = offset + bytes.u32(offset + 8 + index * 4)? as usize;
-        let text = bytes.slice(start, end.saturating_sub(start))?;
+        let start = offset + bytes.u32_at(offset + 4 + index * 4)? as usize;
+        let end = offset + bytes.u32_at(offset + 8 + index * 4)? as usize;
+        let text = bytes.bytes_at(start, end.saturating_sub(start))?;
 
         let Some(nul) = text.iter().position(|&b| b == 0) else {
             return Err(ParseError::NotStringTable { offset });
@@ -287,7 +228,7 @@ fn read_table(bytes: Bytes, offset: u32) -> Result<Vec<String>, ParseError> {
 }
 
 struct Reader<'a> {
-    bytes: Bytes<'a>,
+    bytes: bytes::Reader<'a>,
     keys: Vec<String>,
     strings: Vec<String>,
 }
@@ -310,16 +251,16 @@ impl Reader<'_> {
                     .clone(),
             ),
             BINARY => {
-                let len = self.bytes.u32(offset)? as usize;
-                Node::Binary(self.bytes.slice(offset + 4, len)?.to_vec())
+                let len = self.bytes.u32_at(offset)? as usize;
+                Node::Binary(self.bytes.bytes_at(offset + 4, len)?.to_vec())
             }
             ARRAY | DICT => self.container(node_type, offset, depth)?,
             BOOL => Node::Bool(value != 0),
             INT => Node::Int(value as i32),
             FLOAT => Node::Float(f32::from_bits(value)),
             UINT => Node::UInt(value),
-            INT64 => Node::Int64(self.bytes.u64(offset)? as i64),
-            UINT64 => Node::UInt64(self.bytes.u64(offset)?),
+            INT64 => Node::Int64(self.bytes.u64_at(offset)? as i64),
+            UINT64 => Node::UInt64(self.bytes.u64_at(offset)?),
             NULL => Node::Null,
             _ => {
                 return Err(ParseError::Type {
@@ -348,19 +289,19 @@ impl Reader<'_> {
         let count = header.count;
 
         if node_type == ARRAY {
-            let types = self.bytes.slice(offset + 4, count)?;
+            let types = self.bytes.bytes_at(offset + 4, count)?;
             let values = array_values(offset, count);
             let mut items = Vec::with_capacity(count);
 
             for (index, &item) in types.iter().enumerate() {
-                let value = self.bytes.u32(values + index * 4)?;
+                let value = self.bytes.u32_at(values + index * 4)?;
                 items.push(self.node(item, value, offset, depth + 1)?);
             }
 
             return Ok(Node::Array(items));
         }
 
-        self.bytes.slice(offset + 4, count * DictEntry::SIZE)?;
+        self.bytes.bytes_at(offset + 4, count * DictEntry::SIZE)?;
         let mut dict = BTreeMap::new();
 
         for index in 0..count {
@@ -394,10 +335,7 @@ impl Byml {
             });
         }
 
-        let bytes = Bytes {
-            data,
-            endian: format.endian,
-        };
+        let bytes = bytes::Reader::with_endian(data, format.endian);
 
         let reader = Reader {
             bytes,
@@ -406,7 +344,7 @@ impl Byml {
         };
 
         let root = header.root as usize;
-        let node_type = bytes.u8(root)?;
+        let node_type = bytes.u8_at(root)?;
 
         if !matches!(node_type, ARRAY | DICT) {
             return Err(ParseError::Root);
@@ -430,27 +368,24 @@ impl Byml {
         let keys: Vec<&str> = keys.into_iter().collect();
         let strings: Vec<&str> = strings.into_iter().collect();
 
-        let mut out = Out {
-            buf: vec![0; Header::SIZE],
-            endian: self.format.endian,
-        };
+        let mut out = bytes::Writer::new(self.format.endian);
+        let [keys_slot, strings_slot, root_slot] = Header::reserve(self.format, &mut out);
 
-        let mut header = Header {
-            format: self.format,
-            keys: write_table(&mut out, &keys)?,
-            strings: write_table(&mut out, &strings)?,
-            root: 0,
-        };
+        let keys_at = write_table(&mut out, &keys)?;
+        out.fill_u32(keys_slot, keys_at);
+
+        let strings_at = write_table(&mut out, &strings)?;
+        out.fill_u32(strings_slot, strings_at);
 
         if !matches!(self.root, Node::Null) {
             let mut writer = Writer { out, keys, strings };
-            header.root = writer.value(&self.root)?;
+            let root = writer.value(&self.root)?;
+
             out = writer.out;
+            out.fill_u32(root_slot, root);
         }
 
-        header.write(&mut out);
-
-        Ok(out.buf)
+        Ok(out.into_bytes())
     }
 }
 
@@ -504,12 +439,16 @@ fn index(table: &[&str], text: &str) -> u32 {
     table.partition_point(|t| *t < text) as u32
 }
 
-fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
+fn offset(out: &bytes::Writer) -> Result<u32, WriteError> {
+    u32::try_from(out.pos()).map_err(|_| WriteError::TooLarge)
+}
+
+fn write_table(out: &mut bytes::Writer, table: &[&str]) -> Result<u32, WriteError> {
     if table.is_empty() {
         return Ok(0);
     }
 
-    let start = out.pos()?;
+    let start = offset(out)?;
 
     ContainerHeader {
         node_type: STRING_TABLE,
@@ -520,78 +459,24 @@ fn write_table(out: &mut Out, table: &[&str]) -> Result<u32, WriteError> {
     let mut at = 4 + (table.len() + 1) * 4;
 
     for text in table {
-        out.u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
+        out.write_u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
         at += text.len() + 1;
     }
 
-    out.u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
+    out.write_u32(u32::try_from(at).map_err(|_| WriteError::TooLarge)?);
 
     for text in table {
-        out.buf.extend_from_slice(text.as_bytes());
-        out.u8(0);
+        out.write_bytes(text.as_bytes());
+        out.write_u8(0);
     }
 
-    out.align();
+    out.align(4);
 
     Ok(start)
 }
 
-struct Out {
-    buf: Vec<u8>,
-    endian: Endian,
-}
-
-impl Out {
-    fn pos(&self) -> Result<u32, WriteError> {
-        u32::try_from(self.buf.len()).map_err(|_| WriteError::TooLarge)
-    }
-
-    fn bytes<const N: usize>(&self, mut le: [u8; N]) -> [u8; N] {
-        if self.endian == Endian::Big {
-            le.reverse();
-        }
-
-        le
-    }
-
-    fn u8(&mut self, value: u8) {
-        self.buf.push(value);
-    }
-
-    fn u24(&mut self, value: u32) {
-        let [a, b, c, _] = value.to_le_bytes();
-        let bytes = self.bytes([a, b, c]);
-        self.buf.extend_from_slice(&bytes);
-    }
-
-    fn u32(&mut self, value: u32) {
-        let bytes = self.bytes(value.to_le_bytes());
-        self.buf.extend_from_slice(&bytes);
-    }
-
-    fn u64(&mut self, value: u64) {
-        let bytes = self.bytes(value.to_le_bytes());
-        self.buf.extend_from_slice(&bytes);
-    }
-
-    fn set_u16(&mut self, at: usize, value: u16) {
-        let bytes = self.bytes(value.to_le_bytes());
-        self.buf[at..at + 2].copy_from_slice(&bytes);
-    }
-
-    fn set_u32(&mut self, at: usize, value: u32) {
-        let bytes = self.bytes(value.to_le_bytes());
-        self.buf[at..at + 4].copy_from_slice(&bytes);
-    }
-
-    fn align(&mut self) {
-        let len = self.buf.len().next_multiple_of(4);
-        self.buf.resize(len, 0);
-    }
-}
-
 struct Writer<'n> {
-    out: Out,
+    out: bytes::Writer,
     keys: Vec<&'n str>,
     strings: Vec<&'n str>,
 }
@@ -601,17 +486,17 @@ impl<'n> Writer<'n> {
         Ok(match node {
             Node::String(text) => index(&self.strings, text),
             Node::Binary(data) => {
-                let at = self.out.pos()?;
+                let at = offset(&self.out)?;
 
                 self.out
-                    .u32(u32::try_from(data.len()).map_err(|_| WriteError::TooLarge)?);
+                    .write_u32(u32::try_from(data.len()).map_err(|_| WriteError::TooLarge)?);
 
-                self.out.buf.extend_from_slice(data);
-                self.out.align();
+                self.out.write_bytes(data);
+                self.out.align(4);
                 at
             }
             Node::Array(items) => {
-                let at = self.out.pos()?;
+                let at = offset(&self.out)?;
 
                 ContainerHeader {
                     node_type: ARRAY,
@@ -620,22 +505,22 @@ impl<'n> Writer<'n> {
                 .write(&mut self.out)?;
 
                 for item in items {
-                    self.out.u8(item.node_type());
+                    self.out.write_u8(item.node_type());
                 }
 
-                self.out.align();
-                let values = self.out.buf.len();
-                self.out.buf.resize(values + items.len() * 4, 0);
+                self.out.align(4);
 
-                for (index, item) in items.iter().enumerate() {
+                let slots: Vec<Slot<4>> = items.iter().map(|_| self.out.reserve()).collect();
+
+                for (slot, item) in slots.into_iter().zip(items) {
                     let value = self.value(item)?;
-                    self.out.set_u32(values + index * 4, value);
+                    self.out.fill_u32(slot, value);
                 }
 
                 at
             }
             Node::Dict(dict) => {
-                let at = self.out.pos()?;
+                let at = offset(&self.out)?;
 
                 ContainerHeader {
                     node_type: DICT,
@@ -643,19 +528,17 @@ impl<'n> Writer<'n> {
                 }
                 .write(&mut self.out)?;
 
-                let entries = self.out.buf.len();
+                let mut slots = Vec::with_capacity(dict.len());
 
                 for (key, item) in dict {
-                    self.out.u24(index(&self.keys, key));
-                    self.out.u8(item.node_type());
-                    self.out.u32(0);
+                    self.out.write_u24(index(&self.keys, key));
+                    self.out.write_u8(item.node_type());
+                    slots.push(self.out.reserve());
                 }
 
-                for (index, item) in dict.values().enumerate() {
+                for (slot, item) in slots.into_iter().zip(dict.values()) {
                     let value = self.value(item)?;
-
-                    self.out
-                        .set_u32(entries + index * DictEntry::SIZE + 4, value);
+                    self.out.fill_u32(slot, value);
                 }
 
                 at
@@ -671,8 +554,8 @@ impl<'n> Writer<'n> {
     }
 
     fn u64(&mut self, value: u64) -> Result<u32, WriteError> {
-        let at = self.out.pos()?;
-        self.out.u64(value);
+        let at = offset(&self.out)?;
+        self.out.write_u64(value);
 
         Ok(at)
     }
@@ -725,14 +608,11 @@ mod tests {
         assert_eq!(&data[..4], b"YB\x04\x00");
         assert_eq!(u32::from_le_bytes(data[4..8].try_into().unwrap()), 0x10);
 
-        let bytes = Bytes {
-            data: &data,
-            endian: Endian::Little,
-        };
+        let bytes = bytes::Reader::new(&data);
 
         let keys = read_table(bytes, 0x10).unwrap();
         assert_eq!(keys, ["a", "b", "list", "n", "name"]);
-        let strings = read_table(bytes, bytes.u32(8).unwrap()).unwrap();
+        let strings = read_table(bytes, bytes.u32_at(8).unwrap()).unwrap();
         assert_eq!(strings, ["abc", "x"]);
     }
 

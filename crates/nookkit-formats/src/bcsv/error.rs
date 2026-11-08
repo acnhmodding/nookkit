@@ -1,5 +1,22 @@
 use thiserror::Error;
 
+use crate::bytes::OutOfBounds;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    OutOfBounds(#[from] OutOfBounds),
+
+    #[error("the ext header doesn't start with VSCB")]
+    ExtHeader,
+
+    #[error("the rows' total size overflows")]
+    RowsOverflow,
+
+    #[error("column {index} starts after the next one")]
+    ColumnOrder { index: usize },
+}
+
 #[derive(Debug, Error)]
 #[error("{patch}: {error}")]
 pub struct ReadError {

@@ -1,19 +1,21 @@
+use crate::bytes::{OutOfBounds, Reader};
+
 /// Why an archive could not be read
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
-    #[error("Resource data exceeds its bounds.")]
-    OutOfBounds,
+    #[error(transparent)]
+    OutOfBounds(#[from] OutOfBounds),
 
-    #[error("Expected a little-endian SARC archive.")]
+    #[error("expected a little-endian SARC archive")]
     NotSarc,
 
-    #[error("SARC nodes exceed the archive.")]
+    #[error("SARC nodes exceed the archive")]
     NodesOutOfBounds,
 
-    #[error("SARC member exceeds the archive.")]
+    #[error("SARC member exceeds the archive")]
     MemberOutOfBounds,
 
-    #[error("SARC member name is invalid.")]
+    #[error("SARC member name is invalid")]
     InvalidName,
 }
 
@@ -38,62 +40,39 @@ impl Member {
     }
 }
 
-fn range(data: &[u8], at: usize, count: usize) -> Result<&[u8]> {
-    data.get(at..at.checked_add(count).ok_or(Error::OutOfBounds)?)
-        .ok_or(Error::OutOfBounds)
-}
-
-fn array<const N: usize>(data: &[u8], at: usize) -> Result<[u8; N]> {
-    range(data, at, N)?
-        .first_chunk()
-        .copied()
-        .ok_or(Error::OutOfBounds)
-}
-
-fn u16_at(data: &[u8], at: usize) -> Result<u16> {
-    Ok(u16::from_le_bytes(array(data, at)?))
-}
-
-fn u32_at(data: &[u8], at: usize) -> Result<u32> {
-    Ok(u32::from_le_bytes(array(data, at)?))
-}
-
-fn magic(data: &[u8], at: usize, magic: &[u8]) -> Result<bool> {
-    Ok(range(data, at, magic.len())? == magic)
-}
-
 /// Every member of a little-endian `archive`, in the order its node table lists them
 pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
+    let reader = Reader::new(archive);
     let length = archive.len();
 
-    if !magic(archive, 0, b"SARC")?
-        || u16_at(archive, 4)? != 0x14
-        || u16_at(archive, 6)? != 0xfeff
-        || u32_at(archive, 8)? as usize != length
-        || u16_at(archive, 16)? != 0x100
-        || !magic(archive, 20, b"SFAT")?
-        || u16_at(archive, 24)? != 12
+    if !reader.magic_at(0, b"SARC")?
+        || reader.u16_at(4)? != 0x14
+        || reader.u16_at(6)? != 0xfeff
+        || reader.u32_at(8)? as usize != length
+        || reader.u16_at(16)? != 0x100
+        || !reader.magic_at(20, b"SFAT")?
+        || reader.u16_at(24)? != 12
     {
         return Err(Error::NotSarc);
     }
 
-    let count = u16_at(archive, 26)? as usize;
+    let count = reader.u16_at(26)? as usize;
     let names = 32 + count * 16;
-    let data = u32_at(archive, 12)? as usize;
+    let data = reader.u32_at(12)? as usize;
 
     if names > length || data > length {
         return Err(Error::NodesOutOfBounds);
     }
 
-    let has_names = names + 8 <= length && magic(archive, names, b"SFNT")?;
+    let has_names = names + 8 <= length && reader.magic_at(names, b"SFNT")?;
 
     let mut members = Vec::with_capacity(count);
 
     for i in 0..count {
         let node = 32 + i * 16;
-        let attributes = u32_at(archive, node + 4)?;
-        let start = data + u32_at(archive, node + 8)? as usize;
-        let end = data + u32_at(archive, node + 12)? as usize;
+        let attributes = reader.u32_at(node + 4)?;
+        let start = data + reader.u32_at(node + 8)? as usize;
+        let end = data + reader.u32_at(node + 12)? as usize;
 
         if end < start || end > length {
             return Err(Error::MemberOutOfBounds);
@@ -105,7 +84,7 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
             let at = names + 8 + (attributes & 0xffffff) as usize * 4;
 
             let terminator = if has_names && at < data {
-                range(archive, at, data - at)?.iter().position(|&b| b == 0)
+                reader.bytes_at(at, data - at)?.iter().position(|&b| b == 0)
             } else {
                 None
             };
@@ -115,7 +94,7 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
             };
 
             // ASCII as .NET decodes it, other bytes become ?
-            let bytes = range(archive, at, terminator)?;
+            let bytes = reader.bytes_at(at, terminator)?;
 
             name = Some(
                 bytes
@@ -138,39 +117,46 @@ pub fn read(archive: &[u8]) -> Result<Vec<Member>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bytes::Writer;
 
     fn archive(members: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut names: Vec<u8> = Vec::new();
-        let mut data: Vec<u8> = Vec::new();
-        let mut nodes = Vec::new();
+        let mut nodes = Writer::default();
+        let mut names = Writer::default();
+        let mut data = Writer::default();
 
         for (name, bytes) in members {
-            nodes.extend(0u32.to_le_bytes()); // Name hash, unused by the reader
-            nodes.extend((0x0100_0000 | (names.len() as u32 / 4)).to_le_bytes());
-            nodes.extend((data.len() as u32).to_le_bytes());
-            nodes.extend(((data.len() + bytes.len()) as u32).to_le_bytes());
-            names.extend(name.as_bytes());
-            names.resize((names.len() + 4) & !3, 0);
-            data.extend(*bytes);
+            // Name hash, unused by the reader
+            nodes.write_u32(0);
+            nodes.write_u32(0x0100_0000 | (names.pos() as u32 / 4));
+            nodes.write_u32(data.pos() as u32);
+            nodes.write_u32((data.pos() + bytes.len()) as u32);
+
+            names.write_bytes(name.as_bytes());
+            names.write_u8(0);
+            names.align(4);
+            data.write_bytes(bytes);
         }
 
+        let (nodes, names, data) = (nodes.into_bytes(), names.into_bytes(), data.into_bytes());
         let data_offset = 0x14 + 12 + nodes.len() + 8 + names.len();
-        let mut out = b"SARC".to_vec();
-        out.extend(0x14u16.to_le_bytes());
-        out.extend(0xfeffu16.to_le_bytes());
-        out.extend(((data_offset + data.len()) as u32).to_le_bytes());
-        out.extend((data_offset as u32).to_le_bytes());
-        out.extend(0x100u32.to_le_bytes());
-        out.extend(b"SFAT");
-        out.extend(12u16.to_le_bytes());
-        out.extend((members.len() as u16).to_le_bytes());
-        out.extend(0x65u32.to_le_bytes());
-        out.extend(nodes);
-        out.extend(b"SFNT\x08\0\0\0");
-        out.extend(names);
-        out.extend(data);
 
-        out
+        let mut out = Writer::default();
+        out.write_bytes(b"SARC");
+        out.write_u16(0x14);
+        out.write_u16(0xfeff);
+        out.write_u32((data_offset + data.len()) as u32);
+        out.write_u32(data_offset as u32);
+        out.write_u32(0x100);
+        out.write_bytes(b"SFAT");
+        out.write_u16(12);
+        out.write_u16(members.len() as u16);
+        out.write_u32(0x65);
+        out.write_bytes(&nodes);
+        out.write_bytes(b"SFNT\x08\0\0\0");
+        out.write_bytes(&names);
+        out.write_bytes(&data);
+
+        out.into_bytes()
     }
 
     #[test]
@@ -189,6 +175,10 @@ mod tests {
         let sarc = archive(&[("output.bfres", b"model")]);
         assert_eq!(read(&sarc[..sarc.len() - 1]), Err(Error::NotSarc));
         assert_eq!(read(b"Yaz0"), Err(Error::NotSarc));
-        assert_eq!(read(b"SA"), Err(Error::OutOfBounds));
+
+        assert_eq!(
+            read(b"SA"),
+            Err(Error::OutOfBounds(OutOfBounds { offset: 0, len: 4 }))
+        );
     }
 }

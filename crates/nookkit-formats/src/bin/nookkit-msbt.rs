@@ -42,7 +42,7 @@ fn locales(romfs: &Path, archive: &str, file: &str) -> Result<BTreeMap<String, M
 
         if let Some(member) = members.iter().find(|member| member.is(&wanted)) {
             let msbt = Msbt::parse(member.data(&archive_bytes))
-                .ok_or_else(|| format!("{name}/{wanted}: not an MSBT"))?;
+                .map_err(|e| format!("{name}/{wanted}: {e}"))?;
 
             out.insert(locale.to_owned(), msbt);
         }

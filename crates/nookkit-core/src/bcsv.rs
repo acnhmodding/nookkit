@@ -154,9 +154,12 @@ nookkit_sym::hook! {
         // Not borrowed from the resource, whose data is replaced once the table is dropped
         let data = unsafe { core::slice::from_raw_parts(resource_ref.raw_data, resource_ref.raw_size as usize) };
 
-        let Some(table) = Table::parse(data) else {
-            println!("[NookKit] bcsv patch: {file} isn't a table");
-            return resource;
+        let table = match Table::parse(data) {
+            Ok(table) => table,
+            Err(e) => {
+                println!("[NookKit] bcsv patch: {file}: {e}");
+                return resource;
+            }
         };
 
         let plan = patches.plan(file, &table);

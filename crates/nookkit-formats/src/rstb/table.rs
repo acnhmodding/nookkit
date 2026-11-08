@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::bytes::{Endian, Writer};
 use crate::rstb::crc32;
 use crate::rstb::error::{Result, TableError, fail};
 use crate::rstb::reader::Reader;
@@ -92,33 +93,32 @@ impl Table {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(
-            12 + self.unique.len() * (4 + ENTRY_BYTES)
-                + self.collided.len() * (COLLIDED_NAME_BYTES + ENTRY_BYTES),
-        );
+        let size = 12
+            + self.unique.len() * (4 + ENTRY_BYTES)
+            + self.collided.len() * (COLLIDED_NAME_BYTES + ENTRY_BYTES);
 
-        out.extend_from_slice(b"RSTC");
-        out.extend_from_slice(&(self.unique.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(self.collided.len() as u32).to_le_bytes());
-
-        let write = |out: &mut Vec<u8>, entry: &Entry| {
-            out.extend_from_slice(&entry.size.to_le_bytes());
-            out.extend_from_slice(&entry.dlc.to_le_bytes());
-        };
+        let mut out = Writer::with_capacity(Endian::Little, size);
+        out.write_bytes(b"RSTC");
+        out.write_u32(self.unique.len() as u32);
+        out.write_u32(self.collided.len() as u32);
 
         for (crc, entry) in &self.unique {
-            out.extend_from_slice(&crc.to_le_bytes());
-            write(&mut out, entry);
+            out.write_u32(*crc);
+            out.write_u32(entry.size);
+            out.write_u32(entry.dlc);
         }
 
         for (name, entry) in &self.collided {
-            let start = out.len();
-            out.extend_from_slice(name.as_bytes());
-            out.resize(start + COLLIDED_NAME_BYTES, 0);
-            write(&mut out, entry);
+            let mut field = [0; COLLIDED_NAME_BYTES];
+            let len = name.len().min(COLLIDED_NAME_BYTES);
+            field[..len].copy_from_slice(&name.as_bytes()[..len]);
+
+            out.write_bytes(&field);
+            out.write_u32(entry.size);
+            out.write_u32(entry.dlc);
         }
 
-        out
+        out.into_bytes()
     }
 
     pub fn get(&self, name: &str) -> Option<Entry> {

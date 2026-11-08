@@ -477,6 +477,7 @@ fn key_column(table: &Table) -> Option<Column> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bytes::Writer;
 
     // `UniqueID u16` at 4, `Label string8` at 8 and an unnamed hash column at 16, two rows
     fn table() -> Vec<u8> {
@@ -486,25 +487,26 @@ mod tests {
             (0xbea8_4522, 16),
         ];
 
-        let mut data = Vec::new();
-        data.extend_from_slice(&2u32.to_le_bytes());
-        data.extend_from_slice(&20u32.to_le_bytes());
-        data.extend_from_slice(&(columns.len() as u16).to_le_bytes());
-        data.extend_from_slice(&[0, 1]);
+        let mut data = Writer::default();
+        data.write_u32(2);
+        data.write_u32(20);
+        data.write_u16(columns.len() as u16);
+        data.write_bytes(&[0, 1]);
 
         for (hash, offset) in columns {
-            data.extend_from_slice(&hash.to_le_bytes());
-            data.extend_from_slice(&offset.to_le_bytes());
+            data.write_u32(hash);
+            data.write_u32(offset);
         }
 
         for (id, label) in [(1u16, b"cat01"), (2, b"cat02")] {
-            let mut row = vec![0u8; 20];
-            row[4..6].copy_from_slice(&id.to_le_bytes());
-            row[8..13].copy_from_slice(label);
-            data.extend_from_slice(&row);
+            data.write_u32(0);
+            data.write_u16(id);
+            data.write_u16(0);
+            data.write_bytes(label);
+            data.write_bytes(&[0; 7]);
         }
 
-        data
+        data.into_bytes()
     }
 
     fn apply(set: &PatchSet) -> (usize, usize, Vec<Skipped>, Vec<u8>) {

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::bytes::{OutOfBounds, Reader};
+
 pub struct Msbt {
     /// Label to message index
     pub labels: BTreeMap<String, u32>,
@@ -12,98 +14,133 @@ pub struct Msbt {
     pub attribute_size: u32,
 }
 
-fn u16_at(b: &[u8], at: usize) -> Option<u16> {
-    let bytes = b.get(at..)?.first_chunk()?;
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    OutOfBounds(#[from] OutOfBounds),
 
-    Some(u16::from_le_bytes(*bytes))
+    #[error("not an MSBT")]
+    NotMsbt,
+
+    #[error("no {0} section")]
+    MissingSection(&'static str),
+
+    #[error("the label at 0x{offset:X} isn't UTF-8")]
+    LabelUtf8 { offset: usize },
 }
 
-fn u32_at(b: &[u8], at: usize) -> Option<u32> {
-    let bytes = b.get(at..)?.first_chunk()?;
+fn sections(b: &[u8]) -> Result<BTreeMap<[u8; 4], &[u8]>, ParseError> {
+    let reader = Reader::new(b);
 
-    Some(u32::from_le_bytes(*bytes))
-}
-
-fn sections(b: &[u8]) -> Option<BTreeMap<[u8; 4], &[u8]>> {
-    if b.get(..8)? != b"MsgStdBn" || u16_at(b, 8)? != 0xFEFF {
-        return None;
+    if !reader.magic_at(0, b"MsgStdBn")? || reader.u16_at(8)? != 0xFEFF {
+        return Err(ParseError::NotMsbt);
     }
 
-    let count = u16_at(b, 0xE)?;
+    let count = reader.u16_at(0xE)?;
     let mut at = 0x20;
     let mut out = BTreeMap::new();
 
     for _ in 0..count {
-        let magic: [u8; 4] = *b.get(at..)?.first_chunk()?;
-        let size = u32_at(b, at + 4)? as usize;
-        out.insert(magic, b.get(at + 16..at + 16 + size)?);
+        let magic = reader.array_at::<4>(at)?;
+        let size = reader.u32_at(at + 4)? as usize;
+        out.insert(magic, reader.bytes_at(at + 16, size)?);
         at = (at + 16 + size + 15) & !15;
     }
 
-    Some(out)
+    Ok(out)
+}
+
+fn section<'a>(
+    sections: &BTreeMap<[u8; 4], &'a [u8]>,
+    name: &'static str,
+) -> Result<Reader<'a>, ParseError> {
+    let Some(&data) = name
+        .as_bytes()
+        .first_chunk()
+        .and_then(|magic| sections.get(magic))
+    else {
+        return Err(ParseError::MissingSection(name));
+    };
+
+    Ok(Reader::new(data))
 }
 
 impl Msbt {
-    pub fn parse(b: &[u8]) -> Option<Self> {
+    pub fn parse(b: &[u8]) -> Result<Self, ParseError> {
         let sections = sections(b)?;
 
-        let lbl = sections.get(b"LBL1")?;
+        let lbl = section(&sections, "LBL1")?;
         let mut labels = BTreeMap::new();
 
-        for bucket in 0..u32_at(lbl, 0)? as usize {
-            let count = u32_at(lbl, 4 + bucket * 8)?;
-            let mut at = u32_at(lbl, 8 + bucket * 8)? as usize;
+        for bucket in 0..lbl.u32_at(0)? as usize {
+            let count = lbl.u32_at(4 + bucket * 8)?;
+            let mut at = lbl.u32_at(8 + bucket * 8)? as usize;
 
             for _ in 0..count {
-                let len = *lbl.get(at)? as usize;
-                let name = std::str::from_utf8(lbl.get(at + 1..at + 1 + len)?).ok()?;
-                labels.insert(name.to_owned(), u32_at(lbl, at + 1 + len)?);
+                let len = lbl.u8_at(at)? as usize;
+
+                let Ok(name) = std::str::from_utf8(lbl.bytes_at(at + 1, len)?) else {
+                    return Err(ParseError::LabelUtf8 { offset: at });
+                };
+
+                labels.insert(name.to_owned(), lbl.u32_at(at + 1 + len)?);
                 at += 1 + len + 4;
             }
         }
 
-        let txt = sections.get(b"TXT2")?;
-        let count = u32_at(txt, 0)? as usize;
+        let txt = section(&sections, "TXT2")?;
+        let count = txt.u32_at(0)? as usize;
 
-        let mut offsets = (0..count)
-            .map(|i| u32_at(txt, 4 + i * 4).map(|o| o as usize))
-            .collect::<Option<Vec<_>>>()?;
+        let mut offsets = Vec::with_capacity(count + 1);
+
+        for i in 0..count {
+            offsets.push(txt.u32_at(4 + i * 4)? as usize);
+        }
 
         offsets.push(txt.len());
 
-        let texts = offsets
-            .windows(2)
-            .map(|w| {
-                let bytes = txt.get(w[0]..w[1])?;
+        let mut texts = Vec::with_capacity(count);
 
-                Some(
-                    bytes
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .map(|&c| u16::from_le_bytes(c))
-                        .collect(),
-                )
-            })
-            .collect::<Option<Vec<Vec<u16>>>>()?;
+        for pair in offsets.windows(2) {
+            let (start, end) = (pair[0], pair[1]);
 
-        let (attributes, attribute_size) = match sections.get(b"ATR1") {
-            Some(atr) => {
-                let size = u32_at(atr, 4)?;
+            let Some(len) = end.checked_sub(start) else {
+                return Err(OutOfBounds {
+                    offset: start,
+                    len: 0,
+                }
+                .into());
+            };
 
-                let entries = (0..u32_at(atr, 0)? as usize)
-                    .map(|i| {
-                        let at = 8 + i * size as usize;
-                        atr.get(at..at + size as usize).map(<[u8]>::to_vec)
-                    })
-                    .collect::<Option<Vec<_>>>()?;
+            let bytes = txt.bytes_at(start, len)?;
+
+            texts.push(
+                bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|&c| u16::from_le_bytes(c))
+                    .collect(),
+            );
+        }
+
+        let (attributes, attribute_size) = match section(&sections, "ATR1") {
+            Ok(atr) => {
+                let size = atr.u32_at(4)?;
+
+                let mut entries = Vec::new();
+
+                for i in 0..atr.u32_at(0)? as usize {
+                    let at = 8 + i * size as usize;
+                    entries.push(atr.bytes_at(at, size as usize)?.to_vec());
+                }
 
                 (entries, size)
             }
-            None => (Vec::new(), 0),
+            Err(_) => (Vec::new(), 0),
         };
 
-        Some(Self {
+        Ok(Self {
             labels,
             texts,
             attributes,
