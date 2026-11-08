@@ -8,7 +8,7 @@ When a lint has to be silenced, use `#[expect(lint, reason = "...")]` rather tha
 
 ## Readability
 
-Code should be easily skimmable and not clustered into dense blocks.
+Code should be easily skimmable and not clustered into dense blocks. [check_spacing.py](tools/check_spacing.py) checks the blank lines below in CI, run it on your files to add the missing ones.
 
 - Separate distinct steps of a function (reading, computing, writing) with a blank line.
 - Put a blank line before and after loops, `if` / `match` blocks and any other multiline statement, unless it is the first or last thing in its scope. A `let ... else { ... };` is multiline too, so consecutive ones are separated by a blank line.
@@ -160,7 +160,7 @@ Structures that mirror game memory are `#[repr(C)]`. When a class derives from a
 
 ## Creating new hooks
 
-To create a new hook, the `nookkit_sym::hook!` function should be used. If it's a symbol that does not exist yet, the symbol should be exported by the `ExportSymbols.java` script in Ghidra to the [offsets](offsets) folder.
+To create a new hook, the `nookkit_sym::hook!` function should be used. If it's a symbol that does not exist yet, the symbol should be exported by the [ExportSymbols.java](tools/ghidra/ExportSymbols.java) script in Ghidra to the [offsets](offsets) folder. Add the `tools/ghidra` folder to Ghidra's script directories, then run it headless or from the Script Manager with the absolute paths `<repo>/offsets/<version>.toml <version> <repo>/crates/nookkit-core/symbols.txt <repo>/crates/nookkit-types/symbols.txt` as its arguments.
 
 Files in [offsets](offsets) are generated, do not edit them by hand.
 

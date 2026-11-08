@@ -13,19 +13,14 @@ pub fn mmh3(text: &str) -> u32 {
 
     let bytes = text.as_bytes();
     let mut h = 0u32;
-    let mut blocks = bytes.chunks_exact(4);
+    let (blocks, tail) = bytes.as_chunks::<4>();
 
-    for block in &mut blocks {
-        let k = block
-            .iter()
-            .rev()
-            .fold(0u32, |k, &b| (k << 8) | u32::from(b));
+    for block in blocks {
+        let k = u32::from_le_bytes(*block);
 
         h ^= k.wrapping_mul(C1).rotate_left(15).wrapping_mul(C2);
         h = h.rotate_left(13).wrapping_mul(5).wrapping_add(0xe654_6b64);
     }
-
-    let tail = blocks.remainder();
 
     if !tail.is_empty() {
         let k = tail

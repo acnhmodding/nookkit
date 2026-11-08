@@ -151,8 +151,10 @@ fn push_tag(
     out.extend([OPEN, group, kind, params.len() as u16]);
     out.extend(
         params
-            .chunks_exact(2)
-            .map(|b| u16::from_le_bytes([b[0], b[1]])),
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&b| u16::from_le_bytes(b)),
     );
     Ok(())
 }
@@ -268,8 +270,10 @@ fn ruby(params: &[u8]) -> Option<(u16, String)> {
     }
 
     let units: Vec<u16> = value
-        .chunks_exact(2)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&b| u16::from_le_bytes(b))
         .collect();
 
     let value = String::from_utf16(&units).ok()?;
