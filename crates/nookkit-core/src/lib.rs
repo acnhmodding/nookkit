@@ -12,7 +12,7 @@ mod table;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use nookkit_sys::{API_NAME, API_VERSION, NookKitV2, sl_api_publish};
+use nookkit_sys::{API_NAME, API_VERSION, sl_api_publish};
 use nookkit_types::native::{NativeResult, SymbolKind};
 
 #[unsafe(no_mangle)]
@@ -42,6 +42,7 @@ fn report(context: &str, result: NativeResult) {
 
 fn start() -> Result<(), nookkit_sym::SymError> {
     let symbols = nookkit_sym::init(include_str!("../../../offsets/3.0.3.toml"))?;
+
     println!(
         "[NookKit] {} symbols for {}",
         symbols.len(),
@@ -70,6 +71,7 @@ fn start() -> Result<(), nookkit_sym::SymError> {
     messages::install()?;
     bcsv::install()?;
     pack::install()?;
+
     rstb::install()
 }
 
@@ -85,7 +87,7 @@ pub fn main() {
         sl_api_publish(
             API_NAME.as_ptr(),
             API_VERSION,
-            (&table::TABLE as *const NookKitV2).cast(),
-        )
+            (&raw const table::TABLE).cast(),
+        );
     };
 }

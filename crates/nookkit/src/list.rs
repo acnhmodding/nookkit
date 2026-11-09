@@ -174,7 +174,7 @@ impl List {
     pub fn slots(&self) -> Result<usize> {
         let mut count = 0;
 
-        check(unsafe { (self.page.ui().table.list_slot_count)(self.raw, &mut count) })?;
+        check(unsafe { (self.page.ui().table.list_slot_count)(self.raw, &raw mut count) })?;
 
         Ok(count as usize)
     }
@@ -184,7 +184,7 @@ impl List {
 
         let slot = u32::try_from(slot).map_err(|_| UiError::InvalidArg)?;
 
-        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot, &mut raw) })?;
+        check(unsafe { (self.page.ui().table.list_button)(self.raw, slot, &raw mut raw) })?;
 
         Ok(Pane::new(self.page, raw))
     }

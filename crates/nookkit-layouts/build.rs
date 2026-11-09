@@ -1,4 +1,10 @@
 // Generates layouts::<Layout> and pages::<Page> from the harvested layout data and the page export
+#![expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "build scripts report errors by panicking"
+)]
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -23,22 +29,25 @@ struct Layout {
 
 fn unquote(s: &str) -> String {
     let s = s.trim();
+
     match s.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
         Some(inner) => inner.replace("\\\"", "\"").replace("\\\\", "\\"),
         None => s.to_owned(),
     }
 }
 
-/// Only the subset tools/harvest_layouts.py writes: `[name]`, `control = "…"`, `parts.<pane> = "…"`
+// Only the subset tools/harvest_layouts.py writes: `[name]`, `control = "…"`, `parts.<pane> = "…"`
 fn layouts(text: &str) -> BTreeMap<String, Layout> {
     let mut out: BTreeMap<String, Layout> = BTreeMap::new();
     let mut current = None;
 
     for (index, raw) in text.lines().enumerate() {
         let line = raw.trim();
+
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
+
         if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
             let name = unquote(name);
             out.entry(name.clone()).or_default();
@@ -49,10 +58,10 @@ fn layouts(text: &str) -> BTreeMap<String, Layout> {
         let (key, value) = line
             .split_once(" = ")
             .unwrap_or_else(|| panic!("{LAYOUTS}:{}: expected key = value", index + 1));
-        let layout = current
-            .as_ref()
-            .and_then(|c| out.get_mut(c))
-            .unwrap_or_else(|| panic!("{LAYOUTS}:{}: key outside a table", index + 1));
+
+        let Some(layout) = current.as_ref().and_then(|name| out.get_mut(name)) else {
+            panic!("{LAYOUTS}:{}: key outside a table", index + 1);
+        };
 
         match key.strip_prefix("parts.") {
             Some(pane) => layout.parts.push((unquote(pane), unquote(value))),
@@ -70,6 +79,7 @@ fn pages(text: &str) -> Vec<(String, String)> {
         .filter(|(_, l)| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
         .map(|(index, l)| {
             let mut cols = l.split('\t').map(str::trim);
+
             match (cols.next(), cols.next()) {
                 (Some(class), Some(layout)) if !class.is_empty() && !layout.is_empty() => {
                     (class.to_owned(), layout.to_owned())
@@ -80,7 +90,7 @@ fn pages(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `L_BtnListEye_00` to `L_BTN_LIST_EYE_00`
+// `L_BtnListEye_00` to `L_BTN_LIST_EYE_00`
 fn screaming(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     let mut out = String::new();
@@ -88,15 +98,18 @@ fn screaming(name: &str) -> String {
     for (i, &c) in chars.iter().enumerate() {
         let prev = i.checked_sub(1).map(|p| chars[p]);
         let next = chars.get(i + 1);
+
         let hump = c.is_ascii_uppercase()
             && prev.is_some_and(|p| {
                 p.is_ascii_lowercase()
                     || p.is_ascii_digit()
-                    || (p.is_ascii_uppercase() && next.is_some_and(|n| n.is_ascii_lowercase()))
+                    || (p.is_ascii_uppercase() && next.is_some_and(char::is_ascii_lowercase))
             });
+
         if hump && !out.ends_with('_') {
             out.push('_');
         }
+
         out.push(c.to_ascii_uppercase());
     }
 
@@ -133,25 +146,30 @@ fn consts(
 
     for (pane, part) in &layout.parts {
         let name = screaming(pane);
+
         if let Some(other) = seen.insert(name.clone(), pane) {
             panic!("{owner}: panes `{pane}` and `{other}` map to the same constant");
         }
 
         let control = all.get(part).map_or("", |l| l.control.as_str());
-        let (ty, path) = if root {
+
+        let (type_name, path) = if root {
             ("PanePath", format!("/{pane}"))
         } else {
             ("RelPath", pane.clone())
         };
+
         let doc = if control.is_empty() {
             format!("Part layout `{part}`")
         } else {
             format!("`{control}`, part layout `{part}`")
         };
+
         writeln!(out, "    /// {doc}").unwrap();
+
         writeln!(
             out,
-            "    pub const {name}: crate::{ty}<{}> = crate::{ty}::new({path:?}, {part:?});",
+            "    pub const {name}: crate::{type_name}<{}> = crate::{type_name}::new({path:?}, {part:?});",
             kind(control)
         )
         .unwrap();
@@ -163,19 +181,23 @@ fn main() {
     println!("cargo::rerun-if-changed={LAYOUTS}");
 
     let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set"));
+
     let read = |path: &str| {
         let path = dir.join(path);
         fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
     };
+
     let all = layouts(&read(LAYOUTS));
     let pages = pages(&read(PAGES));
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set"));
 
     let mut out = String::new();
     let mut seen = HashMap::new();
+
     for (name, layout) in &all {
-        let ty = ident(name);
-        if let Some(other) = seen.insert(ty.clone(), name) {
+        let type_name = ident(name);
+
+        if let Some(other) = seen.insert(type_name.clone(), name) {
             panic!("layouts `{name}` and `{other}` map to the same type");
         }
 
@@ -184,40 +206,48 @@ fn main() {
         } else {
             format!(", control `{}`", layout.control)
         };
+
         writeln!(out, "/// Layout `{name}`{control}").unwrap();
-        writeln!(out, "pub struct {ty};").unwrap();
+        writeln!(out, "pub struct {type_name};").unwrap();
+
         if !layout.parts.is_empty() {
-            writeln!(out, "impl {ty} {{").unwrap();
+            writeln!(out, "impl {type_name} {{").unwrap();
             consts(layout, &all, false, name, &mut out);
             writeln!(out, "}}").unwrap();
         }
     }
+
     fs::write(out_dir.join("layouts.rs"), out).expect("write layouts.rs");
 
     let mut out = String::new();
     let mut seen = HashMap::new();
+
     for (class, layout) in &pages {
-        let ty = ident(class.strip_suffix("Page").unwrap_or(class));
-        if let Some(other) = seen.insert(ty.clone(), class) {
+        let type_name = ident(class.strip_suffix("Page").unwrap_or(class));
+
+        if let Some(other) = seen.insert(type_name.clone(), class) {
             panic!("pages `{class}` and `{other}` map to the same type");
         }
 
         writeln!(out, "/// `{class}`, layout `{layout}`").unwrap();
-        writeln!(out, "pub struct {ty};").unwrap();
+        writeln!(out, "pub struct {type_name};").unwrap();
+
         writeln!(
             out,
-            "impl crate::PageClass for {ty} {{\n    const CLASS: &'static str = {class:?};\n    const LAYOUT: &'static str = {layout:?};\n}}"
+            "impl crate::PageClass for {type_name} {{\n    const CLASS: &'static str = {class:?};\n    const LAYOUT: &'static str = {layout:?};\n}}"
         )
         .unwrap();
+
         if !all.contains_key(layout) && !NO_LAYOUT_FILE.contains(&layout.as_str()) {
             println!("cargo::warning=page `{class}` has layout `{layout}` missing from {LAYOUTS}");
         }
 
         if let Some(root) = all.get(layout).filter(|l| !l.parts.is_empty()) {
-            writeln!(out, "impl {ty} {{").unwrap();
+            writeln!(out, "impl {type_name} {{").unwrap();
             consts(root, &all, true, class, &mut out);
             writeln!(out, "}}").unwrap();
         }
     }
+
     fs::write(out_dir.join("pages.rs"), out).expect("write pages.rs");
 }

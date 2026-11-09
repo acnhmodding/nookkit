@@ -56,13 +56,16 @@ impl Allocator {
         {
             std::hint::spin_loop();
         }
+
         let result = f(unsafe { &mut *self.block.get() });
         self.locked.store(false, Ordering::Release);
+
         result
     }
 
     fn lent_to_this_thread(&self) -> bool {
         let owner = self.owner.load(Ordering::Acquire);
+
         owner != 0 && owner == current_thread()
     }
 }
@@ -72,6 +75,7 @@ unsafe impl GlobalAlloc for Allocator {
         if !self.lent_to_this_thread() {
             return unsafe { System.alloc(layout) };
         }
+
         let borrowed = self.with_block(|block| {
             let block = block.as_mut()?;
             let pointer = unsafe { block.talc.malloc(layout) }.ok()?;
@@ -80,6 +84,7 @@ unsafe impl GlobalAlloc for Allocator {
             block.peak_bytes = block.peak_bytes.max(block.live_bytes);
             Some(pointer.as_ptr())
         });
+
         borrowed.unwrap_or_else(|| unsafe { System.alloc(layout) })
     }
 
@@ -97,6 +102,7 @@ unsafe impl GlobalAlloc for Allocator {
                 }
                 _ => false,
             });
+
         if !borrowed {
             unsafe { System.dealloc(pointer, layout) };
         }
@@ -108,19 +114,24 @@ unsafe fn heaps() -> Vec<*mut Heap> {
     let Ok(roots) = nookkit_sym::data::<PtrArray<Heap>>(&sym::sead::HeapMgr::sRootHeaps) else {
         return Vec::new();
     };
+
     let mut pending: Vec<_> = unsafe { (*roots).iter() }
         .filter(|h| !h.is_null())
         .collect();
+
     pending.reverse();
     let mut heaps = Vec::new();
+
     while let Some(heap) = pending.pop() {
         if heaps.len() == MAX_HEAPS {
             break;
         }
+
         heaps.push(heap);
         let children: Vec<_> = unsafe { (*heap).children() }.take(MAX_HEAPS).collect();
         pending.extend(children.into_iter().rev());
     }
+
     heaps
 }
 
@@ -139,10 +150,12 @@ pub struct Loan {
 fn borrow(need: usize, report: &mut String) -> Option<(*mut Heap, usize, usize)> {
     let mut heaps = String::new();
     let borrowed = try_borrow(need, &mut heaps, report);
+
     if borrowed.is_none() {
         report.push_str("sead heaps:\n");
         report.push_str(&heaps);
     }
+
     borrowed
 }
 
@@ -156,11 +169,13 @@ fn try_borrow(
     let mut lender: Option<(*mut Heap, usize)> = None;
     for heap in unsafe { heaps() } {
         let is_exp = unsafe { (*heap).base.vtable } as usize == exp_heap;
+
         let free = if is_exp {
             unsafe { (*heap).get_max_allocatable_size(LOAN_ALIGNMENT) }
         } else {
             0
         };
+
         let _ = writeln!(
             heaps_report,
             "  {} ({} MiB, {} MiB free{})",
@@ -169,6 +184,7 @@ fn try_borrow(
             free >> 20,
             if is_exp { "" } else { ", not an ExpHeap" }
         );
+
         if is_exp && lender.is_none_or(|(_, most)| free > most) {
             lender = Some((heap, free));
         }
@@ -196,6 +212,7 @@ fn try_borrow(
 // own heap memory
 pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) -> (T, usize) {
     let mut report = String::new();
+
     let Some((heap, base, size)) = borrow(need, &mut report) else {
         return (
             f(&Loan {
@@ -206,10 +223,12 @@ pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) ->
             0,
         );
     };
+
     ALLOCATOR.with_block(|block| {
         let mut talc = Talc::new(ErrOnOom);
         // Claiming only fails for spans too small to hold the allocator's metadata
         let _ = unsafe { talc.claim(Span::new(base as *mut u8, (base + size) as *mut u8)) };
+
         *block = Some(Block {
             talc,
             base,
@@ -219,18 +238,23 @@ pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) ->
             peak_bytes: 0,
         });
     });
+
     // The report is allocated before the loan, so it outlives it
     let loan = Loan { size, need, report };
     ALLOCATOR.owner.store(current_thread(), Ordering::Release);
     let result = f(&loan);
     ALLOCATOR.owner.store(0, Ordering::Release);
+
     let (live, peak) = ALLOCATOR.with_block(|block| {
         let used = block.as_ref().map_or((0, 0), |b| (b.live, b.peak_bytes));
+
         if used.0 == 0 {
             *block = None;
         }
+
         used
     });
+
     if live == 0 {
         unsafe { (*heap).free(base as *mut _) };
     } else {
@@ -240,5 +264,6 @@ pub fn with_borrowed_memory<T: Copy>(need: usize, f: impl FnOnce(&Loan) -> T) ->
             size >> 20
         );
     }
+
     (result, peak)
 }

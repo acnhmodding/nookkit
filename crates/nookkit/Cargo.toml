@@ -4,9 +4,13 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-nookkit-hash = { workspace = true }
+nookkit-formats = { workspace = true }
 nookkit-layouts = { workspace = true }
+nookkit-sym = { workspace = true, features = ["skyline"] }
 nookkit-sys = { workspace = true }
 nookkit-types = { workspace = true }
 skyline = { workspace = true }
 thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -5,5 +5,7 @@
 - `nookkit-sys` is the ABI between the core & mods.
 - `nookkit-types` is a Rust recreation of the game's classes & datatypes.
 - `nookkit-sym` is for mapping symbol names to addresses.
+- `nookkit-layouts` generates typed page and pane paths from the game's layouts.
+- `nookkit-formats` reads, writes and patches the game's file formats (BCSV, BYML, MSBT, RSTB, SARC), with a CLI per patch format.
 
 `nookkit` v0.2.0 targets ACNH v3.0.3

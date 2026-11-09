@@ -93,6 +93,7 @@ unsafe fn apply(page: *mut ViewPage, seq: *mut SequenceBase, reg: StateReg) -> S
     };
 
     let entry = seq_ref.state_machine.entry(reg.state);
+
     let Some(entry_ref) = (unsafe { entry.as_mut() }) else {
         return Status::INVALID_ARG;
     };
@@ -109,7 +110,7 @@ unsafe fn apply(page: *mut ViewPage, seq: *mut SequenceBase, reg: StateReg) -> S
                 cbs: Mutex::new(Default::default()),
             }));
 
-            entry_ref.vtable = &hook.vt;
+            entry_ref.vtable = &raw const hook.vt;
             hook
         }
     };

@@ -113,7 +113,7 @@ impl Control {
     pub unsafe fn find_by_path(&mut self, path: &CStr) -> NativeResult<*mut Control> {
         let path = SafeString::new(path)?;
 
-        Ok(unsafe { self.find_by_path_native(&path)? })
+        Ok(unsafe { self.find_by_path_native(&raw const path)? })
     }
 
     pub unsafe fn find<T: Class>(&mut self, path: &CStr) -> NativeResult<Option<&mut T>> {

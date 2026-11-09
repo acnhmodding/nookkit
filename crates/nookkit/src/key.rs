@@ -130,14 +130,17 @@ impl KeyBuilder {
 
     pub fn build(self) -> Result<KeyBinding> {
         let ui = self.page.ui();
+
         let mut flags = if self.consume {
             KeyFlags::CONSUME
         } else {
             KeyFlags::NONE
         };
+
         if self.player.is_none() {
             flags = flags | KeyFlags::SEQ_PLAYER;
         }
+
         let mut raw = core::ptr::null_mut();
 
         check(unsafe {
@@ -146,7 +149,7 @@ impl KeyBuilder {
                 self.player.unwrap_or_default(),
                 self.key.id(),
                 flags,
-                &mut raw,
+                &raw mut raw,
             )
         })?;
 
@@ -155,15 +158,17 @@ impl KeyBuilder {
             raw,
         };
 
-        let configured = match &self.guide {
+        let mut configured = match &self.guide {
             Some(Guide::Text(text)) => binding.set_guide(text),
             Some(Guide::Label(label)) => binding.set_guide_label(label),
             None => Ok(()),
+        };
+
+        if configured.is_ok()
+            && let Some(path) = &self.hint_pane
+        {
+            configured = check(unsafe { (ui.table.key_set_hint_pane)(raw, Str::new(path)) });
         }
-        .and_then(|()| match &self.hint_pane {
-            Some(path) => check(unsafe { (ui.table.key_set_hint_pane)(raw, Str::new(path)) }),
-            None => Ok(()),
-        });
 
         // Bound but half configured, so it stays off rather than firing without its guide
         if let Err(e) = configured {

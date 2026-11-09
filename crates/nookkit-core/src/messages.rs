@@ -1,10 +1,11 @@
 use core::ffi::{CStr, c_char, c_void};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use nookkit_msbt::{Attribute, Entry, PatchSet};
+use nookkit_formats::msbt::{Attribute, Entry, PatchSet};
 use nookkit_sym::sym;
+use nookkit_types::lp::ui::MessageFile;
 use nookkit_types::sead::SafeString;
 
 // The game reads messages only once "content" is mounted
@@ -16,9 +17,9 @@ static LOCALE: OnceLock<String> = OnceLock::new();
 // File handles (MessageArchive::findFile's {msbt*, count} entries) of patched files, by address
 static HANDLES: Mutex<Option<HashMap<usize, &'static str>>> = Mutex::new(None);
 
-/// Every patch, a broken one is reported and skipped
 fn load() -> PatchSet {
     let mut set = PatchSet::default();
+
     let files = match crate::content::json_files(FOLDER) {
         Ok(files) => files,
         Err(e) => {
@@ -28,6 +29,7 @@ fn load() -> PatchSet {
     };
 
     let mut read = 0;
+
     for (name, json) in files {
         let json = match json {
             Ok(json) => json,
@@ -36,6 +38,7 @@ fn load() -> PatchSet {
                 continue;
             }
         };
+
         read += 1;
 
         match set.add(&name, &json) {
@@ -55,15 +58,17 @@ fn load() -> PatchSet {
             read
         );
     }
+
     set
 }
 
 fn patches() -> Option<&'static PatchSet> {
     PATCHES.get_or_init(load);
+
     PATCHES.get().filter(|set| !set.is_empty())
 }
 
-/// The game's language as its archives name it, read on first use when the game has settled it
+// The game's language as its archives name it, read on first use when the game has settled it
 fn locale() -> Option<&'static str> {
     if let Some(locale) = LOCALE.get() {
         return Some(locale);
@@ -72,15 +77,18 @@ fn locale() -> Option<&'static str> {
     let language: unsafe extern "C" fn() -> u32 = unsafe {
         core::mem::transmute(nookkit_sym::fun_addr(&sym::game::System::getLanguageImpl).ok()?)
     };
+
     let codes =
         nookkit_sym::data::<[*const c_char; 16]>(&sym::game::System::sLanguageCodes).ok()?;
 
     let code = unsafe { *(*codes).get(language() as usize)? };
+
     if code.is_null() {
         return None;
     }
 
     let locale = unsafe { CStr::from_ptr(code) }.to_str().ok()?.to_owned();
+
     Some(LOCALE.get_or_init(|| locale))
 }
 
@@ -95,6 +103,7 @@ fn file_of(handle: *const c_void) -> Option<&'static str> {
 
 fn handle_of(file: &str) -> Option<usize> {
     let handles = HANDLES.lock().ok()?;
+
     handles
         .as_ref()?
         .iter()
@@ -106,11 +115,11 @@ unsafe fn str_of<'a>(string: *const SafeString<'a>) -> Option<&'a str> {
     unsafe { string.as_ref()?.as_str() }
 }
 
-/// The patch for `label` in the file `handle` is, with text in the current locale
 fn patched_text(handle: *const c_void, label: *const c_char) -> Option<&'static [u16]> {
     let patches = patches()?;
     let file = file_of(handle)?;
     let label = unsafe { CStr::from_ptr(label) }.to_str().ok()?;
+
     patches.get(file, label)?.text_for(locale()?)
 }
 
@@ -123,13 +132,16 @@ nookkit_sym::hook! {
         if handle.is_null() {
             return handle;
         }
+
         let Some(patches) = patches() else {
             return handle;
         };
 
         let file = unsafe { str_of(name) }.and_then(|n| n.strip_suffix(".msbt"));
+
         if let Ok(mut handles) = HANDLES.lock() {
             let handles = handles.get_or_insert_with(HashMap::new);
+
             match file.and_then(|f| patches.file(f)) {
                 Some(file) => {
                     handles.insert(handle as usize, file);
@@ -152,7 +164,6 @@ nookkit_sym::hook! {
     }
 }
 
-/// MessageFile::findText's result
 #[repr(C)]
 struct Text {
     units: *const u16,
@@ -165,6 +176,7 @@ pub mod find_text {
     use super::*;
 
     static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
 
     // (handle, label) returning a Text through x8, which Rust can't name, so it's passed on as a
     // third argument
@@ -189,50 +201,36 @@ pub mod find_text {
                 out.write(Text {
                     units: units.as_ptr(),
                     len: units.len() as i32,
-                })
+                });
             },
             None => unsafe { call(handle, label, out, ORIGINAL.load(Ordering::Acquire)) },
         }
     }
 
     pub fn install() -> Result<(), nookkit_sym::SymError> {
-        let target = nookkit_sym::fun_addr(&sym::Lp::UI::MessageFile::findText)?;
+        let target = nookkit_sym::fun_addr(&sym::Lp::UI::MessageFile::findText);
 
-        unsafe {
-            nookkit_sym::__hook_function(
-                target as *const _,
-                entry as *const _,
-                ORIGINAL.as_ptr().cast(),
-            );
-        }
-
-        if ORIGINAL.load(Ordering::Acquire) == 0 {
-            return Err(nookkit_sym::SymError::HookFailed(target));
-        }
-        Ok(())
+        nookkit_sym::__install(&INSTALLED, &ORIGINAL, target, entry as *const () as usize)
     }
 }
 
-/// The byte size of the ATR1 entries in the file `handle` is, 0 without attributes
 unsafe fn attribute_size(handle: usize) -> usize {
-    unsafe {
-        let msbt = *(handle as *const *const u8);
-        let section = *(msbt.add(0x28) as *const i32);
-        if msbt.is_null() || section < 0 {
-            return 0;
-        }
+    let Some(file) = (unsafe { (handle as *const MessageFile).as_ref() }) else {
+        return 0;
+    };
 
-        let sections = *(msbt.add(0x18) as *const *const u8);
-        let data = *(sections.add(section as usize * 0x18) as *const *const u8);
-        *(data.add(4) as *const u32) as usize
-    }
+    let Some(binary) = (unsafe { file.binary.as_ref() }) else {
+        return 0;
+    };
+
+    unsafe { binary.attribute_size() }
 }
 
 type ReadAttribute =
     unsafe fn(*mut c_void, *mut u8, *const SafeString<'static>, *const SafeString<'static>) -> bool;
 
-/// One of MessageAttribute's readers for a patched label: its own attributes, another label's, or
-/// zeros for a new label without any. `None` leaves the read to the game
+// One of MessageAttribute's readers for a patched label: its own attributes, another label's, or
+// zeros for a new label without any. `None` leaves the read to the game
 fn read_attribute(
     original: ReadAttribute,
     reader: *mut c_void,
@@ -254,7 +252,7 @@ fn read_attribute(
             let other = std::ffi::CString::new(other.as_str()).ok()?;
             let other = SafeString::new(&other).ok()?;
             // Only read during the call
-            let other = (&other as *const SafeString<'_>).cast::<SafeString<'static>>();
+            let other = (&raw const other).cast::<SafeString<'static>>();
             Some(unsafe { original(reader, dst, file, other) })
         }
         Some(Attribute::Bytes(bytes)) if bytes.len() == size => {
@@ -267,6 +265,7 @@ fn read_attribute(
                 entry.source,
                 bytes.len()
             );
+
             Some(found)
         }
         None if found => Some(true),
@@ -309,5 +308,6 @@ pub fn install() -> Result<(), nookkit_sym::SymError> {
     find_file::install()?;
     has_label::install()?;
     find_text::install()?;
+
     install_attribute_readers()
 }

@@ -86,6 +86,7 @@ impl SequenceBase {
         }
 
         *slot = state;
+
         true
     }
 }

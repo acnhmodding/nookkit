@@ -2,6 +2,7 @@
 // size depends on the sizing code and the shader archive, which together form the cache's epoch
 use std::collections::BTreeMap;
 
+use super::error::RstbError;
 use super::platform;
 
 #[derive(PartialEq)]
@@ -21,23 +22,28 @@ impl Cache {
     // Empty when missing, unreadable or from another epoch
     pub fn load(path: &str, epoch: String) -> Cache {
         let mut earlier = BTreeMap::new();
-        let text = platform::read_optional(path)
-            .ok()
-            .flatten()
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .unwrap_or_default();
+
+        let text = match platform::read_optional(path) {
+            Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
+            _ => String::new(),
+        };
+
         let mut lines = text.lines();
+
         if lines.next() == Some(epoch.as_str()) {
             for line in lines {
                 let mut fields = line.splitn(4, '\t');
+
                 let (Some(length), Some(stamp), Some(size), Some(relative)) =
                     (fields.next(), fields.next(), fields.next(), fields.next())
                 else {
                     continue;
                 };
+
                 let (Ok(length), Ok(size)) = (length.parse(), size.parse()) else {
                     continue;
                 };
+
                 earlier.insert(
                     relative.to_string(),
                     Sized {
@@ -48,6 +54,7 @@ impl Cache {
                 );
             }
         }
+
         Cache {
             epoch,
             earlier,
@@ -56,10 +63,9 @@ impl Cache {
     }
 
     pub fn get(&self, relative: &str, length: u64, stamp: &str) -> Option<i64> {
-        self.earlier
-            .get(relative)
-            .filter(|s| s.length == length && s.stamp == stamp)
-            .map(|s| s.size)
+        let earlier = self.earlier.get(relative)?;
+
+        (earlier.length == length && earlier.stamp == stamp).then_some(earlier.size)
     }
 
     // Files not inserted are dropped on save
@@ -74,14 +80,17 @@ impl Cache {
         );
     }
 
-    pub fn save(&self, path: &str) -> Result<(), String> {
+    pub fn save(&self, path: &str) -> Result<(), RstbError> {
         if self.current == self.earlier && platform::file_exists(path) {
             return Ok(());
         }
+
         let mut text = format!("{}\n", self.epoch);
+
         for (relative, s) in &self.current {
             text += &format!("{}\t{}\t{}\t{relative}\n", s.length, s.stamp, s.size);
         }
+
         platform::write(path, text.as_bytes())
     }
 }

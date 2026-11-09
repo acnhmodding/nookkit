@@ -2,13 +2,8 @@
 members = [
     "crates/nookkit",
     "crates/nookkit-core",
-    "crates/nookkit-bcsv",
-    "crates/nookkit-byml",
-    "crates/nookkit-hash",
+    "crates/nookkit-formats",
     "crates/nookkit-layouts",
-    "crates/nookkit-msbt",
-    "crates/nookkit-rstb",
-    "crates/nookkit-sarc",
     "crates/nookkit-sym",
     "crates/nookkit-sys",
     "crates/nookkit-types",
@@ -23,21 +18,39 @@ panic = "abort"
 lto = true
 
 [workspace.dependencies]
-skyline = "0.6.0"
+skyline = { version = "0.6.0", default-features = false, features = ["std"] }
 native-vtable = { git = "https://github.com/crackheadakira/vtable-rs" }
-thiserror = "2"
-crc32fast = "1.5.0"
+thiserror = { version = "2", default-features = false }
+# std turns on the runtime check for the CPU's CRC32 instructions
+crc32fast = { version = "1.5.0", default-features = false, features = ["std"] }
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+talc = { version = "4.4", default-features = false }
 
 nookkit = { path = "crates/nookkit" }
-nookkit-bcsv = { path = "crates/nookkit-bcsv" }
-nookkit-byml = { path = "crates/nookkit-byml" }
 nookkit-core = { path = "crates/nookkit-core" }
-nookkit-hash = { path = "crates/nookkit-hash" }
+nookkit-formats = { path = "crates/nookkit-formats", default-features = false }
 nookkit-layouts = { path = "crates/nookkit-layouts" }
-nookkit-msbt = { path = "crates/nookkit-msbt" }
-nookkit-rstb = { path = "crates/nookkit-rstb" }
-nookkit-sarc = { path = "crates/nookkit-sarc" }
 nookkit-sym = { path = "crates/nookkit-sym" }
 nookkit-sys = { path = "crates/nookkit-sys" }
 nookkit-types = { path = "crates/nookkit-types" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+allow_attributes_without_reason = "warn"
+borrow_as_ptr = "warn"
+ptr_as_ptr = "warn"
+manual_let_else = "warn"
+semicolon_if_nothing_returned = "warn"
+redundant_closure_for_method_calls = "warn"
+match_bool = "warn"
+uninlined_format_args = "warn"

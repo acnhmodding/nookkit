@@ -12,14 +12,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Generated pane paths, their compile_fail doctests and the symbol file manifests, on the host
+  # CODESTYLE checks and the crates that don't need skyline, on the host
   test:
     runs-on: ubuntu-latest
+    env:
+      HOST_CRATES: -p nookkit-formats -p nookkit-layouts -p nookkit-sym
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Formatting
+        run: cargo +stable fmt --check
+
+      - name: Blank lines
+        run: python3 tools/check_spacing.py --check $(git ls-files 'crates/*.rs')
+
+      - name: Host lints
+        run: cargo +stable clippy $HOST_CRATES --all-targets -- -D warnings
+
+      # Generated pane paths, their compile_fail doctests, the symbol file manifests and the file formats
       - name: Host tests
-        run: cargo +stable test -p nookkit-layouts -p nookkit-sym
+        run: cargo +stable test $HOST_CRATES
+
+  # Every crate on the host with the nightly skyline-v3 was built from, as the builder image has no clippy
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-02-14
+          components: clippy
+
+      - name: Workspace lints
+        run: cargo +nightly-2026-02-14 clippy --workspace --all-targets -- -D warnings
 
   build:
     runs-on: ubuntu-latest

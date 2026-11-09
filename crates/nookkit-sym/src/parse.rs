@@ -31,14 +31,17 @@ impl Kind {
 pub enum ParseError {
     #[error("line {line}: {reason}")]
     Syntax { line: usize, reason: &'static str },
+
     #[error("line {line}: unknown section [{section}]")]
     UnknownSection { line: usize, section: String },
+
     #[error("line {line}: \"{name}\" is listed twice under [{section}]")]
     Duplicate {
         line: usize,
         section: &'static str,
         name: String,
     },
+
     #[error("missing header field `{0}`")]
     MissingHeader(&'static str),
 }
@@ -114,6 +117,7 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
                     section: name.to_owned(),
                 })?,
             );
+
             continue;
         }
 
@@ -147,6 +151,7 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
                     });
                 }
             }
+
             continue;
         };
 
@@ -156,6 +161,7 @@ pub fn parse(text: &str) -> Result<SymbolFile, ParseError> {
                 line,
                 reason: "symbol names must be quoted and not empty",
             })?;
+
         let offset = parse_hex(value).ok_or(ParseError::Syntax {
             line,
             reason: "offsets must be 0x hex",
@@ -196,14 +202,17 @@ rodata_hash = 0x1234abcd
         let f = parse(SAMPLE).unwrap();
         assert_eq!(f.game_version, "3.0.3");
         assert_eq!(f.rodata_hash, 0x1234abcd);
+
         assert_eq!(
             f.get(Kind::Fn, "Lp::UI::Control::findByPath"),
             Some(0x376e6b0)
         );
+
         assert_eq!(
             f.get(Kind::Vtable, "Lp::UI::UniteBtnCtrl::vtable"),
             Some(0x4a92730)
         );
+
         assert_eq!(f.get(Kind::Fn, "Lp::UI::UniteBtnCtrl::vtable"), None);
         assert_eq!(f.len(), 2);
     }
@@ -212,10 +221,12 @@ rodata_hash = 0x1234abcd
     fn keeps_hashes_inside_names() {
         let text =
             "game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"A::{lambda()#1}\" = 0x10 # c\n";
+
         assert_eq!(
             parse(text).unwrap().get(Kind::Fn, "A::{lambda()#1}"),
             Some(0x10)
         );
+
         assert!(matches!(
             parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\n\"\" = 0x1\n"),
             Err(ParseError::Syntax { .. })
@@ -226,14 +237,17 @@ rodata_hash = 0x1234abcd
     fn rejects_duplicates_and_bad_lines() {
         let dup = format!("{SAMPLE}\n[fn]\n\"Lp::UI::Control::findByPath\" = 0x1\n");
         assert!(matches!(parse(&dup), Err(ParseError::Duplicate { .. })));
+
         assert!(matches!(
             parse("game_version = \"1\"\nrodata_hash = 0x1\n[nope]\n"),
             Err(ParseError::UnknownSection { .. })
         ));
+
         assert!(matches!(
             parse("game_version = \"1\"\n"),
             Err(ParseError::MissingHeader("rodata_hash"))
         ));
+
         assert!(matches!(
             parse("game_version = \"1\"\nrodata_hash = 0x1\n[fn]\nname = 0x1\n"),
             Err(ParseError::Syntax { .. })

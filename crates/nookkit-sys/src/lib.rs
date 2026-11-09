@@ -1,5 +1,8 @@
 #![no_std]
-#![allow(clippy::missing_safety_doc)]
+#![expect(
+    clippy::missing_safety_doc,
+    reason = "docs are kept minimal before 1.0"
+)]
 
 use core::ffi::{c_char, c_void};
 
@@ -213,6 +216,7 @@ impl Str {
         }
 
         let bytes = unsafe { core::slice::from_raw_parts(self.ptr, self.len) };
+
         core::str::from_utf8(bytes).ok()
     }
 }
@@ -360,7 +364,7 @@ pub struct NookKitV2 {
 
     pub key_set_enabled: unsafe extern "C" fn(key: *mut c_void, enable: bool) -> Status,
 
-    /// Literal text, or a LayoutMsg/KeyGuide.msbt label when text is empty, both empty removes it.
+    /// Literal text, or a LayoutMsg/KeyGuide.msbt label when text is empty, both empty removes it
     /// Applies at the page's next guide refresh
     pub key_set_guide: unsafe extern "C" fn(key: *mut c_void, text: Str, label: Str) -> Status,
 

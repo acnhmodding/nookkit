@@ -25,6 +25,7 @@ pub enum Error {
     /// From a mod's own `#[native]` functions
     #[error(transparent)]
     Native(#[from] native_vtable::Unresolved),
+
     #[error("symbol \"{0}\" is missing")]
     Missing(String),
 }
@@ -78,6 +79,7 @@ pub fn type_info_of<S>(get_runtime_type_info: &Fn<S>) -> NativeResult<*const Int
 
 fn type_info_by_name(get_runtime_type_info: &str) -> NativeResult<*const Interface> {
     let get = lookup(get_runtime_type_info, SymbolKind::Fn)?;
+
     let get: unsafe extern "C" fn(*const ()) -> *const Interface =
         unsafe { core::mem::transmute(get) };
 

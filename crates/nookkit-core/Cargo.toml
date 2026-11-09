@@ -10,14 +10,14 @@ titleid = "01006F8002326000"
 crate-type = ["cdylib"]
 
 [dependencies]
-skyline = "0.6.0"
+skyline = { workspace = true }
 nookkit-sys = { workspace = true }
 nookkit-sym = { workspace = true, features = ["skyline"] }
 nookkit-types = { workspace = true }
-nookkit-bcsv = { workspace = true }
-nookkit-byml = { workspace = true }
-nookkit-msbt = { workspace = true }
-nookkit-rstb = { workspace = true }
+nookkit-formats = { workspace = true, features = ["bcsv", "byml", "msbt", "rstb"] }
 crc32fast = { workspace = true }
 thiserror = { workspace = true }
-talc = { version = "4.4", default-features = false }
+talc = { workspace = true }
+
+[lints]
+workspace = true

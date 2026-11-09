@@ -209,6 +209,7 @@ pub struct InputRoot {
     /// Set: the root is inactive, its handlers keep state but do not fire
     pub disabled: bool,
     _pad_55: [u8; 0x3],
+
     /// Inactive while it overlaps the UIMgr inhibited-context mask (UIMgr+0x418 -> +0x10)
     pub context_mask: u32,
     pub repeat_delay: i32,

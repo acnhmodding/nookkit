@@ -1,4 +1,4 @@
-use core::ffi::c_void;
+use core::ffi::{CStr, c_void};
 use nookkit_sym::sym;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -63,15 +63,18 @@ pub fn check(handle: Handle) -> Result<*mut ViewPage, Status> {
 
 /// `Handle::NULL` once the page is destroyed
 pub fn handle_of(page: *mut ViewPage) -> Handle {
-    LIVE.lock()
-        .ok()
-        .and_then(|live| {
-            live.get(&(page as usize)).map(|l| Handle {
-                raw: page.cast(),
-                build: l.built,
-            })
-        })
-        .unwrap_or(Handle::NULL)
+    let Ok(live) = LIVE.lock() else {
+        return Handle::NULL;
+    };
+
+    let Some(l) = live.get(&(page as usize)) else {
+        return Handle::NULL;
+    };
+
+    Handle {
+        raw: page.cast(),
+        build: l.built,
+    }
 }
 
 pub fn page_of_seq(seq: usize) -> Option<Handle> {
@@ -88,9 +91,9 @@ pub fn page_of_seq(seq: usize) -> Option<Handle> {
 pub fn live_seq(page: *mut ViewPage) -> Option<usize> {
     let live = LIVE.lock().ok()?;
 
-    live.get(&(page as usize))
-        .map(|l| l.seq)
-        .filter(|&seq| seq != 0)
+    let seq = live.get(&(page as usize))?.seq;
+
+    (seq != 0).then_some(seq)
 }
 
 pub fn set_live_seq(page: *mut ViewPage, seq: usize) {
@@ -111,15 +114,19 @@ unsafe impl Send for EventSlot {}
 
 #[derive(Default)]
 pub struct PageState {
-    // Boxed so the delegates in the game's tables keep pointing at them
-    #[allow(clippy::vec_box)]
+    #[expect(
+        clippy::vec_box,
+        reason = "the delegates in the game's tables keep pointing at the boxes"
+    )]
     events: Vec<Box<EventSlot>>,
 
     pub seq: [Vec<Callback>; SeqEvent::COUNT],
     pub lists: Vec<&'static ListState>,
 
-    // Boxed so the key handlers in the page's input root keep pointing at them
-    #[allow(clippy::vec_box)]
+    #[expect(
+        clippy::vec_box,
+        reason = "the key handlers in the page's input root keep pointing at the boxes"
+    )]
     pub keys: Vec<Box<KeyState>>,
 
     /// Its seq is active, so its key guides belong in the bar
@@ -162,6 +169,7 @@ pub struct Dispatch(());
 
 pub fn dispatching() -> Dispatch {
     DEPTH.fetch_add(1, Ordering::AcqRel);
+
     Dispatch(())
 }
 
@@ -220,10 +228,10 @@ pub fn with_registered<R>(page: *mut ViewPage, f: impl FnOnce(&mut PageState) ->
 }
 
 fn forget(page: *mut ViewPage) {
-    let stale = PAGES
-        .lock()
-        .ok()
-        .and_then(|mut pages| pages.remove(&(page as usize)));
+    let stale = match PAGES.lock() {
+        Ok(mut pages) => pages.remove(&(page as usize)),
+        Err(_) => None,
+    };
 
     if let Some(stale) = stale {
         stale.retire();
@@ -275,7 +283,8 @@ unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> Nat
             if list.button_count() == 0 {
                 list.bind_buttons(builder)?;
 
-                let name = list.name().and_then(|n| n.to_str().ok()).unwrap_or("?");
+                let name = text_or(list.name(), "?");
+
                 println!(
                     "[NookKit] bound list {name} ({} buttons)",
                     list.button_count()
@@ -293,6 +302,13 @@ unsafe fn bind_unbound_lists(control: *mut Control, builder: *mut c_void) -> Nat
     }
 }
 
+fn text_or<'a>(name: Option<&'a CStr>, fallback: &'a str) -> &'a str {
+    match name.map(CStr::to_str) {
+        Some(Ok(name)) => name,
+        _ => fallback,
+    }
+}
+
 unsafe fn built(page: *mut ViewPage) {
     // Pages are initialized once, so anything left at this address belonged to a destroyed page
     forget(page);
@@ -301,12 +317,8 @@ unsafe fn built(page: *mut ViewPage) {
         return;
     };
 
-    let layout = unsafe { page_ref.layout() }
-        .and_then(|s| s.to_str().ok())
-        .unwrap_or("");
-    let class = unsafe { page_ref.class() }
-        .and_then(|s| s.to_str().ok())
-        .unwrap_or("");
+    let layout = text_or(unsafe { page_ref.layout() }, "");
+    let class = text_or(unsafe { page_ref.class() }, "");
 
     // From 1, so build 0 never matches
     let built = BUILT.fetch_add(1, Ordering::Relaxed) + 1;
@@ -339,7 +351,7 @@ unsafe fn built(page: *mut ViewPage) {
         Err(_) => return,
     };
 
-    unsafe { call(matching, (&handle as *const Handle).cast()) };
+    unsafe { call(matching, (&raw const handle).cast()) };
 }
 
 pub fn on_page_built(layout: &str, class: &str, cb: Callback) -> Status {
@@ -372,7 +384,7 @@ extern "C" fn dispatch(slot: *mut EventSlot, event: *const ControlEvent) {
         return;
     };
 
-    unsafe { call(cbs, (&event as *const Event).cast()) };
+    unsafe { call(cbs, (&raw const event).cast()) };
 }
 
 pub unsafe fn on_control_event(
@@ -426,7 +438,7 @@ pub unsafe fn on_control_event(
         cbs: Mutex::new(vec![cb]),
     });
 
-    *free = Delegate::bind(&mut *slot as *mut EventSlot, dispatch as *const () as usize);
+    *free = Delegate::bind(&raw mut *slot, dispatch as *const () as usize);
     events.push(slot);
 
     Ok(Status::OK)

@@ -72,6 +72,7 @@ unsafe extern "C" fn clone(this: *const Delegate, heap: *mut Heap) -> *mut Deleg
         };
 
         let size = core::mem::size_of::<Delegate>();
+
         let memory = match heap.as_mut() {
             Some(heap) => heap.try_alloc(size, 8),
             None => operator_new(size).unwrap_or_default(),
@@ -114,6 +115,6 @@ impl Delegate {
 
     /// `method` must be an `extern "C" fn(*mut T, ...)` taking what the game invokes this delegate with
     pub fn bind<T>(object: *mut T, method: usize) -> Self {
-        Self::new((&RUST_VTABLE as *const RustVtable).cast(), object, method)
+        Self::new((&raw const RUST_VTABLE).cast(), object, method)
     }
 }

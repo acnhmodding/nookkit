@@ -19,12 +19,14 @@ use nookkit_types::native::SymbolKind as NativeKind;
 
 pub use key::{Key, KeyBinding, KeyBuilder, KeyEvent};
 pub use list::{ItemUpdate, List, ListTarget};
-pub use nookkit_hash as hash;
+pub use nookkit_formats::hash;
 pub use nookkit_layouts::{ListRef, PageClass, PanePath, PaneRef, RelPath, kind, layouts, pages};
 pub use nookkit_sys::Player;
 pub use nookkit_types as types;
 pub use nookkit_types::native::sym;
-pub use offsets::{__hook_function, module_base};
+pub use offsets::module_base;
+#[doc(hidden)]
+pub use offsets::{__Kind, __SymError, __install};
 pub use page::{Event, Page, Pane, Seq, SeqState, StateHooks};
 
 #[non_exhaustive]
@@ -74,6 +76,16 @@ pub enum UiError {
 }
 
 pub type Result<T = (), E = UiError> = core::result::Result<T, E>;
+
+impl From<nookkit_sym::SymError> for UiError {
+    fn from(error: nookkit_sym::SymError) -> Self {
+        match error {
+            nookkit_sym::SymError::UnsupportedBuild { .. } => UiError::UnsupportedBuild,
+            nookkit_sym::SymError::HookFailed(_) => UiError::HookFailed,
+            _ => UiError::MissingSymbol,
+        }
+    }
+}
 
 fn check(status: Status) -> Result {
     Err(match status {
@@ -158,6 +170,7 @@ impl PlayerLock {
     pub fn release(self) -> Result {
         let result = check(unsafe { (self.ui.table.release_player)(self.player) });
         core::mem::forget(self);
+
         result
     }
 }
@@ -174,6 +187,7 @@ static TABLE: AtomicPtr<NookKitV2> = AtomicPtr::new(core::ptr::null_mut());
 
 fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
     let table = unsafe { TABLE.load(Ordering::Acquire).as_ref() }?;
+
     let kind = match kind {
         NativeKind::Fn => SymbolKind::FN,
         NativeKind::Vtable => SymbolKind::VTABLE,
@@ -188,6 +202,7 @@ fn resolve(name: &str, kind: NativeKind) -> Option<usize> {
 /// Fails with [`UiError::UnsupportedBuild`] on any other game build
 pub fn connect(name: &'static str) -> Result<Ui> {
     let table = unsafe { sl_api_get(API_NAME.as_ptr(), API_VERSION) }.cast::<NookKitV2>();
+
     if table.is_null() {
         return Err(UiError::FrameworkMissing);
     }
@@ -250,7 +265,7 @@ impl Ui {
     pub fn find_page<P: PageClass>(&self) -> Result<Option<Page>> {
         let mut handle = Handle::NULL;
 
-        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &mut handle) })?;
+        check(unsafe { (self.table.find_page)(Str::new(P::CLASS), &raw mut handle) })?;
 
         Ok((!handle.raw.is_null()).then(|| Page::new(*self, handle)))
     }
@@ -268,7 +283,7 @@ impl Ui {
 
         let mut handle = Handle::NULL;
 
-        check(unsafe { (self.table.seq_page)(raw, &mut handle) })?;
+        check(unsafe { (self.table.seq_page)(raw, &raw mut handle) })?;
 
         Ok((!handle.raw.is_null()).then(|| Seq::new(Page::new(*self, handle), raw)))
     }
