@@ -36,6 +36,19 @@ jobs:
       - name: Host tests
         run: cargo +stable test $HOST_CRATES
 
+  # Every crate on the host with the nightly skyline-v3 was built from, as the builder image has no clippy
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-02-14
+          components: clippy
+
+      - name: Workspace lints
+        run: cargo +nightly-2026-02-14 clippy --workspace --all-targets -- -D warnings
+
   build:
     runs-on: ubuntu-latest
     # HewDraw Remix's builder: cargo-skyline 3.5.0 with skyline-v3, pinned so image updates can't change builds
@@ -51,14 +64,6 @@ jobs:
       - name: Build the plugin
         working-directory: crates/nookkit-core
         run: cargo skyline build --release
-
-      # After the build, as the different RUSTFLAGS rebuild every crate
-      - name: Plugin lints
-        env:
-          RUSTFLAGS: -D warnings
-        run: |
-          (cd crates/nookkit-core && cargo skyline clippy)
-          (cd crates/nookkit && cargo skyline clippy)
 
       - uses: actions/upload-artifact@v4
         with:
