@@ -22,3 +22,7 @@ fn	game::ResourceSizeTable::load
 data	game::ResourceMgr::sInstance
 data	sead::HeapMgr::sRootHeaps
 vtable	sead::ExpHeap::vtable
+fn	game::BcsvMgr::loadResource
+data	game::BcsvMgr::sInstance
+fn	game::FileCache::load
+fn	game::FileCache::insert
