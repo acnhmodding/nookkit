@@ -10,6 +10,7 @@ mod key;
 mod list;
 mod offsets;
 mod page;
+mod save;
 pub mod screens;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
@@ -70,6 +71,12 @@ pub enum UiError {
 
     #[error("a callback fired its own event, the nested call was skipped")]
     Reentrant,
+
+    #[error("save data is not loaded")]
+    SaveNotLoaded,
+
+    #[error("save data is already lent to an outer call")]
+    SaveBorrowed,
 
     #[error("unknown status {0} from a newer NookKit")]
     Unknown(i32),

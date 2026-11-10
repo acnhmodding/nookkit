@@ -43,3 +43,9 @@ fn	game::PlayerAction::beginCategory
 fn	game::PlayerControlLockMgr::acquire
 data	game::PlayerControlLockMgr::sInstance
 fn	game::PlayerControlLockMgr::releaseMenuLock
+fn	sead::HeapMgr::findContainHeap
+data	sead::HeapMgr::sInstance
+fn	game::SaveMgr::getLandNode
+data	game::SaveMgr::sInstance
+data	game::PlayerSaveMgr::sInstance
+fn	game::PlayerSaveMgr::getPlayerSlot
