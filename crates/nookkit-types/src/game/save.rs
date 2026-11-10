@@ -15,8 +15,10 @@ pub struct SaveIoNode {
     pub payload_offset: usize,
     pub first_child: *mut SaveIoNode,
     pub next_sibling: *mut SaveIoNode,
+
     /// Callbacks run around payload reads and writes
     pub guard: *mut c_void,
+
     pub state: u8,
 }
 
@@ -90,12 +92,16 @@ const _: () = {
 pub struct PlayerSaveMgr {
     // Set to 0xff on init
     _unk_0: [u8; 0x20],
+
     // Per-player runtime objects, not save data
     _unk_20: [[u8; 0x740]; 8],
+
     /// What init binds `slots[i].player` to, read through `player` instead
     pub players: [SavePlayer; 8],
+
     /// What init binds every `slots[i].other` to
     pub other: SavePlayerOther,
+
     pub slots: [PlayerSaveSlot; 8],
     pub available_player_mask: u32,
     _unk_431fc4: [u8; 0x4c],
